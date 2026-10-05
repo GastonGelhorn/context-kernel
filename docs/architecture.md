@@ -14,14 +14,14 @@ Question -> NeedPlan -> scoped FTS/retrieval -> byte-bounded projection
 
 ## Data model
 
-The executable schema is `context_kernel/store.py:SCHEMA`. Schema version 1 rejects unsupported databases; there is no destructive automatic migration.
+The executable schema is `context_kernel/store.py:SCHEMA`. Schema version 2 adds the `depends_on` relation kind. A version 1 database is migrated on open by rebuilding the relations table with every row copied; unknown versions are rejected. Nothing is dropped.
 
 | Table | Responsibility |
 | --- | --- |
 | entities | Scoped keys, labels, types, and exact aliases |
 | evidence | Original bounded source fragment, attribution, optional source reference, recorded timestamp |
 | statements | Entity/property/value, evidence, assertion kind, validity interval, lifecycle, replacement link |
-| relations | Typed `corrects` and acyclic `part_of`; statement `about` is implicit in entity ownership |
+| relations | Typed `corrects`, acyclic `part_of`, and acyclic `depends_on` between statement versions; statement `about` is implicit in entity ownership |
 | proposals | Pending, accepted, or rejected owner-reviewed changes |
 | plans | Recorded evidence needs and uncertainty codes, not full conversations |
 | projections | IDs, selection reasons, exclusions, snapshot, policy, timing, size, delivery status |
@@ -37,6 +37,8 @@ The database has foreign keys and indexes over scope, entity/property/lifecycle,
 Validity is half-open: `valid_from <= as_of < valid_until`; no end means until changed. ISO timestamps without a timezone, and date-only inputs, are explicitly interpreted as UTC. Ambiguous natural dates are not parsed. The injectable clock makes boundary tests deterministic.
 
 Corrections atomically create a statement and a `corrects` relation, close the previous interval, and retain history. Two unrelated statements with conflicting values stay conflicting; chronology alone does not settle them. Future corrections become effective at their specified start; revoking a future replacement does not resurrect its predecessor automatically. Reviewing or replacing a scheduled correction requires an explicit owner decision.
+
+`depends_on` links a statement to the exact version of another statement it assumed. A statement is stale when any assumption is no longer active (superseded, revoked, expired); the flag is computed at query time from the same clock, never stored. Correcting an assumption changes nothing about its dependents except that flag. The owner then corrects or revokes the dependent, or reaffirms it, which moves the link to the assumption's current version. A corrected dependent starts without links. Dependencies are declared, never inferred.
 
 Delivery transitions update three properties together: delivery status, ownership status, and pending-loop state. Repeated equal transitions do not add versions. Exact entity/alias resolution and unique delivery-reference resolution are supported; unrestricted discourse or intention inference is not.
 
@@ -74,6 +76,6 @@ Malicious values cannot change scope, add tools, approve proposals, or gain auth
 
 Projection traces contain no duplicate claim values or evidence fragments. Plans contain source keys and needs; failures contain controlled error messages/codes. Forgotten scope derivatives are invalidated rather than retained for audit convenience.
 
-`prepared` means compiled; `emitted` means locally written; `failed` records failed revalidation. `host_attachment` remains `unknown`. Hook/MCP traces observe the projection, not the full host request. Local demo traces instead measure the complete known message payload, its hash and byte length, plus model-reported token counts. No host transcript is scraped to fabricate a full-request trace.
+`prepared` means compiled; `emitted` means locally written; `failed` records failed revalidation or an unavailable projection the hook declined to deliver. Hooks fail open by default: the envelope goes out with empty context and a `systemMessage`; `--fail-closed` blocks instead, and privacy commands always block. `host_attachment` remains `unknown`. Hook/MCP traces observe the projection, not the full host request. Local demo traces instead measure the complete known message payload, its hash and byte length, plus model-reported token counts. No host transcript is scraped to fabricate a full-request trace.
 
 Ollama calls have no proxy use or redirects and accept only loopback HTTP. Inventory, message bytes, message counts, output tokens, response bytes, and timeouts are bounded. Truncated output, invalid structured responses, context-boundary counts, overflow, or unavailability never become accepted facts. Input byte ceilings are conservative controls, not exact tokenizer accounting.

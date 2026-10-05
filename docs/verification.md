@@ -9,7 +9,7 @@ python3 -W error::ResourceWarning -m unittest discover -v
 python3 -m context_kernel.demo
 ```
 
-125 unit/integration tests passed. One parameterized regression includes 120 deterministic state/retrieval scenarios (15 variations of eight checks). These are not 120 independent language tasks or a claim of universal exhaustiveness. Six checks validate native evaluation authentication/command boundaries. The 36 new v0.2 checks cover bilingual relevance and proposal grammar, contextual versus generic questions, explicit/ambiguous entities, bounded containment, relation snapshot non-interference, quantities, bounded currency review, explicit unavailable/conflicted/clarification states, trace listing, empty-context minimum budgets, unused-index avoidance, project-work/career disambiguation, and pre-delivery retries.
+154 unit/integration tests passed. One parameterized regression includes 120 deterministic state/retrieval scenarios (15 variations of eight checks). These are not 120 independent language tasks or a claim of universal exhaustiveness. Six checks validate native evaluation authentication/command boundaries. The 36 new v0.2 checks cover bilingual relevance and proposal grammar, contextual versus generic questions, explicit/ambiguous entities, bounded containment, relation snapshot non-interference, quantities, bounded currency review, explicit unavailable/conflicted/clarification states, trace listing, empty-context minimum budgets, unused-index avoidance, project-work/career disambiguation, and pre-delivery retries.
 
 Coverage includes attribution, temporal boundaries, future and immediate corrections, conflicting claims, excluded hypotheses, history, revocation, scoped non-interference, aliases and ambiguous references, managed forgetting, whole-claim byte budgets, deterministic plan replay, stale proposals, atomic delivery transitions, retry deduplication, pre-delivery changes, hook subprocess contracts, strict JSON, MCP transport recovery, and injected local model failures/limits.
 
@@ -83,6 +83,20 @@ The v0.2 protocol changes include explicit query/recovery instructions, a Spanis
 Subscription session wall time totaled 126.774 seconds; usage events reported 188,728 input tokens (116,736 cached) and 1,032 output tokens (370 reasoning). Local native session wall time totaled 352.592 seconds; usage events reported 86,945 input tokens (35,161 cached) and 331 output tokens (zero reasoning). These are aggregate client session figures across model steps, not unique prompt sizes, kernel projection costs, or exact account quota percentages. No API-key model billing or paid judge was used.
 
 The separate prompt-hook pilot was prepared with fictional data and no proposal capture. Project-file and invocation-inline probes without user configuration emitted no kernel projection and answered UNKNOWN; they did not verify automatic attachment or establish a specific skip reason. The hook still requires the owner's normal project/definition review. Hooks are enabled by default in the installed CLI; no bypass or trust-state mutation was used. [Owner pilot instructions](hook-pilot.md), [official discovery/trust behavior](https://learn.chatgpt.com/docs/hooks#where-codex-looks-for-hooks).
+
+## v0.3 results
+
+The direct local demo (`python3 -m context_kernel.demo --live --repetitions 1`, qwen3.5:9b) passed every check: three reader history conditions, the contamination probe, five selection probes (career and gift each still needed one rule supplement), and the new dependency fixture. [v0.3 local results](v03-local-results.json).
+
+The dependency fixture: a rewrite decision depends on a three-month deadline; the deadline is corrected to three weeks; a fresh projection asks about the rewrite. The kernel delivered the decision with `stale_assumptions`, the new deadline alongside, no "three months", status `review_required`. The local reader then answered that the rewrite "rests on a superseded assumption regarding its deadline" and should be reviewed. The check is a keyword test on one fictional answer; it shows the mechanism, not reliability. The reader's "you should not proceed" goes further than the reader rules ask (flag, do not decide); answer quality still needs human review.
+
+Fixture-level metrics reported by the demo: 2 of 2 facts delivered in a fresh session without restating; 1 of 1 stale recommendation flagged, 0 silently replaced; 0 of 4 reader answers the owner would have to correct. These are counts on one fixture, not a benchmark.
+
+`--strategy jev` was exercised against the real `jev` 1.9.3 on its local backend (tev1-32k through Ollama) with seven authorized pairs. The correct pair ranked first on all four probes: allergy 0.56 for the gift question (favorite colour 0.45, salary 0.48), salary 0.75 and availability 0.58 for the job offer, deadline 0.67 for the rewrite question, and every pair below 0.09 for a generic sorting question. The gift margin is narrow and the allergy landed as supporting rather than critical at the default thresholds. Thresholds need `jev tune` on a real inventory; the hosted model was not measured. The unit suite drives the integration through a fake `jev` executable: thresholds, metadata-only traces, timeouts, exit codes, malformed output, and the rules fallback.
+
+Hooks were switched to fail open. The subprocess contract was re-verified for both clients: an unreadable event yields an empty-context envelope with a `systemMessage`, `--fail-closed` yields `decision: block`, and a `Forget:` prompt blocks in both modes.
+
+Not run here: the native Claude Code headless check (`tests/native_claude_check.py`) and the owner-trusted Codex hook walkthrough both use the owner's sign-in and quota and were left for the owner to start.
 
 ## Native Codex CLI
 

@@ -44,6 +44,10 @@ The generator emits a local `mcpServers` entry for `.agents/mcp_config.json`, as
 
 This adapter is on-demand: ask the agent to use `memory_context` when personal/project state can change its answer. It does not promise automatic per-prompt retrieval. The documented `PreInvocation` hook does not provide the current prompt, so we do not reconstruct it from unstable transcript internals. [Antigravity hooks](https://www.antigravity.google/docs/hooks).
 
+## Selection strategy and failure mode
+
+Both hook generators accept `--strategy jev` (calibrated selection through the `jev` command line; see the README) and `--fail-closed`. By default a hook that cannot serve memory emits empty context plus a `systemMessage`; the prompt proceeds. With `--fail-closed` it blocks. Privacy commands block in both modes. The MCP server accepts the same `--strategy` flags after `serve`.
+
 ## Optional proposal capture
 
 Add `--proposals` to the **hook configuration generator**, then review the new command. Exact supported English messages are:

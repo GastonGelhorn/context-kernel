@@ -1,4 +1,6 @@
-# Codex prompt-hook pilot
+# Prompt-hook pilots
+
+## Codex
 
 This host-local pilot contains fictional data only. It is separate from personal and real project databases. No trust hash is created or modified by the kernel.
 
@@ -40,3 +42,17 @@ Inspect the returned replacement ID before an explicit `forget` command. Keep th
 This prepared hook is not yet owner-trusted or automatically active in the current desktop chat. Current native MCP results do not substitute for this step. No global settings were edited. Remove only the pilot's context-kernel hook entry to disconnect it; unrelated settings and host histories remain untouched.
 
 On another checkout, regenerate configuration using `memory adapter codex --workspace /your/pilot --raw` and review the new command. This pilot uses absolute paths specific to this host.
+
+## Claude Code
+
+The headless runner performs the same lifecycle through the real client, plus the dependency fixture:
+
+```sh
+mkdir -p work/claude-pilot && mktemp -d work/claude-pilot/run.XXXXXX
+python3 -m tests.native_claude_check --workspace /absolute/path/to/that/new/dir
+python3 -m tests.native_claude_check --workspace /absolute/path/to/another/new/dir --strategy jev
+```
+
+It writes `.claude/settings.local.json` inside the empty pilot directory only, runs `claude -p` six times with file, shell, and web tools disallowed, and reads the kernel's own traces to confirm an emitted projection per prompt. Phases: empty memory, registered approver, corrected approver in a fresh session, the rewrite decision after its deadline moved (the answer must name the change and not restate three months), forgotten approver, and a generic question with no personal context. The owner starts it: it uses the owner's Claude Code sign-in and quota and sends fictional prompts to Anthropic. It never touches `~/.claude`, never bypasses permissions, and reports the client's own cost and usage fields.
+
+An emitted trace plus a correct answer is evidence the hook delivered context to that headless session. It is not proof that the desktop app, with its own history and settings, behaves the same.

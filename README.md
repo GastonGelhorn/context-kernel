@@ -4,7 +4,9 @@ Local memory that can be corrected, inspected, and withdrawn. Python, SQLite, an
 
 The kernel keeps attributed state outside the model, selects bounded evidence for a question, and explains the selection. A correction creates a new version rather than another competing summary. New sessions and different agents can use the same owner-selected database and scope.
 
-This is v0.2, not a claim that arbitrary personal context or prompt injection is solved. The default selector uses bilingual English/Spanish rules, scoped lexical search, explicit entities, and bounded containment ancestors. Local Qwen planning is optional and still needs relevance checks. The kernel does not replace an agent's existing conversation history.
+A decision can be linked to the assumptions it rests on. When an assumption is corrected, the decision is not replaced: it is flagged, delivered together with the assumption's current version, and left for the owner to correct, revoke, or reaffirm.
+
+This is v0.3, not a claim that arbitrary personal context or prompt injection is solved. The default selector uses bilingual English/Spanish rules, scoped lexical search, explicit entities, and bounded containment ancestors. Calibrated selection through the `jev` command line and local Qwen planning are optional. The kernel does not replace an agent's existing conversation history.
 
 ## Try it
 
@@ -57,6 +59,21 @@ Missing metadata stays null. Old plain numeric values remain compatible and proj
 
 `forget` removes **every version of the selected entity/property**, associated orphan evidence, and same-scope derived logs and proposals. It is destructive within that explicitly selected property. It does not erase host transcripts, backups, or forensic disk copies. `revoke` instead retains evidence but makes that statement ineligible for subsequent retrieval.
 
+## Decisions and their assumptions
+
+```sh
+python3 -m context_kernel remember checkout deadline '"three months"' --kind project --evidence 'We have three months.'
+python3 -m context_kernel remember checkout decision '"Rewrite the payment module before launch"' --kind project --evidence 'We agreed to rewrite.'
+python3 -m context_kernel depend DECISION_ID DEADLINE_ID
+python3 -m context_kernel correct DEADLINE_ID '"three weeks"' --evidence 'The deadline moved to three weeks.'
+python3 -m context_kernel --pretty stale
+python3 -m context_kernel --pretty project 'Should we go ahead with the rewrite for checkout?'
+```
+
+The projection has status `review_required`; the decision carries `stale_assumptions` naming the superseded deadline and its successor, the new deadline is delivered with it, and the old value is not. The reader rules ask the model to flag the dependency rather than restate or silently replace the decision. Then the owner decides: `correct` or `revoke` the decision, or `reaffirm DECISION_ID` to move its link to the current deadline. `dependents ID` lists what rests on a statement.
+
+Dependencies are declared by the owner and point at an exact version. The kernel never infers them, never rewrites a decision, and never settles which side of a changed assumption is right. Forgetting an assumption removes its links.
+
 ## Delivery continuity
 
 ```sh
@@ -72,8 +89,8 @@ Ordering, receiving, and returning update delivery, ownership, and the pending l
 
 | Client | Integration | Verified here |
 | --- | --- | --- |
-| Codex | Project prompt hook; optional stdio MCP | Native CLI MCP with Ollama and ChatGPT subscription; failures recorded. Hook subprocess contract only |
-| Claude Code | Project prompt hook; optional stdio MCP | Hook envelope and subprocess contract |
+| Codex | Project prompt hook; optional stdio MCP | Native CLI MCP with Ollama and ChatGPT subscription; failures recorded. Hook subprocess contract; native activation needs the owner's trust step |
+| Claude Code | Project prompt hook; optional stdio MCP | Hook envelope and subprocess contract; `tests/native_claude_check.py` runs the real headless client on request |
 | Antigravity | On-demand stdio MCP | Documented config shape; native client not installed |
 | MCP clients | Read/propose tools with fixed scope | Official Python SDK 2.3.0 interoperability |
 
@@ -89,11 +106,26 @@ The output names the destination and includes its configuration. Add `--raw` to 
 
 See [client setup](docs/adapters.md) before activation and [native results](docs/verification.md#native-codex-cli) for the scoped Codex checks. Automatic hook activation and desktop request inspection remain unverified; MCP retrieval is not automatic per-turn injection.
 
+Hooks fail open: when the kernel cannot serve memory (local model down, budget overflow, unreadable event), the prompt proceeds without context and the host receives a `systemMessage` saying why. `--fail-closed` blocks the prompt instead. A privacy command typed into the prompt (`Forget: ...`, `Revoke: ...`) always blocks, because the hook must not let the model pretend it was applied.
+
 Hooks are read-only by default. Optional `--proposals` recognizes whole-message commands such as `Remember: user.constraint = "No late meetings"`, plus a small delivery grammar. It never approves a fact. Review with `proposals`, then `approve PROPOSAL_ID` or `reject PROPOSAL_ID` in the owner CLI. General conversation extraction is not automatic.
 
 The bounded grammar also accepts `Recuerda: user.constraint = "No reuniones por la tarde"` and `Corrige: user.constraint = "No reuniones después de las 16"`. Spanish delivery commands include `Pedí laptop.`, `Todavía no llegó.`, `Al final llegó.`, and `Lo devolví.`. These remain proposals, not automatically accepted facts. See the [prepared hook pilot](docs/hook-pilot.md) for the separate owner-trust step.
 
 MCP exposes `memory_context`, `memory_inspect`, `memory_status`, `memory_why`, and `memory_propose`. It cannot approve, revoke, forget, choose another scope, execute a shell command, or change permissions. Those restrictions do not protect the database from an agent that separately has filesystem or shell access.
+
+## Optional calibrated selection with jev
+
+With [jevmate](https://github.com/GastonGelhorn/jevmate) installed (`jev` on the PATH, its own backend and key configured):
+
+```sh
+python3 -m context_kernel --pretty project 'Would a snack hamper be a good gift for my friend?' --strategy jev
+python3 -m context_kernel adapter claude --workspace /absolute/path/project --strategy jev --raw
+```
+
+Every authorized entity/property pair is judged against the question (`Is the candidate a fact that someone answering the query must take into account?`). Pairs at or above `--jev-critical` (0.6) become critical needs, at or above `--jev-supporting` (0.5) supporting ones; the rest are excluded. The trace records one probability per pair, never a value. If `jev` is missing, fails, or times out, the rules plan is used and the trace carries `jev_unavailable`.
+
+jev's own configuration decides where the inventory goes: a local backend keeps it on this machine; a hosted backend sends it to that vendor and costs money. The kernel never installs, configures, or authenticates jev. Measured here with the local backend: the correct pair ranked first on all four probes, with margins as narrow as 0.56 versus 0.48, so tune the thresholds for your inventory with `jev tune` before relying on them. See [verification](docs/verification.md#v03-results).
 
 ## Optional local planning
 
@@ -120,6 +152,7 @@ The planner proposes needs using authorized inventory values. Available needs mu
 - A local kernel does not make a remote coding agent local. An enabled client may send projected memory to its existing model provider.
 - Invalid MCP arguments return structured unavailable/error data with a bounded retry hint. A failed call is never proof that a fact is missing. Successful empty retrieval means no evidence was selected for that query, not that all possible needs were discovered.
 - Reader rules and explicit quantity metadata reduce opportunities for guessing; they do not enforce general factual correctness. The native harness includes a narrow currency-review signal, not a general answer judge.
+- Dependencies are owner-declared edges between statement versions, not an inferred or generic graph; staleness is computed when queried, never stored as a verdict.
 - No embeddings, cloud sync, background ingestion, credential store, generic graph, or autonomous policy learning.
 
 Read [architecture and safety](docs/architecture.md), [the implementation plan](docs/plan.md), and [verification](docs/verification.md) for details.

@@ -1,4 +1,4 @@
-# v0.2 implementation plan
+# v0.3 implementation plan
 
 This is the canonical English plan for this repository. Earlier conversation documents are historical background, not additional active instructions. The objective is a useful local kernel: register, correct, use current evidence in another session, inspect it, and withdraw it. It is not a paid API evaluation campaign or a universal memory platform.
 
@@ -11,10 +11,14 @@ This is the canonical English plan for this repository. Earlier conversation doc
 5. Codex and Claude prompt-hook adapters, a local MCP tool interface, and an Antigravity MCP configuration generator.
 6. Deterministic regression, subprocess contracts, injected Ollama failures, official SDK interoperability, an optional local model demo, and native Codex CLI MCP checks with recorded failures.
 7. English/Spanish selection and bounded proposal grammar, entity/alias narrowing, scoped containment ancestors, explicit quantities, structured unavailable/error results, and bounded pre-delivery revalidation retry.
+8. Owner-declared `depends_on` links between statement versions, query-time staleness, `review_required` projections that deliver the changed assumption with the stale decision, and `reaffirm`.
+9. Optional calibrated selection through the `jev` command line with per-pair traced probabilities and rules fallback; fail-open prompt hooks with `--fail-closed`; a delivery snapshot limited to the selected pairs; single-query record loading; a native Claude Code headless check.
 
 Hooks do not authenticate human origin. Therefore the implementation narrows automatic ingestion to read-only operation by default, with opt-in proposal capture. Accepted changes require the owner CLI. Negation is supported in values and bounded delivery transitions; free-form extraction cannot certify semantics.
 
 ## Evidence questions
+
+The three outcomes the kernel is meant to move, as stated publicly: fewer repeated explanations, fewer recommendations based on outdated assumptions, less work correcting the assistant. `context_kernel.demo` reports them as fixture-level counts under `metrics`; the reader-side count needs `--live`. They are measured on fictional fixtures and are not a benchmark.
 
 Can the planner discover a cross-domain constraint? Can a correction survive stale accumulated replies? Can retrieval avoid an irrelevant personal preference? These remain measured capabilities, not promises inferred from schemas.
 
@@ -31,12 +35,12 @@ The local fixture families include career, housing, deployment, gifts, and gener
 - Real local Qwen results must be reported with misses, truncation, irrelevant selections, and missing evidence; no paid judge or API calls.
 - Native Codex CLI MCP was exercised in fresh fictional sessions with local Ollama and owner-authorized ChatGPT subscription access. The v0.2 subscription campaign passed its six functional checks and two controls. Local native Qwen still invented a currency and failed an abstention-format control. Earlier failed results remain historical evidence, and changed test protocols are not a controlled improvement benchmark. Automatic prompt-hook trust/activation and desktop history behavior remain pending. No global settings or unrelated workspaces are modified to simulate acceptance.
 
-## What stays outside v0.2
+## What stays outside v0.3
 
-Cloud synchronization, bulk transcript ingestion, paid embeddings, automatic free-form fact promotion, unrestricted personal reasoning, generic dependency graphs, cross-user authorization, autonomous policy learning, complete host-request replacement, and forensic/remote erasure. CCC stays a reference, not a runtime dependency.
+Cloud synchronization, bulk transcript ingestion, paid embeddings, automatic free-form fact promotion, unrestricted personal reasoning, inferred or generic dependency graphs (declared statement-to-statement links are in), cross-user authorization, autonomous policy learning, complete host-request replacement, and forensic/remote erasure. CCC stays a reference, not a runtime dependency.
 
 ## Next release decisions
 
-Enable inference only where local relevance checks justify it. If inferred planning misses available evidence, keep a working bounded default and improve the single planner rather than stacking unchecked agents. Broader inventories need an explicit authorized inventory-selection design before raising context limits.
+Prefer `--strategy jev` over the rule families once its thresholds are tuned on the owner's inventory; the families remain the dependency-free fallback. Enable Qwen inference only where local relevance checks justify it. A pre-filter (jev or FTS top-K) before the Qwen planner is the way to lift its 5,000-byte inventory ceiling, not a larger context.
 
-Recheck native Codex MCP after v0.2 delivery and selection changes, preserving the earlier failed results. The new test protocol includes recovery guidance, a Spanish correction query, and an unforced generic turn; scores are not directly comparable with the earlier forced-tool protocol. Run the owner-trusted prompt-hook walkthrough before calling the full Codex integration verified. Claude Code still needs its native walkthrough. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.
+Recheck native Codex MCP after v0.2 delivery and selection changes, preserving the earlier failed results. The new test protocol includes recovery guidance, a Spanish correction query, and an unforced generic turn; scores are not directly comparable with the earlier forced-tool protocol. Run the owner-trusted prompt-hook walkthrough before calling the full Codex integration verified. Claude Code has an opt-in headless runner (`tests/native_claude_check.py`) that the owner starts explicitly because it uses their sign-in and quota. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.
