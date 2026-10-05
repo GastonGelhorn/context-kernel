@@ -8,3 +8,4 @@ dist/
 *.sqlite*
 work/
 .DS_Store
+.claude/settings.local.json
