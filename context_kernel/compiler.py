@@ -76,7 +76,9 @@ class Compiler:
             elif strategy == "jev":
                 if self.jev is None:
                     raise KernelError("jev selection requires a configured jev client.")
-                plan, usage = jev_plan(query, records, self.jev, relations)
+                hits = lexical_scores(query, records)
+                lexical = {(r["entity_key"], r["predicate"]) for r in records if r["id"] in hits}
+                plan, usage = jev_plan(query, records, self.jev, relations, lexical)
             elif strategy == "fts":
                 plan = NeedPlan(strategy="fts")
             elif strategy == "rules":

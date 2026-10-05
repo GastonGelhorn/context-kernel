@@ -281,15 +281,15 @@ class Jev:
 
     QUESTION = "Is `candidate` a fact that someone answering `query` must take into account?"
 
-    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None):
+    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None, band=0.35):
         if not isinstance(command, str) or not command.strip() or "\0" in command:
             raise KernelError("Invalid jev command.")
         if not 0 < timeout <= 60:
             raise KernelError("jev timeout must be 1-60 seconds.")
-        if not (0 < supporting <= critical <= 1):
-            raise KernelError("jev thresholds must satisfy 0 < supporting <= critical <= 1.")
+        if not (0 < band <= supporting <= critical <= 1):
+            raise KernelError("jev thresholds must satisfy 0 < band <= supporting <= critical <= 1.")
         self.command, self.timeout = command, timeout
-        self.critical, self.supporting = critical, supporting
+        self.critical, self.supporting, self.band = critical, supporting, band
         self.question = text(question or self.QUESTION, 1024)
 
     def rank(self, query, candidates):
@@ -331,10 +331,13 @@ def jev_candidate(entity, predicate, values):
     return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()
 
 
-def jev_plan(query, records, jev, relations=()):
+def jev_plan(query, records, jev, relations=(), lexical=()):
     """Every authorized entity/property pair is judged against the question; the plan keeps the
-    pairs above the supporting threshold, critical above the critical one. jev failures fall back
-    to the rules plan with a visible warning: a judgment service outage must not hide memory."""
+    pairs above the supporting threshold, critical above the critical one. A pair that lands in
+    the uncertain band below the supporting bar is kept as supporting only when the question
+    lexically matches it (`lexical` holds those pairs): the band is decided by other evidence, not
+    by lowering the bar. jev failures fall back to the rules plan with a visible warning: a
+    judgment service outage must not hide memory."""
     if generic_question(query, records):
         return NeedPlan(strategy="jev"), {"calls": 0}
     if ambiguous_entity_reference(query, records):
@@ -351,9 +354,12 @@ def jev_plan(query, records, jev, relations=()):
         fallback = rules_plan(query, records, relations)
         return NeedPlan(fallback.needs, "jev", fallback.warnings + ("jev_unavailable",)), {"calls": 1, "failure": str(exc)}
     ranked = sorted(((scores.get(i, 0.0), e, p) for i, (e, p) in enumerate(keys)), key=lambda t: (-t[0], t[1], t[2]))
-    needs = tuple(Need((p,), (e,), critical=score >= jev.critical)
-                  for score, e, p in ranked if score >= jev.supporting)[:16]
+    lexical = set(lexical)
+    rescued = [f"{e}.{p}" for score, e, p in ranked if jev.band <= score < jev.supporting and (e, p) in lexical]
+    needs = tuple(Need((p,), (e,), critical=score >= jev.critical) for score, e, p in ranked
+                  if score >= jev.supporting or (jev.band <= score and (e, p) in lexical))[:16]
     # Scores are keyed by source pair, never by value: the trace stays metadata-only.
     usage.update(calls=1, scores={f"{e}.{p}": round(score, 3) for score, e, p in ranked},
-                 thresholds={"critical": jev.critical, "supporting": jev.supporting})
+                 thresholds={"critical": jev.critical, "supporting": jev.supporting, "band": jev.band},
+                 lexical_rescues=rescued)
     return NeedPlan(needs, "jev"), usage

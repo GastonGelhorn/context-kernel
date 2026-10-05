@@ -138,8 +138,18 @@ class JevTests(unittest.TestCase):
         self.assertEqual(len(plan.needs), 16)
         self.assertEqual(len(usage["scores"]), 20)
 
+    def test_uncertain_band_is_decided_by_a_lexical_match_not_a_lower_bar(self):
+        os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.467, "user favorite color": 0.467})
+        manager, colour = self.add("manager", "Dani"), self.add("favorite_color", "Blue")
+        result = self.compiler.project("quien es mi manager?", strategy="jev")
+        self.assertEqual(result.trace["reasons"][manager["id"]], "supporting_need")
+        self.assertNotIn(colour["id"], result.trace["selected"])
+        self.assertEqual(result.trace["usage"]["lexical_rescues"], ["user.manager"])
+        os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.2})
+        self.assertEqual(self.compiler.project("quien es mi manager?", strategy="jev").trace["selected"], [])
+
     def test_thresholds_and_command_are_validated(self):
-        for kwargs in ({"critical": 0.3, "supporting": 0.5}, {"supporting": 0}, {"timeout": 0}, {"command": ""}):
+        for kwargs in ({"critical": 0.3, "supporting": 0.5}, {"supporting": 0}, {"timeout": 0}, {"command": ""}, {"band": 0.55}):
             with self.assertRaises(KernelError):
                 Jev(**({"command": str(self.fake)} | kwargs))
 
