@@ -90,6 +90,14 @@ class DependencyTests(unittest.TestCase):
         with self.assertRaisesRegex(KernelError, "no stale"):
             self.store.reaffirm(rewrite["id"])
 
+    def test_reaffirm_follows_a_chain_of_corrections(self):
+        deadline, rewrite = self.deadline_and_rewrite()
+        second = self.store.correct(deadline["id"], "three weeks", "Moved.")
+        third = self.store.correct(second["id"], "two weeks", "Moved again.")
+        result = self.store.reaffirm(rewrite["id"])
+        self.assertEqual(result["moved"], [{"from": deadline["id"], "to": third["id"]}])
+        self.assertFalse(self.store.inspect(rewrite["id"])["stale"])
+
     def test_revoked_assumption_cannot_be_reaffirmed(self):
         deadline, rewrite = self.deadline_and_rewrite()
         self.store.revoke(deadline["id"])

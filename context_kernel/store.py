@@ -334,8 +334,12 @@ class Store:
             for assumption in row["assumptions"]:
                 if assumption["effective_state"] == "active":
                     continue
-                successor = assumption["superseded_by"]
-                if not successor or self.inspect(successor)["effective_state"] != "active":
+                # Follow the correction chain: the assumption may have changed more than once.
+                successor, seen = assumption["superseded_by"], set()
+                while successor and successor not in seen and self.inspect(successor)["effective_state"] != "active":
+                    seen.add(successor)
+                    successor = self.inspect(successor)["superseded_by"]
+                if not successor or successor in seen:
                     raise KernelError("A changed assumption has no current successor; correct or revoke the dependent instead.")
                 self.db.execute("DELETE FROM relations WHERE scope=? AND kind='depends_on' AND from_statement=? AND to_statement=?",
                                 (self.scope, row["id"], assumption["id"]))
