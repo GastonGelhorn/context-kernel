@@ -10,3 +10,5 @@ work/
 .DS_Store
 .claude/settings.local.json
 .codex/hooks.json
+.mcp.json
+.codex/config.toml
