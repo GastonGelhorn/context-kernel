@@ -1,0 +1,107 @@
+{
+ "client": "Claude Code",
+ "version": "2.1.287 (Claude Code)",
+ "model": "client default",
+ "strategy": "jev",
+ "jev_backend": "local (tev1-32k through Ollama); TYPESAFE_BASE_URL unset for the run",
+ "passed": true,
+ "hook_emitted_in_every_session": true,
+ "strategy_fallbacks": 0,
+ "wall_seconds": 51.904,
+ "paid_api_calls": 0,
+ "global_settings_edited": false,
+ "permissions_bypassed": false,
+ "cost_usd_reported": [
+  0.30664075,
+  0.30285125,
+  0.30278125,
+  0.36196075,
+  0.32737125,
+  0.34074375
+ ],
+ "evaluation_scope": "fictional lifecycle, dependency, and evidence-use checks through the real hook; not a quality benchmark",
+ "phases": [
+  {
+   "name": "empty_memory",
+   "answer": "UNKNOWN",
+   "passed": true,
+   "projection_status": [
+    "empty"
+   ],
+   "selection_calls": [
+    0
+   ],
+   "duration_seconds": 7.863
+  },
+  {
+   "name": "registered_approver_fresh_session",
+   "answer": "Nyra Vale",
+   "passed": true,
+   "projection_status": [
+    "ok"
+   ],
+   "selection_calls": [
+    1
+   ],
+   "duration_seconds": 6.08
+  },
+  {
+   "name": "corrected_approver_fresh_session",
+   "answer": "Orin Keel",
+   "passed": true,
+   "projection_status": [
+    "ok"
+   ],
+   "selection_calls": [
+    1
+   ],
+   "duration_seconds": 7.008
+  },
+  {
+   "name": "stale_recommendation_after_deadline_change",
+   "answer": "The recorded decision to rewrite the payment module before launch rests on an assumption that has since been superseded by the stated three-week deadline, so it should be re-reviewed against that deadline before you commit rather than treated as a settled yes.",
+   "passed": true,
+   "projection_status": [
+    "review_required"
+   ],
+   "projection_warnings": [
+    [
+     "stale_dependents"
+    ]
+   ],
+   "selection_calls": [
+    1
+   ],
+   "duration_seconds": 15.532,
+   "thinking_tokens": 200
+  },
+  {
+   "name": "forgotten_approver_fresh_session",
+   "answer": "UNKNOWN",
+   "passed": true,
+   "projection_status": [
+    "empty"
+   ],
+   "selection_calls": [
+    1
+   ],
+   "duration_seconds": 7.397,
+   "jev_scores_by_pair": {
+    "checkout.deadline": 0.276,
+    "checkout.decision": 0.342
+   }
+  },
+  {
+   "name": "generic_question_no_personal_context",
+   "answer": "A SQLite primary key is a column or set of columns whose values uniquely identify each row in a table, and when declared as a single `INTEGER PRIMARY KEY` it becomes an alias for the table's built-in `rowid`.",
+   "passed": true,
+   "projection_status": [
+    "empty"
+   ],
+   "selection_calls": [
+    0
+   ],
+   "duration_seconds": 8.024
+  }
+ ]
+}
