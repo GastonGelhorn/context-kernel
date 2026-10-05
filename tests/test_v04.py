@@ -178,6 +178,33 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(self.capture(packet, ("user", "manager", "Dani"))[0]["reason"], "judge_unavailable")
         self.assertEqual(self.store.records(quarantined=True), [])
 
+    def test_an_uncertain_affirmation_is_held_not_delivered(self):
+        self.judge.ask_fn = answers(affirmed=0.65)
+        packet, _ = self.prompt("Creo que mi manager es Dani")
+        result = self.capture(packet, ("user", "manager", "Dani"))[0]
+        self.assertEqual((result["status"], result["reason"]), ("quarantined", "uncertain"))
+        self.assertEqual(self.current("user", "manager"), [])
+
+    def test_restating_a_captured_fact_confirms_it(self):
+        packet, _ = self.prompt("Mi manager es Dani")
+        self.capture(packet, ("user", "manager", "Dani"))
+        packet, _ = self.prompt("Sí, mi manager es Dani")
+        self.assertEqual(self.capture(packet, ("user", "manager", "Dani"))[0]["status"], "confirmed")
+        self.assertEqual(self.current("user", "manager")[0]["trust"], "confirmed")
+
+    def test_unconfirmed_captures_stop_being_evidence_after_180_days(self):
+        packet, _ = self.prompt("Mi manager es Dani")
+        self.capture(packet, ("user", "manager", "Dani"))
+        self.assertTrue(Compiler(self.store).project("Who is my manager?", strategy="fts").trace["selected"])
+        self.now = timestamp_offset(self.now, 181 * 86400)
+        self.assertEqual(Compiler(self.store).project("Who is my manager?", strategy="fts").trace["selected"], [])
+        self.assertEqual(len(self.current("user", "manager")), 1)  # still in memory, visible in the inventory
+
+    def test_calibration_exports_rows_jev_tune_reads(self):
+        from context_kernel.calibration import export
+        rows = [json.loads(line) for line in export("affirmed", Path(__file__).resolve().parent.parent / "fixtures" / "calibration.jsonl").splitlines()]
+        self.assertTrue(rows and all(set(r) == {"text", "label"} and r["label"] in {"yes", "no"} for r in rows))
+
     # Corrections, confirmations, undo, caps, and forgetting
 
     def test_a_capture_corrects_a_capture_but_asks_before_overriding_a_confirmed_fact(self):

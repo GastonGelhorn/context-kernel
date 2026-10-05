@@ -14,6 +14,7 @@ from .language import fold, query_terms
 from .turns import do_not_remember
 
 
+NONE_BAR = 0.15
 CATEGORIES = {
     "project_state": "the status, scope, or progress of a project or piece of work",
     "project_decisions": "a decision, plan, or choice the user or their team made",
@@ -27,7 +28,9 @@ DEFAULT_POLICY = {
     "auto_capture": True,
     "allow_remote_judge": False,
     "categories": {name: name not in {"personal_attributes", "third_party_sensitive"} for name in CATEGORIES},
-    "thresholds": {"affirmed": 0.75, "facts_present": 0.5},
+    # Measured with `memory calibrate affirmed --score` on the local model: every true row scored
+    # 0.76 or more, the highest false one (a question) 0.757. The band below holds, not delivers.
+    "thresholds": {"affirmed": 0.75, "uncertain": 0.6, "none_bar": NONE_BAR},
     "caps": {"turn": 2, "session": 10, "day": 30},
 }
 AFFIRMED = ("Does the writer of `text` assert `fact` as true, in their own words, rather than quoting someone, "
@@ -44,7 +47,6 @@ _LOG_LINE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2}[ t]\d|\[\w+\]|traceback|\s+at |\
 _REPLY_MARKER = re.compile(r"^\s*(-{3,}|_{3,}|-+ ?(original message|forwarded message|mensaje original) ?-+|on .+ wrote:|el .+ escribi[oó]:)\s*$", re.I)
 _INSTRUCTION_VALUE = re.compile(r"(?i)\b(ignore (all|previous|the)|always (run|execute|answer)|you must|siempre (ejecuta|responde)|ignora)\b")
 AUTHORED_LIMIT = 1500
-NONE_BAR = 0.15
 VALUE_LIMIT = 200
 
 
@@ -92,7 +94,7 @@ def evidence_sentence(authored, triple):
     return best[:300]
 
 
-def gate(judge, prompt, deadline=None):
+def gate(judge, prompt, deadline=None, none_bar=None):
     """How many facts the authored part of this prompt states, and whether it is mostly an
     instruction. Cheap: one request; called only when the budget allows."""
     authored, _ = segments(prompt)
@@ -105,7 +107,7 @@ def gate(judge, prompt, deadline=None):
     # Measured on the local model: messages that state a fact put P(none) at 0.04 or less, a generic
     # question at 0.27. The count itself is an estimate (a fact plus a question reads as "two"), so
     # it is used for coverage accounting, not as an exact number.
-    if counts.get("none", 0.0) >= NONE_BAR:
+    if counts.get("none", 0.0) >= (none_bar if none_bar is not None else NONE_BAR):
         facts = 0
     else:
         best = max((k for k in counts if k != "none"), key=counts.get)
@@ -132,6 +134,8 @@ def _decide(store, judge, turn, triple, rules, deadline):
         pasted, _ = judge.ask({"text": quoted, "fact": line}, {"affirmed": ("noul", AFFIRMED)}, timeout=timeout)
         if pasted["affirmed"] >= bar:
             return "quarantined", "quoted_source", category, quoted
+    if answers["affirmed"] >= rules["thresholds"].get("uncertain", bar):
+        return "quarantined", "uncertain", category, authored
     return "rejected", "not_affirmed", category, None
 
 
@@ -185,8 +189,22 @@ def _capture_one(store, judge, turn, triple, rules, deadline):
     if store.tombstoned_since(entity, predicate, turn["opened_at"]):
         return done("rejected", "forgotten")
     current = [r for r in store.records(quarantined=True) if r["entity_key"] == entity and r["predicate"] == predicate]
-    if any(r["value"] == value for r in current):
-        return done("duplicate", "already_known", next(r["id"] for r in current if r["value"] == value))
+    same = next((r for r in current if r["value"] == value), None)
+    if same:
+        # Confirmation by use: the user restating a captured value in a message they typed promotes
+        # it; anything else is a no-op. Being delivered or repeated by the agent proves nothing.
+        if turn["origin"] != "interactive":
+            return done("duplicate", "already_known", same["id"])
+        try:
+            status, _, _, _ = _decide(store, judge, turn, triple, rules, deadline)
+        except JudgeError:
+            return done("duplicate", "already_known", same["id"])
+        if status == "captured" and same["trust"] != "confirmed":
+            store.confirm(same["id"])
+            return done("confirmed", "restated_by_user", same["id"])
+        if status == "captured":
+            store.confirm(same["id"])  # refreshes last_confirmed_at
+        return done("duplicate", "already_known", same["id"])
     try:
         status, reason, category, source = _decide(store, judge, turn, triple, rules, deadline)
     except JudgeError as exc:

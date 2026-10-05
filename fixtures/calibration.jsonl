@@ -1,0 +1,56 @@
+{"kind": "affirmed", "message": "Mi manager es Dani.", "fact": "user manager: Dani", "label": true}
+{"kind": "affirmed", "message": "My manager is Dani.", "fact": "user manager: Dani", "label": true}
+{"kind": "affirmed", "message": "¿Mi manager es Dani?", "fact": "user manager: Dani", "label": false}
+{"kind": "affirmed", "message": "Is my manager Dani?", "fact": "user manager: Dani", "label": false}
+{"kind": "affirmed", "message": "Mi manager ya no es Dani.", "fact": "user manager: Dani", "label": false}
+{"kind": "affirmed", "message": "Ana dijo que su manager es Dani.", "fact": "user manager: Dani", "label": false}
+{"kind": "affirmed", "message": "If Dani were my manager I would ask for a raise.", "fact": "user manager: Dani", "label": false}
+{"kind": "affirmed", "message": "El proyecto tiene que estar listo en tres semanas.", "fact": "checkout deadline: three weeks", "label": true}
+{"kind": "affirmed", "message": "We have three months to deliver the checkout project. Should we rewrite it?", "fact": "checkout deadline: three months", "label": true}
+{"kind": "affirmed", "message": "Should we aim for three months on checkout?", "fact": "checkout deadline: three months", "label": false}
+{"kind": "affirmed", "message": "The deadline might move to three weeks, not sure yet.", "fact": "checkout deadline: three weeks", "label": false}
+{"kind": "affirmed", "message": "Update: the checkout deadline changed, we now have three weeks.", "fact": "checkout deadline: three weeks", "label": true}
+{"kind": "affirmed", "message": "Para esta versión descartamos Redis.", "fact": "release decision: no Redis", "label": true}
+{"kind": "affirmed", "message": "¿Descartamos Redis para esta versión?", "fact": "release decision: no Redis", "label": false}
+{"kind": "affirmed", "message": "El cliente escribió: 'descartamos Redis'. ¿Qué opinas?", "fact": "release decision: no Redis", "label": false}
+{"kind": "affirmed", "message": "Yo apruebo las releases de context-kernel.", "fact": "context_kernel release approver: Gaston", "label": true}
+{"kind": "affirmed", "message": "Who approves context-kernel releases?", "fact": "context_kernel release approver: Gaston", "label": false}
+{"kind": "affirmed", "message": "Prefiero respuestas cortas y en español.", "fact": "user preference: short answers in Spanish", "label": true}
+{"kind": "affirmed", "message": "Can you answer in Spanish this time?", "fact": "user preference: answers in Spanish", "label": false}
+{"kind": "affirmed", "message": "Our budget for the migration is 20k EUR.", "fact": "migration budget: 20000 EUR", "label": true}
+{"kind": "affirmed", "message": "Is 20k EUR enough for the migration?", "fact": "migration budget: 20000 EUR", "label": false}
+{"kind": "affirmed", "message": "No estoy seguro de si el presupuesto es 20k.", "fact": "migration budget: 20000 EUR", "label": false}
+{"kind": "affirmed", "message": "Mi amigo es alérgico a las nueces.", "fact": "friend allergy: nuts", "label": true}
+{"kind": "affirmed", "message": "Busco un regalo, ¿a alguien le dan alergia las nueces?", "fact": "friend allergy: nuts", "label": false}
+{"kind": "affirmed", "message": "We decided to deploy only in the EU region.", "fact": "platform deploy region: EU only", "label": true}
+{"kind": "affirmed", "message": "What if we deployed only in the EU region?", "fact": "platform deploy region: EU only", "label": false}
+{"kind": "affirmed", "message": "Ya no trabajo en el proyecto aurora.", "fact": "user employment: aurora", "label": false}
+{"kind": "affirmed", "message": "Trabajo en el proyecto aurora desde marzo.", "fact": "user employment: aurora", "label": true}
+{"kind": "affirmed", "message": "The approver used to be Orin; now it's Nyra.", "fact": "release approver: Nyra", "label": true}
+{"kind": "affirmed", "message": "The approver used to be Orin; now it's Nyra.", "fact": "release approver: Orin", "label": false}
+{"kind": "facts_present", "message": "Mi manager es Dani", "label": true}
+{"kind": "facts_present", "message": "We have three months to deliver checkout. Should we rewrite the payment module?", "label": true}
+{"kind": "facts_present", "message": "El plazo cambió: tenemos tres semanas.", "label": true}
+{"kind": "facts_present", "message": "Para esta versión descartamos Redis.", "label": true}
+{"kind": "facts_present", "message": "Prefiero respuestas cortas.", "label": true}
+{"kind": "facts_present", "message": "Our budget is 20k EUR and the client wants a demo on Friday.", "label": true}
+{"kind": "facts_present", "message": "Trabajo en aurora desde marzo.", "label": true}
+{"kind": "facts_present", "message": "I'm allergic to penicillin, keep that in mind for the health app copy.", "label": true}
+{"kind": "facts_present", "message": "We decided to keep Postgres.", "label": true}
+{"kind": "facts_present", "message": "Yo apruebo las releases.", "label": true}
+{"kind": "facts_present", "message": "Explain what a SQLite primary key is.", "label": false}
+{"kind": "facts_present", "message": "ok", "label": false}
+{"kind": "facts_present", "message": "Thanks!", "label": false}
+{"kind": "facts_present", "message": "Can you rerun the tests?", "label": false}
+{"kind": "facts_present", "message": "¿Qué hora es en Tokio?", "label": false}
+{"kind": "facts_present", "message": "Please forget the checkout deadline.", "label": false}
+{"kind": "facts_present", "message": "Write a Python function that sorts a list.", "label": false}
+{"kind": "facts_present", "message": "What do you remember about me?", "label": false}
+{"kind": "facts_present", "message": "Show me the diff.", "label": false}
+{"kind": "facts_present", "message": "Hazlo más corto.", "label": false}
+{"kind": "forget_asked", "message": "Olvida mi salario.", "fact": "user salary: 50000", "label": true}
+{"kind": "forget_asked", "message": "Please forget the checkout deadline.", "fact": "checkout deadline: three weeks", "label": true}
+{"kind": "forget_asked", "message": "Borra lo de mi manager, ya no aplica.", "fact": "user manager: Dani", "label": true}
+{"kind": "forget_asked", "message": "¿Cuánto gano?", "fact": "user salary: 50000", "label": false}
+{"kind": "forget_asked", "message": "Forget the old approach, let's use Redis.", "fact": "user salary: 50000", "label": false}
+{"kind": "forget_asked", "message": "No te olvides de mi salario cuando negocies.", "fact": "user salary: 50000", "label": false}

@@ -38,6 +38,13 @@ def parser():
     policy.add_argument("--disable", nargs="*", default=[])
     policy.add_argument("--allow-remote-judge", choices=("yes", "no"))
     policy.add_argument("--auto-capture", choices=("on", "off"))
+    policy.add_argument("--threshold", action="append", default=[], help="name=value, e.g. affirmed=0.72 after jev tune")
+    calibrate = commands.add_parser("calibrate", help="Export labelled fixtures for `jev tune`")
+    calibrate.add_argument("kind", choices=("affirmed", "facts_present", "forget_asked"))
+    calibrate.add_argument("--fixtures", default=str(Path(__file__).resolve().parent.parent / "fixtures" / "calibration.jsonl"))
+    calibrate.add_argument("--questions", action="store_true", help="Print the candidate questions instead of the rows")
+    calibrate.add_argument("--score", action="store_true", help="Run the kernel's own question over the fixtures with jev and sweep thresholds")
+    calibrate.add_argument("--jev-command", default="jev")
     serve = commands.add_parser("serve", help="Stdio MCP server with a fixed scope")
     traces = commands.add_parser("traces")
     traces.add_argument("--limit", type=int, default=20, help="Latest scoped projection metadata, 1-100")
@@ -146,6 +153,16 @@ def execute(args, store):
     if command == "inventory":
         from .mcp import Server
         return Server(store, parent=[]).inventory()
+    if command == "calibrate":
+        from .calibration import export, questions, score
+        if args.score:
+            judge = make_judge(args)
+            if not judge:
+                raise KernelError("Scoring needs jev on the PATH or --jev-command.")
+            print(json.dumps(score(args.kind, args.fixtures, judge), ensure_ascii=False, indent=2 if args.pretty else None), flush=True)
+            return None
+        print("\n".join(questions(args.kind)) if args.questions else export(args.kind, args.fixtures), flush=True)
+        return None
     if command == "metrics":
         return {"captures": store.capture_metrics(), "status": store.status()}
     if command == "policy":
@@ -156,7 +173,12 @@ def execute(args, store):
             stored["allow_remote_judge"] = args.allow_remote_judge == "yes"
         if args.auto_capture:
             stored["auto_capture"] = args.auto_capture == "on"
-        if args.enable or args.disable or args.allow_remote_judge or args.auto_capture:
+        for item in args.threshold:
+            name, _, value = item.partition("=")
+            if name not in {"affirmed", "uncertain", "none_bar"} or not 0 < float(value) < 1:
+                raise KernelError("Thresholds: affirmed, uncertain, or none_bar, between 0 and 1.")
+            stored["thresholds"] = dict(stored.get("thresholds", {}), **{name: float(value)})
+        if args.enable or args.disable or args.allow_remote_judge or args.auto_capture or args.threshold:
             store.set_policy(stored)
         return capture_policy(store)
     if command == "dependents":
@@ -232,6 +254,9 @@ def main(argv=None):
     args = parser().parse_args(argv)
     store = None
     try:
+        if args.command == "calibrate":
+            execute(args, None)
+            return 0
         if args.command == "adapter":
             result = configuration(args.client, args.workspace, args.db, args.scope, args.python, args.mode,
                                    args.proposals, args.strategy, args.fail_closed, args.jev_command)

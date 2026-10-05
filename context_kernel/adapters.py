@@ -115,7 +115,7 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
             and (deadline is None or deadline.allows(4)):
         try:
             judge.require_local(capture_policy(store)["allow_remote_judge"])
-            result = gate(judge, prompt, deadline)
+            result = gate(judge, prompt, deadline, capture_policy(store)["thresholds"].get("none_bar"))
             # A message often states a fact and asks something; the instruction score is not a veto.
             if result["facts"]:
                 gate_count = result["facts"]
