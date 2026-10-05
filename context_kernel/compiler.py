@@ -67,7 +67,7 @@ class Compiler:
         scores = lexical_scores(query, records)
         selected, critical, missing, reasons = set(), set(), [], {}
         for index, need in enumerate(plan.needs):
-            matches = [r for r in records if r["predicate"] in need.predicates
+            matches = [r for r in records if not need.unavailable and r["predicate"] in need.predicates
                        and (not need.entities or r["entity_key"] in need.entities)]
             if not matches and need.critical:
                 missing.append(index)

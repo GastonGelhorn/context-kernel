@@ -45,7 +45,11 @@ def key(value, name="key"):
 
 
 def text(value, limit=4096):
-    if not isinstance(value, str) or not value.strip() or len(value.encode()) > limit:
+    try:
+        valid = isinstance(value, str) and value.strip() and len(value.encode()) <= limit
+    except UnicodeError:
+        valid = False
+    if not valid:
         raise KernelError("Text is empty or exceeds its size limit.")
     return value.strip()
 
@@ -55,7 +59,11 @@ def checked_value(value):
         encoded = canonical(value)
     except (TypeError, ValueError, RecursionError) as exc:
         raise KernelError("Value must be finite JSON data.") from exc
-    if len(encoded.encode()) > 4096:
+    try:
+        size = len(encoded.encode())
+    except UnicodeError as exc:
+        raise KernelError("Value must contain valid Unicode.") from exc
+    if size > 4096:
         raise KernelError("Value exceeds its size limit.")
     return encoded
 

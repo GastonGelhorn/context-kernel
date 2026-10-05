@@ -1,6 +1,7 @@
 """Read-only prompt hooks and explicit configuration generation."""
 
 from pathlib import Path
+import json
 import re
 import shlex
 import sys
@@ -14,6 +15,18 @@ COMMAND = re.compile(r'^(Remember|Correct): ([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+) =
 
 def propose_command(store, prompt):
     """A whole-message grammar creates proposals, never accepted facts."""
+    if prompt.strip().lower() in {"it finally arrived.", "it has not arrived.", "i returned it."}:
+        event = {"it finally arrived.": "arrived", "it has not arrived.": "not_arrived", "i returned it.": "returned"}[prompt.strip().lower()]
+        entity = store.resolve_pending_delivery(event)
+        return store.propose("transition", {"entity": entity, "event": event, "evidence": prompt})
+    transitions = ((r"I ordered ([a-zA-Z0-9_-]+)\.", "ordered"),
+                   (r"([a-zA-Z0-9_-]+) has not arrived\.", "not_arrived"),
+                   (r"([a-zA-Z0-9_-]+) arrived\.", "arrived"),
+                   (r"I returned ([a-zA-Z0-9_-]+)\.", "returned"))
+    for grammar, event in transitions:
+        match = re.fullmatch(grammar, prompt.strip(), re.IGNORECASE)
+        if match:
+            return store.propose("transition", {"entity": match[1].lower(), "event": event, "evidence": prompt})
     match = COMMAND.fullmatch(prompt.strip())
     if not match:
         return None
@@ -41,6 +54,8 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         raise KernelError("Hook workspace is outside the configured boundary.")
     prompt = text(event.get("prompt"), 16384)
     notice = None
+    if re.fullmatch(r"(?:Forget|Revoke): .+", prompt, re.IGNORECASE):
+        raise KernelError("Privacy changes require the owner CLI: memory forget or memory revoke. This hook did not apply the request.")
     if proposals:
         event_id = digest({"session": event.get("session_id"), "turn": event.get("turn_id"), "prompt": prompt})
         # No content-derived event hashes persist unless proposal capture is enabled.
@@ -50,7 +65,11 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
                 with store.db:
                     store.db.execute("INSERT INTO processed_events VALUES(?,?)", (store.scope, event_id))
     projection = compiler.project(prompt, strategy=strategy)
-    compiler.revalidate(projection)
+    try:
+        compiler.revalidate(projection)
+    except KernelError:
+        store.mark_failed(projection.id)
+        raise
     result = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
               "additionalContext": projection.content}}
     messages = []
@@ -71,8 +90,9 @@ def configuration(client, workspace, db, scope, python=None, mode="hook", propos
     if mode == "mcp" or client == "antigravity":
         server = {"command": executable, "args": args + ["serve"], "env": {"PYTHONPATH": checkout}}
         if client == "codex":
-            return {"destination": ".codex/config.toml", "mcp_servers": {"context-kernel": server},
-                    "format": "Translate this object to TOML or use the documented Codex MCP CLI."}
+            toml = "[mcp_servers.context-kernel]\ncommand = " + json.dumps(executable) + "\nargs = " + json.dumps(server["args"]) + "\n"
+            toml += "\n[mcp_servers.context-kernel.env]\nPYTHONPATH = " + json.dumps(checkout) + "\n"
+            return {"destination": ".codex/config.toml", "content": toml}
         return {"destination": ".mcp.json" if client == "claude" else ".agents/mcp_config.json",
                 "config": {"mcpServers": {"context-kernel": server}}}
     command = shlex.join(["env", "PYTHONPATH=" + checkout, executable] + args +

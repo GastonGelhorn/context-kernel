@@ -25,10 +25,11 @@ TOOLS = [
     {"name": "memory_status", "description": "Inspect counts in this server's fixed scope.", "inputSchema": schema()},
     {"name": "memory_why", "description": "Explain a previously prepared projection using its metadata-only trace.",
      "inputSchema": schema({"id": STRING}, ["id"])},
-    {"name": "memory_propose", "description": "Propose remembering or correcting evidence. Does not commit a fact; only the local owner CLI can approve.",
-     "inputSchema": schema({"operation": {"type": "string", "enum": ["remember", "correct"]},
+    {"name": "memory_propose", "description": "Propose remembering, correcting, or a delivery transition. Does not commit a fact; only the local owner CLI can approve.",
+     "inputSchema": schema({"operation": {"type": "string", "enum": ["remember", "correct", "transition"]},
                             "payload": schema({"entity": STRING, "predicate": STRING, "target_id": STRING,
-                                               "value": {}, "evidence": STRING, "valid_from": STRING, "valid_until": STRING})},
+                                               "value": {}, "evidence": STRING, "valid_from": STRING, "valid_until": STRING,
+                                               "event": {"type": "string", "enum": ["ordered", "not_arrived", "arrived", "returned"]}})},
                            ["operation", "payload"])},
 ]
 for tool in TOOLS:
@@ -66,7 +67,11 @@ class Server:
         if name == "memory_context":
             compiler = Compiler(self.store)
             projection = compiler.project(arguments["query"])
-            compiler.revalidate(projection)
+            try:
+                compiler.revalidate(projection)
+            except KernelError:
+                self.store.mark_failed(projection.id)
+                raise
             return {"projection_id": projection.id, "context": parse_json(projection.content) if projection.content else None,
                     "trace": projection.trace, "plan": projection.plan.to_dict()}
         if name == "memory_inspect":
@@ -96,6 +101,8 @@ class Server:
             return None
         if not isinstance(params, dict):
             return error(-32602, "Params must be an object.")
+        if method not in {"ping", "initialize", "tools/list", "tools/call"}:
+            return error(-32601, "Method not found.")
         if method == "ping":
             result = {}
         elif method == "initialize":

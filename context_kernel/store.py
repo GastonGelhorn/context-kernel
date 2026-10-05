@@ -62,8 +62,15 @@ class Store:
         if not create and not self.path.is_file():
             raise KernelError("Memory is not initialized. Run memory init first.")
         if create:
-            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
         self.db = sqlite3.connect(self.path, timeout=5)
+        try:
+            self._configure(create)
+        except Exception:
+            self.db.close()
+            raise
+
+    def _configure(self, create):
         self.db.row_factory = sqlite3.Row
         self.db.execute("PRAGMA foreign_keys=ON")
         self.db.execute("PRAGMA secure_delete=ON")
@@ -111,6 +118,53 @@ class Store:
         if len(matches) != 1:
             raise KernelError("Entity is unknown or ambiguous in this scope.")
         return matches[0]
+
+    def resolve_pending_delivery(self, event="arrived"):
+        predicate, value = ("ownership_status", "owned") if event == "returned" else ("open_loop", "awaiting_delivery")
+        matches = {r["entity_key"] for r in self.records() if r["predicate"] == predicate and r["value"] == value}
+        if len(matches) != 1:
+            raise KernelError("Delivery reference is unknown or ambiguous. Specify the object.")
+        return next(iter(matches))
+
+    def _delivery_records(self, entity):
+        return [r for r in self.records() if r["entity_key"] == entity and
+                r["predicate"] in {"delivery_status", "ownership_status", "open_loop"}]
+
+    def _transition(self, entity, event, evidence, expected_ids=None):
+        entity = key(entity, "entity")
+        evidence = text(evidence)
+        reject_secrets(evidence)
+        states = {
+            "ordered": ("pending", "not_received", "awaiting_delivery"),
+            "not_arrived": ("pending", "not_received", "awaiting_delivery"),
+            "arrived": ("delivered", "owned", "resolved"),
+            "returned": ("delivered", "returned", "resolved"),
+        }
+        if not isinstance(event, str) or event not in states:
+            raise KernelError("Unsupported delivery transition.")
+        if event != "ordered":
+            self.resolve_entity(entity)
+        current = self._delivery_records(entity)
+        if expected_ids is not None and sorted(r["id"] for r in current) != sorted(expected_ids):
+            raise KernelError("Transition proposal is stale; review the current state first.")
+        ids = []
+        for predicate, value in zip(("delivery_status", "ownership_status", "open_loop"), states[event]):
+            targets = [r for r in current if r["predicate"] == predicate]
+            if len(targets) > 1:
+                raise KernelError("Transition has conflicting targets; resolve them first.")
+            if targets and targets[0]["value"] == value:
+                ids.append(targets[0]["id"])
+            elif targets:
+                ids.append(self._correct(targets[0]["id"], value, evidence))
+            else:
+                ids.append(self._insert(entity, predicate, value, evidence, kind="object"))
+        self._event("transition", {"statement_ids": ids, "event": event})
+        return ids
+
+    def transition(self, entity, event, evidence):
+        with self.db:
+            ids = self._transition(entity, event, evidence)
+        return {"event": event, "statements": [self.inspect(i) for i in ids]}
 
     def _insert(self, entity, predicate, value, evidence, valid_from=None, valid_until=None,
                 assertion_kind="user_statement", source_kind="user_statement", label=None, kind="person", source_ref=None):
@@ -211,6 +265,16 @@ class Store:
             parent_id = self.resolve_entity(parent)["id"]
             if child_id == parent_id:
                 raise KernelError("An entity cannot contain itself.")
+            ancestors = {parent_id}
+            frontier = [parent_id]
+            while frontier:
+                node = frontier.pop()
+                for row in self.db.execute("SELECT to_entity FROM relations WHERE scope=? AND kind='part_of' AND from_entity=?", (self.scope, node)):
+                    if row[0] == child_id:
+                        raise KernelError("Containment would create a cycle.")
+                    if row[0] not in ancestors:
+                        ancestors.add(row[0])
+                        frontier.append(row[0])
             relation_id = identifier()
             self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
                             (relation_id, self.scope, "part_of", None, None, child_id, parent_id))
@@ -237,12 +301,13 @@ class Store:
                 "limits": "Host history, external backups, and forensic disk erasure are not covered."}
 
     def propose(self, operation, payload):
-        if operation not in {"remember", "correct"} or not isinstance(payload, dict):
-            raise KernelError("Only remember and correct proposals are supported.")
-        allowed = {"entity", "predicate", "value", "evidence", "target_id", "valid_from", "valid_until"}
+        if operation not in {"remember", "correct", "transition"} or not isinstance(payload, dict):
+            raise KernelError("Unsupported memory proposal.")
+        payload = dict(payload)
+        allowed = {"entity", "predicate", "value", "evidence", "valid_from", "valid_until"} if operation == "remember" else {"target_id", "value", "evidence", "valid_from", "valid_until"} if operation == "correct" else {"entity", "event", "evidence"}
         if set(payload) - allowed:
             raise KernelError("Proposal has unsupported fields.")
-        required = {"entity", "predicate", "value"} if operation == "remember" else {"target_id", "value"}
+        required = {"entity", "predicate", "value"} if operation == "remember" else {"target_id", "value"} if operation == "correct" else {"entity", "event", "evidence"}
         if not required <= set(payload):
             raise KernelError("Proposal is missing required fields.")
         if operation == "remember":
@@ -250,6 +315,14 @@ class Store:
             key(payload["predicate"], "predicate")
         if operation == "correct":
             self._row(payload.get("target_id"))
+        if operation == "transition":
+            entity = key(payload["entity"], "entity")
+            if payload["event"] not in {"ordered", "not_arrived", "arrived", "returned"}:
+                raise KernelError("Unsupported delivery transition.")
+            if payload["event"] != "ordered":
+                self.resolve_entity(entity)
+            payload["entity"] = entity
+            payload["expected_ids"] = sorted(r["id"] for r in self._delivery_records(entity))
         encoded = checked_value(payload)
         reject_secrets(encoded)
         proposal_id = identifier()
@@ -283,11 +356,16 @@ class Store:
                 new_id = self._insert(payload["entity"], payload["predicate"], payload["value"], evidence,
                                       valid_from=payload.get("valid_from"), valid_until=payload.get("valid_until"),
                                       source_kind="user_confirmation")
-            else:
+            elif row["operation"] == "correct":
                 new_id = self._correct(payload["target_id"], payload["value"], evidence,
                                        payload.get("valid_from"), payload.get("valid_until"))
+            else:
+                new_ids = self._transition(payload["entity"], payload["event"], evidence, payload["expected_ids"])
+                new_id = new_ids[0]
             self.db.execute("UPDATE proposals SET status='accepted' WHERE id=?", (proposal_id,))
             self._event("approve", {"statement_id": new_id})
+        if row["operation"] == "transition":
+            return {"event": payload["event"], "statements": [self.inspect(i) for i in new_ids]}
         return self.inspect(new_id)
 
     def save_plan(self, plan):
@@ -317,6 +395,16 @@ class Store:
         trace["delivery"] = "emitted"
         with self.db:
             self.db.execute("UPDATE projections SET trace=? WHERE id=? AND scope=?", (canonical(trace), projection_id, self.scope))
+
+    def mark_failed(self, projection_id, reason="state_changed"):
+        trace = self.trace(projection_id)
+        trace.update(delivery="failed", failure=key(reason, "failure code"))
+        with self.db:
+            self.db.execute("UPDATE projections SET trace=? WHERE id=? AND scope=?", (canonical(trace), projection_id, self.scope))
+
+    def record_failure(self, operation):
+        with self.db:
+            self._event("failure", {"operation": key(operation, "operation"), "code": "local_request_failed"})
 
     def status(self):
         return {"scope": self.scope, "current_statements": len(self.records()),
