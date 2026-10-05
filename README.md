@@ -89,8 +89,8 @@ Ordering, receiving, and returning update delivery, ownership, and the pending l
 
 | Client | Integration | Verified here |
 | --- | --- | --- |
-| Codex | Project prompt hook; optional stdio MCP | Native CLI MCP with Ollama and ChatGPT subscription; failures recorded. Hook subprocess contract; native activation needs the owner's trust step |
-| Claude Code | Project prompt hook; optional stdio MCP | Hook envelope and subprocess contract; `tests/native_claude_check.py` runs the real headless client on request |
+| Codex | Project prompt hook; optional stdio MCP | Hook verified natively after the owner's trust step; native CLI MCP with Ollama and ChatGPT subscription, failures recorded |
+| Claude Code | Project prompt hook; optional stdio MCP | Hook verified natively (headless runner and live desktop sessions); `tests/native_claude_check.py` reruns it on request |
 | Antigravity | On-demand stdio MCP | Documented config shape; native client not installed |
 | MCP clients | Read/propose tools with fixed scope | Official Python SDK 2.3.0 interoperability |
 

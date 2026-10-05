@@ -117,7 +117,9 @@ First real use outside the pilot: the owner's `work` scope, two facts, hook in t
 
 jev local latency, measured with synthetic pairs and `--no-cache`, warm Ollama: 2 pairs 0.21 s, 4 pairs 0.30 s, 32 pairs 1.7 s, 48 pairs 2.6 s, 64 pairs 3.5-4.8 s, 96 pairs 13 s. The first call after the model loads took 6.1 s for 32 pairs. jev's `--concurrency` made no difference between 1 and 8 on this Ollama. The kernel caps each call at `--jev-max-pairs` (48) and records the unjudged count.
 
-Still pending: the owner-trusted Codex hook walkthrough (`.codex/hooks.json` is generated in this checkout, untracked), and `jev tune` of the thresholds once the real inventory has enough labelled rows.
+The owner then ran the Codex walkthrough: Codex CLI 0.160.0 (GPT-5.6-Sol, ChatGPT subscription) opened in this checkout, the folder was trusted, the generated `.codex/hooks.json` was reviewed and trusted through Codex's own hooks prompt, and "quien es mi manager?" was asked. The kernel recorded two emitted projections for that session (a typo'd first attempt produced a correct `empty` projection: jev 0.424 and no lexical match), both selecting `user.manager` through the lexical rescue, and Codex answered "Tu manager es Dani." No bypass or global setting was involved. This closes the native hook verification for both clients; desktop-app history behaviour and the hosted jev model remain unmeasured.
+
+Still pending: `jev tune` of the thresholds once the real inventory has enough labelled rows.
 
 ## Native Codex CLI
 
