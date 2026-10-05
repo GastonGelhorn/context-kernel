@@ -1,0 +1,225 @@
+{
+  "date": "2026-10-05",
+  "model": "qwen3.5:9b",
+  "paid_api_calls": 0,
+  "attempted_local_model_calls": 65,
+  "runs": [
+    {
+      "run": "live_demo",
+      "reader_calls": 10,
+      "planner_calls": 3,
+      "passed": true
+    },
+    {
+      "run": "live_demo_final",
+      "reader_calls": 10,
+      "planner_calls": 7,
+      "passed": false
+    },
+    {
+      "run": "live_demo_validated",
+      "reader_calls": 10,
+      "planner_calls": 7,
+      "passed": false
+    },
+    {
+      "run": "live_demo_pairs",
+      "reader_calls": 4,
+      "planner_calls": 5,
+      "passed": false
+    },
+    {
+      "run": "live_demo_latest",
+      "reader_calls": 4,
+      "planner_calls": 5,
+      "passed": false
+    }
+  ],
+  "latest": {
+    "passed": false,
+    "core_checks": {
+      "correction_visible_in_new_projection": true,
+      "forget_removes_all_manager_versions": true,
+      "forgotten_history_not_in_database_dump": true,
+      "generic_question_avoids_personal_context_and_model_call": true,
+      "old_evidence_retained_until_forget": true,
+      "trace_explains_selection": true
+    },
+    "reader_checks": [
+      {
+        "condition": "reconstructed",
+        "passed": true,
+        "answer": "Blair",
+        "input_tokens": 313,
+        "payload_bytes": 1093
+      },
+      {
+        "condition": "accumulated",
+        "passed": true,
+        "answer": "Blair",
+        "input_tokens": 333,
+        "payload_bytes": 1196
+      },
+      {
+        "condition": "compact_structured",
+        "passed": true,
+        "answer": "Blair",
+        "input_tokens": 315,
+        "payload_bytes": 1098
+      },
+      {
+        "condition": "answer_contamination_probe",
+        "passed": true,
+        "answer": "4",
+        "input_tokens": 250,
+        "payload_bytes": 732
+      }
+    ],
+    "planner_checks": [
+      {
+        "condition": "cross_domain",
+        "passed": true,
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "availability"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "caregiving_requirements"
+            ],
+            "predicates": [
+              "relative_care_duration"
+            ],
+            "unavailable": true
+          }
+        ],
+        "warnings": [
+          "missing_critical_evidence"
+        ],
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 77,
+          "prompt_eval_count": 309,
+          "total_duration": 13726650875
+        }
+      },
+      {
+        "condition": "housing",
+        "passed": true,
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "mobility_limit"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "apartment_option_1_has_elevator",
+              "apartment_option_2_has_elevator",
+              "apartment_option_1_stair_count",
+              "apartment_option_2_stair_count"
+            ],
+            "predicates": [
+              "has_elevator_accessibility_feature"
+            ],
+            "unavailable": true
+          }
+        ],
+        "warnings": [
+          "missing_critical_evidence"
+        ],
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 143,
+          "prompt_eval_count": 285,
+          "total_duration": 15758114500
+        }
+      },
+      {
+        "condition": "deployment",
+        "passed": true,
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "data_region"
+            ],
+            "unavailable": false
+          }
+        ],
+        "warnings": [],
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 46,
+          "prompt_eval_count": 283,
+          "total_duration": 2402589167
+        }
+      },
+      {
+        "condition": "gift",
+        "passed": false,
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "snack_hammer_allergen_info"
+            ],
+            "predicates": [
+              "contains_nuts"
+            ],
+            "unavailable": true
+          }
+        ],
+        "warnings": [
+          "missing_critical_evidence"
+        ],
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 63,
+          "prompt_eval_count": 283,
+          "total_duration": 2929098959
+        }
+      },
+      {
+        "condition": "unguarded_generic",
+        "passed": true,
+        "needs": [],
+        "warnings": [],
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 14,
+          "prompt_eval_count": 306,
+          "total_duration": 1659271459
+        }
+      }
+    ]
+  },
+  "known_limitations": [
+    "The gift/allergy case misses available evidence and still fails.",
+    "Additional missing needs can be redundant or poorly named; schema validity is not relevance.",
+    "Fixed-seed repeated fictional runs are not statistical evidence or exhaustive language tests.",
+    "Native client hook and Antigravity acceptance is pending."
+  ]
+}
