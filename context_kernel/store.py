@@ -263,6 +263,15 @@ class Store:
         return [dict(r) | {"payload": json.loads(r["payload"])} for r in self.db.execute(
             "SELECT * FROM proposals WHERE scope=? ORDER BY recorded_at,id", (self.scope,))]
 
+    def reject(self, proposal_id):
+        with self.db:
+            changed = self.db.execute("UPDATE proposals SET status='rejected' WHERE id=? AND scope=? AND status='pending'",
+                                      (proposal_id, self.scope)).rowcount
+            if not changed:
+                raise KernelError("Pending proposal not found in this scope.")
+            self._event("reject", {"proposal_id": proposal_id})
+        return {"id": proposal_id, "status": "rejected"}
+
     def approve(self, proposal_id):
         with self.db:
             row = self.db.execute("SELECT * FROM proposals WHERE id=? AND scope=? AND status='pending'", (proposal_id, self.scope)).fetchone()
