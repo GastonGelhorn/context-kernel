@@ -1,0 +1,588 @@
+{
+  "client": "Codex CLI",
+  "hook_trust_bypassed": false,
+  "model": "qwen3.5:9b",
+  "paid_api_calls": 0,
+  "passed": true,
+  "phases": [
+    {
+      "answer": "UNKNOWN",
+      "condition": "empty_memory",
+      "context_tool_calls": 1,
+      "duration_seconds": 30.576,
+      "exit_code": 0,
+      "passed": true,
+      "tool_calls": [
+        {
+          "arguments": {
+            "query": "current release approver"
+          },
+          "error": null,
+          "id": "item_1",
+          "result": {
+            "content": [
+              {
+                "text": "{\"context\":{\"as_of\":\"2026-10-05T12:45:20.595185+00:00\",\"claims\":[],\"policy\":\"1\",\"type\":\"context_data\",\"warnings\":[\"unknown_task\"]},\"plan\":{\"needs\":[],\"strategy\":\"rules\",\"version\":1,\"warnings\":[\"unknown_task\"]},\"projection_id\":\"f18b1c4feedb43f1ba3171b1a87c7898\",\"trace\":{\"as_of\":\"2026-10-05T12:45:20.595185+00:00\",\"bytes\":119,\"delivery\":\"prepared\",\"excluded\":{},\"historical\":false,\"host_attachment\":\"unknown\",\"id\":\"f18b1c4feedb43f1ba3171b1a87c7898\",\"latency_ms\":4.852,\"missing_needs\":[],\"observation\":\"projection_only\",\"plan_id\":\"b60a5efc56c24929a3cde731da97f019\",\"policy\":\"1\",\"reasons\":{},\"scope\":\"pilot\",\"selected\":[],\"snapshot\":\"f77f1b2329c90b7da65bd534f23e374abdbbd72baa97477f97a0d71cad58086a\",\"status\":\"empty\",\"usage\":{\"calls\":0},\"warnings\":[\"unknown_task\"]}}",
+                "type": "text"
+              }
+            ],
+            "structured_content": {
+              "context": {
+                "as_of": "2026-10-05T12:45:20.595185+00:00",
+                "claims": [],
+                "policy": "1",
+                "type": "context_data",
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "plan": {
+                "needs": [],
+                "strategy": "rules",
+                "version": 1,
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "projection_id": "f18b1c4feedb43f1ba3171b1a87c7898",
+              "trace": {
+                "as_of": "2026-10-05T12:45:20.595185+00:00",
+                "bytes": 119,
+                "delivery": "prepared",
+                "excluded": {},
+                "historical": false,
+                "host_attachment": "unknown",
+                "id": "f18b1c4feedb43f1ba3171b1a87c7898",
+                "latency_ms": 4.852,
+                "missing_needs": [],
+                "observation": "projection_only",
+                "plan_id": "b60a5efc56c24929a3cde731da97f019",
+                "policy": "1",
+                "reasons": {},
+                "scope": "pilot",
+                "selected": [],
+                "snapshot": "f77f1b2329c90b7da65bd534f23e374abdbbd72baa97477f97a0d71cad58086a",
+                "status": "empty",
+                "usage": {
+                  "calls": 0
+                },
+                "warnings": [
+                  "unknown_task"
+                ]
+              }
+            }
+          },
+          "server": "context-kernel",
+          "status": "completed",
+          "tool": "memory_context",
+          "type": "mcp_tool_call"
+        }
+      ],
+      "usage": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 6083,
+          "input_tokens": 12582,
+          "output_tokens": 35,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "warnings": [
+        "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      ]
+    },
+    {
+      "answer": "Nyra Vale",
+      "condition": "registered",
+      "context_tool_calls": 1,
+      "duration_seconds": 45.052,
+      "exit_code": 0,
+      "passed": true,
+      "tool_calls": [
+        {
+          "arguments": {
+            "query": "current release approver"
+          },
+          "error": null,
+          "id": "item_1",
+          "result": {
+            "content": [
+              {
+                "text": "{\"context\":{\"as_of\":\"2026-10-05T12:46:04.520379+00:00\",\"claims\":[{\"attribution\":\"user_statement\",\"entity\":\"project\",\"evidence_id\":\"0ee1368822cc421dacab43d344310b5f\",\"id\":\"ff675dc58b2c4e979190cc34aea9fa1d\",\"predicate\":\"release_approver\",\"valid_from\":\"2026-10-05T12:45:23.468831+00:00\",\"valid_until\":null,\"value\":\"Nyra Vale\"}],\"policy\":\"1\",\"type\":\"context_data\",\"warnings\":[\"unknown_task\"]},\"plan\":{\"needs\":[],\"strategy\":\"rules\",\"version\":1,\"warnings\":[\"unknown_task\"]},\"projection_id\":\"00028cbf60d845278e5df864a705bc0d\",\"trace\":{\"as_of\":\"2026-10-05T12:46:04.520379+00:00\",\"bytes\":377,\"delivery\":\"prepared\",\"excluded\":{},\"historical\":false,\"host_attachment\":\"unknown\",\"id\":\"00028cbf60d845278e5df864a705bc0d\",\"latency_ms\":14.014,\"missing_needs\":[],\"observation\":\"projection_only\",\"plan_id\":\"2006b6c0bd1f4e96a280966c2db7d000\",\"policy\":\"1\",\"reasons\":{\"ff675dc58b2c4e979190cc34aea9fa1d\":\"lexical_match\"},\"scope\":\"pilot\",\"selected\":[\"ff675dc58b2c4e979190cc34aea9fa1d\"],\"snapshot\":\"cc135afa2babf812e2e3e602fd77e58ec5773f0132039948cf0cf33ee105964b\",\"status\":\"ok\",\"usage\":{\"calls\":0},\"warnings\":[\"unknown_task\"]}}",
+                "type": "text"
+              }
+            ],
+            "structured_content": {
+              "context": {
+                "as_of": "2026-10-05T12:46:04.520379+00:00",
+                "claims": [
+                  {
+                    "attribution": "user_statement",
+                    "entity": "project",
+                    "evidence_id": "0ee1368822cc421dacab43d344310b5f",
+                    "id": "ff675dc58b2c4e979190cc34aea9fa1d",
+                    "predicate": "release_approver",
+                    "valid_from": "2026-10-05T12:45:23.468831+00:00",
+                    "valid_until": null,
+                    "value": "Nyra Vale"
+                  }
+                ],
+                "policy": "1",
+                "type": "context_data",
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "plan": {
+                "needs": [],
+                "strategy": "rules",
+                "version": 1,
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "projection_id": "00028cbf60d845278e5df864a705bc0d",
+              "trace": {
+                "as_of": "2026-10-05T12:46:04.520379+00:00",
+                "bytes": 377,
+                "delivery": "prepared",
+                "excluded": {},
+                "historical": false,
+                "host_attachment": "unknown",
+                "id": "00028cbf60d845278e5df864a705bc0d",
+                "latency_ms": 14.014,
+                "missing_needs": [],
+                "observation": "projection_only",
+                "plan_id": "2006b6c0bd1f4e96a280966c2db7d000",
+                "policy": "1",
+                "reasons": {
+                  "ff675dc58b2c4e979190cc34aea9fa1d": "lexical_match"
+                },
+                "scope": "pilot",
+                "selected": [
+                  "ff675dc58b2c4e979190cc34aea9fa1d"
+                ],
+                "snapshot": "cc135afa2babf812e2e3e602fd77e58ec5773f0132039948cf0cf33ee105964b",
+                "status": "ok",
+                "usage": {
+                  "calls": 0
+                },
+                "warnings": [
+                  "unknown_task"
+                ]
+              }
+            }
+          },
+          "server": "context-kernel",
+          "status": "completed",
+          "tool": "memory_context",
+          "type": "mcp_tool_call"
+        }
+      ],
+      "usage": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 6083,
+          "input_tokens": 12762,
+          "output_tokens": 37,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "warnings": [
+        "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      ]
+    },
+    {
+      "answer": "Orin Keel",
+      "condition": "corrected_new_session",
+      "context_tool_calls": 1,
+      "duration_seconds": 6.107,
+      "exit_code": 0,
+      "passed": true,
+      "tool_calls": [
+        {
+          "arguments": {
+            "query": "Who is the current release approver?"
+          },
+          "error": null,
+          "id": "item_1",
+          "result": {
+            "content": [
+              {
+                "text": "{\"context\":{\"as_of\":\"2026-10-05T12:46:10.594280+00:00\",\"claims\":[{\"attribution\":\"user_statement\",\"entity\":\"project\",\"evidence_id\":\"a93157569792453bba264b2b8e4bad9a\",\"id\":\"8ef0011742554041960af2d29e28feb4\",\"predicate\":\"release_approver\",\"valid_from\":\"2026-10-05T12:46:08.523891+00:00\",\"valid_until\":null,\"value\":\"Orin Keel\"}],\"policy\":\"1\",\"type\":\"context_data\",\"warnings\":[\"unknown_task\"]},\"plan\":{\"needs\":[],\"strategy\":\"rules\",\"version\":1,\"warnings\":[\"unknown_task\"]},\"projection_id\":\"01fd2348c4154f8696ba69d105655dee\",\"trace\":{\"as_of\":\"2026-10-05T12:46:10.594280+00:00\",\"bytes\":377,\"delivery\":\"prepared\",\"excluded\":{},\"historical\":false,\"host_attachment\":\"unknown\",\"id\":\"01fd2348c4154f8696ba69d105655dee\",\"latency_ms\":5.0,\"missing_needs\":[],\"observation\":\"projection_only\",\"plan_id\":\"0363e5144eab46b08d6df236ea84dd75\",\"policy\":\"1\",\"reasons\":{\"8ef0011742554041960af2d29e28feb4\":\"lexical_match\"},\"scope\":\"pilot\",\"selected\":[\"8ef0011742554041960af2d29e28feb4\"],\"snapshot\":\"49ca3e478f24d029b3112c5b4f2e84d2cb6cc2145a51c0608d8aefab0e49fe9a\",\"status\":\"ok\",\"usage\":{\"calls\":0},\"warnings\":[\"unknown_task\"]}}",
+                "type": "text"
+              }
+            ],
+            "structured_content": {
+              "context": {
+                "as_of": "2026-10-05T12:46:10.594280+00:00",
+                "claims": [
+                  {
+                    "attribution": "user_statement",
+                    "entity": "project",
+                    "evidence_id": "a93157569792453bba264b2b8e4bad9a",
+                    "id": "8ef0011742554041960af2d29e28feb4",
+                    "predicate": "release_approver",
+                    "valid_from": "2026-10-05T12:46:08.523891+00:00",
+                    "valid_until": null,
+                    "value": "Orin Keel"
+                  }
+                ],
+                "policy": "1",
+                "type": "context_data",
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "plan": {
+                "needs": [],
+                "strategy": "rules",
+                "version": 1,
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "projection_id": "01fd2348c4154f8696ba69d105655dee",
+              "trace": {
+                "as_of": "2026-10-05T12:46:10.594280+00:00",
+                "bytes": 377,
+                "delivery": "prepared",
+                "excluded": {},
+                "historical": false,
+                "host_attachment": "unknown",
+                "id": "01fd2348c4154f8696ba69d105655dee",
+                "latency_ms": 5,
+                "missing_needs": [],
+                "observation": "projection_only",
+                "plan_id": "0363e5144eab46b08d6df236ea84dd75",
+                "policy": "1",
+                "reasons": {
+                  "8ef0011742554041960af2d29e28feb4": "lexical_match"
+                },
+                "scope": "pilot",
+                "selected": [
+                  "8ef0011742554041960af2d29e28feb4"
+                ],
+                "snapshot": "49ca3e478f24d029b3112c5b4f2e84d2cb6cc2145a51c0608d8aefab0e49fe9a",
+                "status": "ok",
+                "usage": {
+                  "calls": 0
+                },
+                "warnings": [
+                  "unknown_task"
+                ]
+              }
+            }
+          },
+          "server": "context-kernel",
+          "status": "completed",
+          "tool": "memory_context",
+          "type": "mcp_tool_call"
+        }
+      ],
+      "usage": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 12166,
+          "input_tokens": 12772,
+          "output_tokens": 42,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "warnings": [
+        "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      ]
+    },
+    {
+      "answer": "UNKNOWN",
+      "condition": "forgotten_new_session",
+      "context_tool_calls": 1,
+      "duration_seconds": 5.94,
+      "exit_code": 0,
+      "passed": true,
+      "tool_calls": [
+        {
+          "arguments": {
+            "query": "Who is the current release approver?"
+          },
+          "error": null,
+          "id": "item_1",
+          "result": {
+            "content": [
+              {
+                "text": "{\"context\":{\"as_of\":\"2026-10-05T12:46:16.665857+00:00\",\"claims\":[],\"policy\":\"1\",\"type\":\"context_data\",\"warnings\":[\"unknown_task\"]},\"plan\":{\"needs\":[],\"strategy\":\"rules\",\"version\":1,\"warnings\":[\"unknown_task\"]},\"projection_id\":\"cb0022289be24b53b79a4038b13a15d1\",\"trace\":{\"as_of\":\"2026-10-05T12:46:16.665857+00:00\",\"bytes\":119,\"delivery\":\"prepared\",\"excluded\":{},\"historical\":false,\"host_attachment\":\"unknown\",\"id\":\"cb0022289be24b53b79a4038b13a15d1\",\"latency_ms\":2.545,\"missing_needs\":[],\"observation\":\"projection_only\",\"plan_id\":\"75f6a8e4443a4d1aa9a30e93d30b3fa1\",\"policy\":\"1\",\"reasons\":{},\"scope\":\"pilot\",\"selected\":[],\"snapshot\":\"f77f1b2329c90b7da65bd534f23e374abdbbd72baa97477f97a0d71cad58086a\",\"status\":\"empty\",\"usage\":{\"calls\":0},\"warnings\":[\"unknown_task\"]}}",
+                "type": "text"
+              }
+            ],
+            "structured_content": {
+              "context": {
+                "as_of": "2026-10-05T12:46:16.665857+00:00",
+                "claims": [],
+                "policy": "1",
+                "type": "context_data",
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "plan": {
+                "needs": [],
+                "strategy": "rules",
+                "version": 1,
+                "warnings": [
+                  "unknown_task"
+                ]
+              },
+              "projection_id": "cb0022289be24b53b79a4038b13a15d1",
+              "trace": {
+                "as_of": "2026-10-05T12:46:16.665857+00:00",
+                "bytes": 119,
+                "delivery": "prepared",
+                "excluded": {},
+                "historical": false,
+                "host_attachment": "unknown",
+                "id": "cb0022289be24b53b79a4038b13a15d1",
+                "latency_ms": 2.545,
+                "missing_needs": [],
+                "observation": "projection_only",
+                "plan_id": "75f6a8e4443a4d1aa9a30e93d30b3fa1",
+                "policy": "1",
+                "reasons": {},
+                "scope": "pilot",
+                "selected": [],
+                "snapshot": "f77f1b2329c90b7da65bd534f23e374abdbbd72baa97477f97a0d71cad58086a",
+                "status": "empty",
+                "usage": {
+                  "calls": 0
+                },
+                "warnings": [
+                  "unknown_task"
+                ]
+              }
+            }
+          },
+          "server": "context-kernel",
+          "status": "completed",
+          "tool": "memory_context",
+          "type": "mcp_tool_call"
+        }
+      ],
+      "usage": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 12166,
+          "input_tokens": 12591,
+          "output_tokens": 39,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "warnings": [
+        "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      ]
+    },
+    {
+      "answer": "No, you should not accept a higher-paying job if its flexible hours constraint would prevent you from caring for your relative.",
+      "condition": "cross_domain_constraint",
+      "context_tool_calls": 1,
+      "duration_seconds": 11.292,
+      "exit_code": 0,
+      "passed": true,
+      "tool_calls": [
+        {
+          "arguments": {
+            "query": "Should I accept a job offer that pays more?"
+          },
+          "error": null,
+          "id": "item_1",
+          "result": {
+            "content": [
+              {
+                "text": "{\"context\":{\"as_of\":\"2026-10-05T12:46:25.010785+00:00\",\"claims\":[{\"attribution\":\"user_statement\",\"entity\":\"user\",\"evidence_id\":\"c6567390989b4a2b8b14034fa386b7d1\",\"id\":\"b58b99f24f2f45d980630f57ca3b406e\",\"predicate\":\"availability\",\"valid_from\":\"2026-10-05T12:46:20.576242+00:00\",\"valid_until\":null,\"value\":\"Must have flexible hours to care for a relative for four months.\"},{\"attribution\":\"user_statement\",\"entity\":\"user\",\"evidence_id\":\"44c43569fefe4d5aa299204f15e5d9f3\",\"id\":\"0a0977e493b24a86b2471a0b23a81fa0\",\"predicate\":\"salary\",\"valid_from\":\"2026-10-05T12:46:20.574903+00:00\",\"valid_until\":null,\"value\":42000}],\"policy\":\"1\",\"type\":\"context_data\",\"warnings\":[]},\"plan\":{\"needs\":[{\"critical\":true,\"entities\":[],\"predicates\":[\"salary\"],\"unavailable\":false},{\"critical\":true,\"entities\":[],\"predicates\":[\"availability\"],\"unavailable\":false}],\"strategy\":\"rules\",\"version\":1,\"warnings\":[]},\"projection_id\":\"6d1bf5af91344086adad0f1d0107dbfe\",\"trace\":{\"as_of\":\"2026-10-05T12:46:25.010785+00:00\",\"bytes\":651,\"delivery\":\"prepared\",\"excluded\":{},\"historical\":false,\"host_attachment\":\"unknown\",\"id\":\"6d1bf5af91344086adad0f1d0107dbfe\",\"latency_ms\":3.369,\"missing_needs\":[],\"observation\":\"projection_only\",\"plan_id\":\"0996addbe2334f87b03146c4fce24c31\",\"policy\":\"1\",\"reasons\":{\"0a0977e493b24a86b2471a0b23a81fa0\":\"critical_need\",\"b58b99f24f2f45d980630f57ca3b406e\":\"critical_need\"},\"scope\":\"pilot\",\"selected\":[\"b58b99f24f2f45d980630f57ca3b406e\",\"0a0977e493b24a86b2471a0b23a81fa0\"],\"snapshot\":\"ca2044554535cc06ade4a0a8dd195344ed3b6604d5102beb9a60209236c21c31\",\"status\":\"ok\",\"usage\":{\"calls\":0},\"warnings\":[]}}",
+                "type": "text"
+              }
+            ],
+            "structured_content": {
+              "context": {
+                "as_of": "2026-10-05T12:46:25.010785+00:00",
+                "claims": [
+                  {
+                    "attribution": "user_statement",
+                    "entity": "user",
+                    "evidence_id": "c6567390989b4a2b8b14034fa386b7d1",
+                    "id": "b58b99f24f2f45d980630f57ca3b406e",
+                    "predicate": "availability",
+                    "valid_from": "2026-10-05T12:46:20.576242+00:00",
+                    "valid_until": null,
+                    "value": "Must have flexible hours to care for a relative for four months."
+                  },
+                  {
+                    "attribution": "user_statement",
+                    "entity": "user",
+                    "evidence_id": "44c43569fefe4d5aa299204f15e5d9f3",
+                    "id": "0a0977e493b24a86b2471a0b23a81fa0",
+                    "predicate": "salary",
+                    "valid_from": "2026-10-05T12:46:20.574903+00:00",
+                    "valid_until": null,
+                    "value": 42000
+                  }
+                ],
+                "policy": "1",
+                "type": "context_data",
+                "warnings": []
+              },
+              "plan": {
+                "needs": [
+                  {
+                    "critical": true,
+                    "entities": [],
+                    "predicates": [
+                      "salary"
+                    ],
+                    "unavailable": false
+                  },
+                  {
+                    "critical": true,
+                    "entities": [],
+                    "predicates": [
+                      "availability"
+                    ],
+                    "unavailable": false
+                  }
+                ],
+                "strategy": "rules",
+                "version": 1,
+                "warnings": []
+              },
+              "projection_id": "6d1bf5af91344086adad0f1d0107dbfe",
+              "trace": {
+                "as_of": "2026-10-05T12:46:25.010785+00:00",
+                "bytes": 651,
+                "delivery": "prepared",
+                "excluded": {},
+                "historical": false,
+                "host_attachment": "unknown",
+                "id": "6d1bf5af91344086adad0f1d0107dbfe",
+                "latency_ms": 3.369,
+                "missing_needs": [],
+                "observation": "projection_only",
+                "plan_id": "0996addbe2334f87b03146c4fce24c31",
+                "policy": "1",
+                "reasons": {
+                  "0a0977e493b24a86b2471a0b23a81fa0": "critical_need",
+                  "b58b99f24f2f45d980630f57ca3b406e": "critical_need"
+                },
+                "scope": "pilot",
+                "selected": [
+                  "b58b99f24f2f45d980630f57ca3b406e",
+                  "0a0977e493b24a86b2471a0b23a81fa0"
+                ],
+                "snapshot": "ca2044554535cc06ade4a0a8dd195344ed3b6604d5102beb9a60209236c21c31",
+                "status": "ok",
+                "usage": {
+                  "calls": 0
+                },
+                "warnings": []
+              }
+            }
+          },
+          "server": "context-kernel",
+          "status": "completed",
+          "tool": "memory_context",
+          "type": "mcp_tool_call"
+        }
+      ],
+      "usage": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 11654,
+          "input_tokens": 13005,
+          "output_tokens": 64,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "warnings": [
+        "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      ]
+    },
+    {
+      "answer": "A SQLite primary key is a column or set of columns that uniquely identifies each row in a table and enforces entity integrity by preventing duplicate values and null entries.",
+      "condition": "generic_question_empty_projection",
+      "context_tool_calls": 1,
+      "duration_seconds": 13.187,
+      "exit_code": 0,
+      "passed": true,
+      "tool_calls": [
+        {
+          "arguments": {
+            "query": "Explain a SQLite primary key"
+          },
+          "error": null,
+          "id": "item_1",
+          "result": {
+            "content": [
+              {
+                "text": "{\"context\":null,\"plan\":{\"needs\":[],\"strategy\":\"rules\",\"version\":1,\"warnings\":[]},\"projection_id\":\"9690471e4a8641c2a73a60521ca35224\",\"trace\":{\"as_of\":\"2026-10-05T12:46:40.420859+00:00\",\"bytes\":0,\"delivery\":\"prepared\",\"excluded\":{},\"historical\":false,\"host_attachment\":\"unknown\",\"id\":\"9690471e4a8641c2a73a60521ca35224\",\"latency_ms\":4.418,\"missing_needs\":[],\"observation\":\"projection_only\",\"plan_id\":\"07b882e7a19542c991970bc64645bd92\",\"policy\":\"1\",\"reasons\":{},\"scope\":\"pilot\",\"selected\":[],\"snapshot\":\"ca2044554535cc06ade4a0a8dd195344ed3b6604d5102beb9a60209236c21c31\",\"status\":\"empty\",\"usage\":{\"calls\":0},\"warnings\":[]}}",
+                "type": "text"
+              }
+            ],
+            "structured_content": {
+              "context": null,
+              "plan": {
+                "needs": [],
+                "strategy": "rules",
+                "version": 1,
+                "warnings": []
+              },
+              "projection_id": "9690471e4a8641c2a73a60521ca35224",
+              "trace": {
+                "as_of": "2026-10-05T12:46:40.420859+00:00",
+                "bytes": 0,
+                "delivery": "prepared",
+                "excluded": {},
+                "historical": false,
+                "host_attachment": "unknown",
+                "id": "9690471e4a8641c2a73a60521ca35224",
+                "latency_ms": 4.418,
+                "missing_needs": [],
+                "observation": "projection_only",
+                "plan_id": "07b882e7a19542c991970bc64645bd92",
+                "policy": "1",
+                "reasons": {},
+                "scope": "pilot",
+                "selected": [],
+                "snapshot": "ca2044554535cc06ade4a0a8dd195344ed3b6604d5102beb9a60209236c21c31",
+                "status": "empty",
+                "usage": {
+                  "calls": 0
+                },
+                "warnings": []
+              }
+            }
+          },
+          "server": "context-kernel",
+          "status": "completed",
+          "tool": "memory_context",
+          "type": "mcp_tool_call"
+        }
+      ],
+      "usage": [
+        {
+          "cache_write_input_tokens": 0,
+          "cached_input_tokens": 11648,
+          "input_tokens": 12513,
+          "output_tokens": 68,
+          "reasoning_output_tokens": 0
+        }
+      ],
+      "warnings": [
+        "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+      ]
+    }
+  ],
+  "private_canary_exposed": false,
+  "provider": "ollama",
+  "evaluation_scope": "Native transport/lifecycle smoke checks, not a validated answer-quality benchmark",
+  "quality_review": {
+    "cross_domain_constraint": "The availability evidence was retrieved and mentioned, but the answer prematurely recommended rejection without knowing the offer's hours.",
+    "generic_question": "The memory projection was empty; the technical answer's NULL claim was not validated by this memory check."
+  }
+}

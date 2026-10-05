@@ -9,7 +9,7 @@ This is the canonical English plan for this repository. Earlier conversation doc
 3. Recorded NeedPlans, authorized FTS baseline, optional local Qwen planning, missing-evidence diagnostics, and bounded derived projections.
 4. Metadata-only projection/operation logs, pre-delivery revalidation, visible failures, and truthful observability boundaries.
 5. Codex and Claude prompt-hook adapters, a local MCP tool interface, and an Antigravity MCP configuration generator.
-6. Deterministic regression, subprocess contracts, injected Ollama failures, official SDK interoperability, and an optional local end-to-end model demo.
+6. Deterministic regression, subprocess contracts, injected Ollama failures, official SDK interoperability, an optional local model demo, and native Codex CLI MCP checks with recorded failures.
 
 Hooks do not authenticate human origin. Therefore the implementation narrows automatic ingestion to read-only operation by default, with opt-in proposal capture. Accepted changes require the owner CLI. Negation is supported in values and bounded delivery transitions; free-form extraction cannot certify semantics.
 
@@ -28,7 +28,7 @@ The local fixture families include career, housing, deployment, gifts, and gener
 - Dependency-free tests, CLI lifecycle, scope non-interference, proposal/alias ambiguity, temporal boundaries, and forgetting must pass.
 - The official MCP SDK must initialize, discover tools, retrieve, propose, observe an owner-approved correction, and handle a scoped error.
 - Real local Qwen results must be reported with misses, truncation, irrelevant selections, and missing evidence; no paid judge or API calls.
-- Native host acceptance requires an owner-reviewed pilot and two fresh conversations. It remains pending until that walkthrough actually occurs. No global settings or unrelated workspaces are modified to simulate acceptance.
+- Native Codex CLI MCP was exercised in fresh fictional sessions with local Ollama and owner-authorized ChatGPT subscription access. A failed tool invocation and an unsupported currency in the answer prevent a clean acceptance claim. Automatic prompt-hook trust/activation and desktop history behavior remain pending. No global settings or unrelated workspaces are modified to simulate acceptance.
 
 ## What stays outside v0.1
 
@@ -38,4 +38,4 @@ Cloud synchronization, bulk transcript ingestion, paid embeddings, automatic fre
 
 Enable inference only where local relevance checks justify it. If inferred planning misses available evidence, keep a working bounded default and improve the single planner rather than stacking unchecked agents. Broader inventories need an explicit authorized inventory-selection design before raising context limits.
 
-Run the native Codex/Claude walkthrough before calling these integrations end-to-end verified. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.
+Resolve the observed native Codex MCP failures and run the owner-trusted prompt-hook walkthrough before calling the full Codex integration verified. Claude Code still needs its native walkthrough. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.

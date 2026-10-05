@@ -63,7 +63,7 @@ Ordering, receiving, and returning update delivery, ownership, and the pending l
 
 | Client | Integration | Verified here |
 | --- | --- | --- |
-| Codex | Project prompt hook; optional stdio MCP | Hook envelope and subprocess contract |
+| Codex | Project prompt hook; optional stdio MCP | Native CLI MCP with Ollama and ChatGPT subscription; failures recorded. Hook subprocess contract only |
 | Claude Code | Project prompt hook; optional stdio MCP | Hook envelope and subprocess contract |
 | Antigravity | On-demand stdio MCP | Documented config shape; native client not installed |
 | MCP clients | Read/propose tools with fixed scope | Official Python SDK 2.3.0 interoperability |
@@ -78,7 +78,7 @@ python3 -m context_kernel --db /absolute/path/memory.sqlite adapter antigravity 
 
 The output names the destination and includes its configuration. Add `--raw` to print just the JSON/TOML content. Review and merge it into the indicated project file; do not overwrite unrelated settings. Approve the hook or server through the client's normal trust flow. Paths are generated for this checkout and Python executable; regenerate them if either moves.
 
-See [client setup](docs/adapters.md) before activation. Native two-conversation acceptance remains a manual check, not something the subprocess tests establish.
+See [client setup](docs/adapters.md) before activation and [native results](docs/verification.md#native-codex-cli) for the scoped Codex checks. Automatic hook activation and desktop request inspection remain unverified; MCP retrieval is not automatic per-turn injection.
 
 Hooks are read-only by default. Optional `--proposals` recognizes whole-message commands such as `Remember: user.constraint = "No late meetings"`, plus a small delivery grammar. It never approves a fact. Review with `proposals`, then `approve PROPOSAL_ID` or `reject PROPOSAL_ID` in the owner CLI. General conversation extraction is not automatic.
 

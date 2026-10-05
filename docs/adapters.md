@@ -66,6 +66,6 @@ JSON values allow explicit negation and structured data. Quoted, fenced, multili
 
 In a trusted fictional pilot workspace, enable only the intended scope. Use two fresh conversations to check that a registered fact is available, its correction replaces the old version, and forgetting/revocation prevents new retrieval. Inspect the projection ID with `why`. Check a job-offer question with a caregiving constraint and a generic technical turn that needs no personal memory.
 
-Host debug facilities can help confirm hook execution. The kernel labels its trace `projection_only` and host attachment `unknown`; successful stdout or SDK parsing does not establish what a remote model ultimately received. No paid model runs were used to claim native host acceptance.
+Host debug facilities can help confirm hook execution. The kernel labels its trace `projection_only` and host attachment `unknown`; successful stdout or SDK parsing does not establish the complete model request. Native Codex CLI MCP calls and answers were observed using both local Ollama and the owner's ChatGPT subscription, with failures preserved in the [verification report](verification.md#native-codex-cli). This does not establish automatic prompt-hook activation or desktop history behavior.
 
 To remove a pilot, remove only its `context-kernel` hook/server entry, using the client's UI or a careful settings edit. Keep unrelated configuration. Memory remains in the database until the owner explicitly withdraws it. Removing an adapter does not erase previous client history.

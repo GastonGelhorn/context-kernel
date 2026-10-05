@@ -1,0 +1,180 @@
+{
+  "checked_on": "2026-10-05",
+  "client": "Codex CLI",
+  "client_version": "0.160.0",
+  "authentication": "chatgpt_subscription",
+  "model": "gpt-5.6-sol",
+  "reasoning": "high",
+  "provider": "openai",
+  "sessions": 8,
+  "api_key_calls": 0,
+  "subscription_quota_used": true,
+  "hook_trust_bypassed": false,
+  "global_configuration_edited": false,
+  "fictional_data_only": true,
+  "private_canary_exposed": false,
+  "passed": false,
+  "phases": [
+    {
+      "exit_code": 0,
+      "condition": "empty_memory",
+      "answer": "UNKNOWN",
+      "duration_seconds": 31.635,
+      "context_tool_calls": 2,
+      "successful_context_tool_calls": 1,
+      "failed_context_tool_calls": 1,
+      "passed": true,
+      "usage": {
+        "input_tokens": 41388,
+        "cached_input_tokens": 25856,
+        "output_tokens": 432,
+        "reasoning_output_tokens": 198
+      },
+      "observation": "An empty-argument call failed, then a query-bearing retry succeeded."
+    },
+    {
+      "exit_code": 0,
+      "condition": "registered",
+      "answer": "UNKNOWN",
+      "duration_seconds": 13.953,
+      "context_tool_calls": 1,
+      "successful_context_tool_calls": 0,
+      "failed_context_tool_calls": 1,
+      "passed": false,
+      "usage": {
+        "input_tokens": 20085,
+        "cached_input_tokens": 17792,
+        "output_tokens": 144,
+        "reasoning_output_tokens": 74
+      },
+      "observation": "Codex sent {}, received Missing required tool arguments, and returned UNKNOWN without recovering. Evidence existed but was not delivered."
+    },
+    {
+      "exit_code": 0,
+      "condition": "corrected_new_session",
+      "answer": "Orin Keel",
+      "duration_seconds": 13.914,
+      "context_tool_calls": 1,
+      "successful_context_tool_calls": 1,
+      "failed_context_tool_calls": 0,
+      "passed": true,
+      "usage": {
+        "input_tokens": 31227,
+        "cached_input_tokens": 29696,
+        "output_tokens": 113,
+        "reasoning_output_tokens": 34
+      }
+    },
+    {
+      "exit_code": 0,
+      "condition": "forgotten_new_session",
+      "answer": "UNKNOWN",
+      "duration_seconds": 16.4,
+      "context_tool_calls": 1,
+      "successful_context_tool_calls": 1,
+      "failed_context_tool_calls": 0,
+      "passed": true,
+      "usage": {
+        "input_tokens": 30784,
+        "cached_input_tokens": 29824,
+        "output_tokens": 202,
+        "reasoning_output_tokens": 106
+      }
+    },
+    {
+      "exit_code": 0,
+      "condition": "cross_domain_constraint",
+      "answer": "Accept only if the higher pay exceeds your current €42,000 salary and the employer confirms flexible hours for the next four months.",
+      "duration_seconds": 32.81,
+      "context_tool_calls": 1,
+      "successful_context_tool_calls": 1,
+      "failed_context_tool_calls": 0,
+      "passed": true,
+      "usage": {
+        "input_tokens": 32675,
+        "cached_input_tokens": 9856,
+        "output_tokens": 442,
+        "reasoning_output_tokens": 239
+      },
+      "selected_predicates": [
+        "availability",
+        "salary"
+      ],
+      "quality_review": {
+        "constraint_used": true,
+        "offer_hours_not_assumed": true,
+        "unsupported_currency": "EUR was not supplied in the numeric salary evidence.",
+        "grounding_passed": false
+      }
+    },
+    {
+      "exit_code": 0,
+      "condition": "generic_question_empty_projection",
+      "answer": "A SQLite primary key uniquely identifies each table row, and an `INTEGER PRIMARY KEY` specifically aliases SQLite’s internal `rowid`.",
+      "duration_seconds": 7.981,
+      "context_tool_calls": 0,
+      "successful_context_tool_calls": 0,
+      "failed_context_tool_calls": 0,
+      "passed": false,
+      "usage": {
+        "input_tokens": 9958,
+        "cached_input_tokens": 0,
+        "output_tokens": 77,
+        "reasoning_output_tokens": 45
+      },
+      "observation": "Codex skipped the requested tool. No personal information was included, but an empty projection was not observed."
+    }
+  ],
+  "controls": [
+    {
+      "exit_code": 0,
+      "condition": "registered_without_memory",
+      "answer": "UNKNOWN",
+      "duration_seconds": 5.249,
+      "context_tool_calls": 0,
+      "passed": true,
+      "usage": {
+        "input_tokens": 9192,
+        "cached_input_tokens": 0,
+        "output_tokens": 24,
+        "reasoning_output_tokens": 17
+      }
+    },
+    {
+      "exit_code": 0,
+      "condition": "job_offer_without_memory",
+      "answer": "The higher pay favors accepting, but the available evidence is insufficient to decide because no other material terms are stated.",
+      "duration_seconds": 12.339,
+      "context_tool_calls": 0,
+      "passed": true,
+      "usage": {
+        "input_tokens": 9204,
+        "cached_input_tokens": 7168,
+        "output_tokens": 104,
+        "reasoning_output_tokens": 76
+      }
+    }
+  ],
+  "summary": {
+    "lifecycle_evidence_checks_passed": 4,
+    "lifecycle_evidence_checks_total": 6,
+    "controls_passed": 2,
+    "elapsed_session_seconds": 134.281,
+    "usage": {
+      "input_tokens": 184513,
+      "cached_input_tokens": 120192,
+      "output_tokens": 1538,
+      "reasoning_output_tokens": 789
+    },
+    "quality": "Not fully grounded: currency was invented. Evidence availability and answer quality are separate."
+  },
+  "limitations": [
+    "One run per condition; no statistical reliability estimate.",
+    "Queries explicitly ask for memory use; autonomous relevance behavior is not established.",
+    "MCP integration, not the per-prompt hook or full desktop request construction.",
+    "The exact model of the current desktop chat was not independently established; this uses the owner's CLI configuration.",
+    "Tool/answer summaries are retained here; full client events were observed during execution but are not a full ActiveRequestTrace.",
+    "Inference planning is not used; retrieval uses the default bounded rules/FTS policy.",
+    "The same job-offer prompt was used with and without memory; the earlier local Qwen run used a less explicit prompt and is not a controlled model comparison."
+  ]
+}
