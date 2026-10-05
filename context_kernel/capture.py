@@ -44,6 +44,7 @@ _LOG_LINE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2}[ t]\d|\[\w+\]|traceback|\s+at |\
 _REPLY_MARKER = re.compile(r"^\s*(-{3,}|_{3,}|-+ ?(original message|forwarded message|mensaje original) ?-+|on .+ wrote:|el .+ escribi[oó]:)\s*$", re.I)
 _INSTRUCTION_VALUE = re.compile(r"(?i)\b(ignore (all|previous|the)|always (run|execute|answer)|you must|siempre (ejecuta|responde)|ignora)\b")
 AUTHORED_LIMIT = 1500
+NONE_BAR = 0.15
 VALUE_LIMIT = 200
 
 
@@ -100,8 +101,15 @@ def gate(judge, prompt, deadline=None):
     timeout = deadline.timeout(judge.timeout) if deadline else None
     answers, usage = judge.ask({"text": authored}, {"count": ("choice", FACT_COUNT, COUNTS),
                                                     "instruction": ("noul", INSTRUCTION)}, timeout=timeout)
-    best = max(answers["count"], key=answers["count"].get)
-    facts = {"none": 0, "one": 1, "two": 2, "several": 3}[best]
+    counts = answers["count"]
+    # Measured on the local model: messages that state a fact put P(none) at 0.04 or less, a generic
+    # question at 0.27. The count itself is an estimate (a fact plus a question reads as "two"), so
+    # it is used for coverage accounting, not as an exact number.
+    if counts.get("none", 0.0) >= NONE_BAR:
+        facts = 0
+    else:
+        best = max((k for k in counts if k != "none"), key=counts.get)
+        facts = {"one": 1, "two": 2, "several": 3}[best]
     return {"facts": facts, "instruction": answers["instruction"], "calls": 1, "latency_ms": usage.get("latency_ms")}
 
 

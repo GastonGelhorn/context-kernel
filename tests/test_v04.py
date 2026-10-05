@@ -252,12 +252,25 @@ class AutonomyTests(unittest.TestCase):
         self.capture(packet, ("user", "manager", "Dani"))
         receipt = self.stop(event, "Anotado.")["systemMessage"]
         self.assertIn("saved user.manager", receipt)
-        self.assertIn("1 fact(s)", receipt)
+        self.assertNotIn("not saved", receipt)  # the count is an estimate: no nagging once something was saved
         packet, _ = self.prompt("ok")
         self.assertEqual(packet["turn"]["pending"][0]["facts_not_captured"], 1)
         self.tick(700)
         self.prompt("otra cosa")
         self.assertIn({"outcome": "missed", "reason": "excerpt_expired", "count": 1}, self.store.capture_metrics())
+
+    def test_nothing_saved_is_reported_and_generic_questions_skip_the_gate(self):
+        packet, event = self.prompt("Mi manager es Dani")
+        self.assertIn("not saved", self.stop(event, "Ok.")["systemMessage"])
+        before = len(self.judge.calls)
+        packet, _ = self.prompt("Explain what a SQLite primary key is.")
+        self.assertNotIn("capture", packet["turn"])
+        self.assertEqual(len(self.judge.calls), before)
+
+    def test_a_fact_with_a_question_still_asks_for_capture(self):
+        self.judge.ask_fn = answers(instruction=0.9)
+        packet, _ = self.prompt("Tenemos tres meses. ¿Conviene reescribir el módulo?")
+        self.assertEqual(packet["turn"]["capture"]["facts_stated"], 1)
 
     def test_an_acknowledgement_costs_no_judgment_unless_something_is_pending(self):
         self.store.remember("user", "salary", 50000, "Owner CLI")

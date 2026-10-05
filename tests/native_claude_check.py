@@ -1,10 +1,13 @@
-"""Opt-in native Claude Code prompt-hook check in a disposable workspace.
+"""Opt-in native Claude Code check of the v0.4 flow: no memory commands, only conversation.
 
-Runs the installed `claude` CLI headless (`-p`) in a pilot directory whose
-`.claude/settings.local.json` carries the kernel hook. This uses the owner's
-existing Claude Code sign-in and quota, sends fictional prompts to Anthropic, and
-never edits global settings, bypasses permissions, or downloads anything. The
-workspace must be an empty directory the owner supplies.
+Runs the installed `claude` CLI headless (`-p`) in an empty pilot directory that carries the
+generated bundle: prompt, stop, and session-start hooks in `.claude/settings.local.json` and the
+memory MCP server through `--mcp-config`. Each phase is a fresh session. The kernel database is
+inspected directly afterwards; the model's own claims are not taken as evidence.
+
+It uses the owner's Claude Code sign-in and quota and sends fictional prompts to Anthropic. It never
+edits global settings or bypasses permissions: only the memory tools are allowed, and file, shell,
+and web tools are disallowed.
 """
 
 import argparse
@@ -12,99 +15,112 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import sys
 import time
 
 from context_kernel.adapters import configuration
 from context_kernel.common import KernelError, canonical
-from context_kernel.demo import stale_reader_check
 from context_kernel.store import Store
 
 
 ROOT = Path(__file__).resolve().parent.parent
-QUESTION = "Who is the current release approver? Reply with just the name, or UNKNOWN if the available context does not say. Do not use tools."
-REWRITE = ("Should we go ahead with the payment module rewrite for the checkout project? "
-           "Answer in one sentence using only the provided context. Do not use tools.")
 TOOLS_OFF = "Bash,Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Agent,Task"
+MEMORY_TOOLS = ",".join("mcp__context-kernel__" + name for name in (
+    "memory_context", "memory_capture", "memory_undo", "memory_inventory", "memory_history", "memory_dependents",
+    "memory_forget", "memory_revoke", "memory_confirm", "memory_reaffirm", "memory_depend", "memory_policy"))
+PHASES = [
+    ("constraint_and_recommendation",
+     "We have three months to deliver the checkout project. Should we rewrite its payment module? Answer in one sentence."),
+    ("constraint_changes",
+     "Update: the checkout deadline changed, we now have three weeks."),
+    ("fresh_session_recalls_and_flags",
+     "Should we still go ahead with what we discussed for the checkout payment module? Answer in one sentence."),
+    ("forget_by_asking",
+     "Please forget the checkout deadline."),
+    ("generic_question",
+     "Explain what a SQLite primary key is in one sentence."),
+]
 
 
-def invoke(claude, workspace, prompt, model=None):
-    command = [claude, "-p", prompt, "--output-format", "json", "--disallowedTools", TOOLS_OFF]
+def invoke(claude, workspace, prompt, mcp_config, model=None):
+    command = [claude, "-p", prompt, "--output-format", "json", "--disallowedTools", TOOLS_OFF,
+               "--allowedTools", MEMORY_TOOLS, "--mcp-config", str(mcp_config)]
     if model:
         command.extend(["--model", model])
     started = time.perf_counter()
     try:
-        result = subprocess.run(command, cwd=workspace, input="", text=True, capture_output=True, timeout=180)
+        result = subprocess.run(command, cwd=workspace, input="", text=True, capture_output=True, timeout=240)
     except subprocess.TimeoutExpired as exc:
-        return {"exit_code": 124, "answer": None, "stderr": str(exc), "duration_seconds": 180.0, "raw": None}
-    answer, raw = None, None
+        return {"exit_code": 124, "answer": None, "stderr": str(exc), "duration_seconds": 240.0}
+    raw = None
     try:
         raw = json.loads(result.stdout)
-        answer = raw.get("result") if isinstance(raw, dict) else None
     except ValueError:
-        answer = result.stdout.strip() or None
-    return {"exit_code": result.returncode, "answer": answer, "stderr": result.stderr[-2000:],
-            "duration_seconds": round(time.perf_counter() - started, 3),
-            "usage": raw.get("usage") if isinstance(raw, dict) else None,
+        pass
+    return {"exit_code": result.returncode, "answer": raw.get("result") if isinstance(raw, dict) else result.stdout.strip() or None,
+            "stderr": result.stderr[-1500:], "duration_seconds": round(time.perf_counter() - started, 3),
             "cost_usd": raw.get("total_cost_usd") if isinstance(raw, dict) else None}
 
 
-def run(claude, workspace, model=None, strategy="rules", jev_command="jev"):
+def snapshot(database):
+    store = Store(database, scope="pilot")
+    try:
+        history = store.records(history=True)
+        return {
+            "deadline": [(r["value"], r["trust"], r["effective_state"]) for r in history if r["predicate"] == "deadline"],
+            "recommendations": [{"id": r["id"], "stale": r["stale"], "links": len(r["assumptions"])}
+                                for r in history if r["predicate"] == "recommendation"],
+            "inferred_links": store.db.execute("SELECT count(*) FROM relations WHERE provenance='inferred'").fetchone()[0],
+            "captures": store.capture_metrics(),
+            "last_trace": (store.traces(1) or [{}])[0],
+            "sessions": store.db.execute("SELECT count(*) FROM sessions").fetchone()[0],
+        }
+    finally:
+        store.close()
+
+
+def run(claude, workspace, model=None, strategy="jev", jev_command="jev"):
     workspace = Path(workspace).resolve()
     if not workspace.is_dir() or any(workspace.iterdir()):
         raise KernelError("Supply an empty disposable workspace for the native pilot.")
     database = workspace / "memory.sqlite"
-    store = Store(database, scope="pilot", create=True)
-    try:
-        config = configuration("claude", workspace, database, "pilot", strategy=strategy, jev_command=jev_command)
-        destination = workspace / config["destination"]
-        destination.parent.mkdir(parents=True)
-        destination.write_text(json.dumps(config["config"], indent=2))
-        report = {"client": "Claude Code", "version": subprocess.run([claude, "--version"], capture_output=True, text=True).stdout.strip(),
-                  "model": model or "client default", "strategy": strategy, "hook_file": str(destination),
-                  "paid_api_calls": 0, "global_settings_edited": False, "permissions_bypassed": False, "phases": [],
-                  "evaluation_scope": "fictional lifecycle, dependency, and evidence-use checks through the real hook; not a quality benchmark"}
-
-        def phase(name, prompt, expected=None, check=None):
-            before = len(store.traces(100))
-            result = invoke(claude, workspace, prompt, model)
-            traces = store.traces(100)
-            emitted = [t for t in traces[:len(traces) - before] if t["delivery"] == "emitted"]
-            result.update(name=name, expected=expected, new_traces=len(traces) - before, emitted_projections=len(emitted),
-                          projection_status=[t["status"] for t in emitted], projection_warnings=[t["warnings"] for t in emitted],
-                          selection_calls=[t["usage"].get("calls", 0) for t in emitted])
-            answer = result["answer"] or ""
-            result["passed"] = bool(emitted) and result["exit_code"] == 0 and (
-                check(answer) if check else expected.casefold() in answer.casefold())
-            report["phases"].append(result)
-            if result["exit_code"] != 0 and "authenticate" in answer.casefold():
-                report["aborted"] = "Claude Code sign-in expired; run `claude` and `/login`, then start a new pilot directory."
-                raise KernelError(report["aborted"])
-            return result
-
-        phase("empty_memory", QUESTION, "UNKNOWN")
-        approver = store.remember("user", "release_approver", "Nyra Vale", "Fictional pilot: the release approver is Nyra Vale.")
-        phase("registered_approver_fresh_session", QUESTION, "Nyra Vale")
-        corrected = store.correct(approver["id"], "Orin Keel", "Fictional pilot: the approver is now Orin Keel.")
-        phase("corrected_approver_fresh_session", QUESTION, "Orin Keel",
-              check=lambda a: "orin keel" in a.casefold() and "nyra" not in a.casefold())
-        deadline = store.remember("checkout", "deadline", "three months", "Fictional pilot: three months.", kind="project")
-        rewrite = store.remember("checkout", "decision", "Rewrite the payment module before launch",
-                                 "Fictional pilot: rewrite agreed.", kind="project")
-        store.depend(rewrite["id"], deadline["id"])
-        store.correct(deadline["id"], "three weeks", "Fictional pilot: the deadline moved to three weeks.")
-        phase("stale_recommendation_after_deadline_change", REWRITE, check=stale_reader_check)
-        store.forget(corrected["id"])
-        phase("forgotten_approver_fresh_session", QUESTION, "UNKNOWN")
-        phase("generic_question_no_personal_context", "Explain what a SQLite primary key is in one sentence. Do not use tools.",
-              check=lambda a: "nyra" not in a.casefold() and "orin" not in a.casefold() and "three weeks" not in a.casefold())
-    except KernelError:
-        if "aborted" not in report:
-            raise
-    finally:
-        store.close()
-    report["passed"] = "aborted" not in report and all(p["passed"] for p in report["phases"])
-    report["hook_emitted_in_every_session"] = bool(report["phases"]) and all(p["emitted_projections"] == 1 for p in report["phases"])
+    Store(database, scope="pilot", create=True).close()
+    hooks = configuration("claude", workspace, database, "pilot", strategy=strategy, jev_command=jev_command)
+    (workspace / ".claude").mkdir()
+    (workspace / ".claude" / "settings.local.json").write_text(json.dumps(hooks["config"], indent=2))
+    server = configuration("claude", workspace, database, "pilot", mode="mcp", strategy=strategy, jev_command=jev_command)
+    mcp_config = workspace / "mcp.json"
+    mcp_config.write_text(json.dumps(server["config"], indent=2))
+    report = {"client": "Claude Code", "version": subprocess.run([claude, "--version"], capture_output=True, text=True).stdout.strip(),
+              "model": model or "client default", "strategy": strategy, "paid_api_calls": 0, "global_settings_edited": False,
+              "permissions_bypassed": False, "memory_commands_typed": 0, "phases": [],
+              "evaluation_scope": "one fictional scenario through the real hooks and MCP server; not a quality benchmark"}
+    for name, prompt in PHASES:
+        result = invoke(claude, workspace, prompt, mcp_config, model)
+        if result["exit_code"] != 0 and "authenticate" in (result["answer"] or "").casefold():
+            report["aborted"] = "Claude Code sign-in expired; run `claude auth login`, then start a new pilot directory."
+            report["phases"].append(dict(result, name=name))
+            break
+        report["phases"].append(dict(result, name=name, state=snapshot(database)))
+    states = {p["name"]: p.get("state") for p in report["phases"]}
+    checks = {}
+    if len(states) == len(PHASES) and all(states.values()):
+        first, second, third, fourth, fifth = (states[n] for n, _ in PHASES)
+        answer = (report["phases"][2]["answer"] or "").casefold()
+        checks = {
+            "constraint_captured_from_conversation": bool(first["deadline"]),
+            "recommendation_linked_by_inference": first["inferred_links"] > 0,
+            "change_captured_as_new_version": len(second["deadline"]) >= 2,
+            "recommendation_flagged_after_change": any(r["stale"] for r in second["recommendations"]),
+            "fresh_session_projection_requires_review": third["last_trace"].get("status") == "review_required"
+                                                         or "review_recommended" in third["last_trace"].get("warnings", []),
+            "fresh_session_answer_names_the_change": ("week" in answer or "semana" in answer)
+                                                     and any(w in answer for w in ("review", "revis", "reconsider", "changed", "no longer")),
+            "forget_removed_the_deadline": not fourth["deadline"],
+            "generic_question_carried_no_claims": not fifth["last_trace"].get("selected"),
+            "sessions_bound": fifth["sessions"] >= len(PHASES),
+        }
+    report["checks"] = checks
+    report["passed"] = bool(checks) and all(checks.values()) and "aborted" not in report
     report["wall_seconds"] = round(sum(p["duration_seconds"] for p in report["phases"]), 3)
     report["cost_usd_reported"] = [p.get("cost_usd") for p in report["phases"]]
     return report
@@ -115,7 +131,7 @@ def main():
     parser.add_argument("--workspace", required=True, help="Empty disposable directory")
     parser.add_argument("--claude", default=shutil.which("claude"))
     parser.add_argument("--model", help="Optional model override; default is the client's configured model")
-    parser.add_argument("--strategy", choices=("rules", "fts", "jev"), default="rules")
+    parser.add_argument("--strategy", choices=("rules", "fts", "jev"), default="jev")
     parser.add_argument("--jev-command", default="jev")
     args = parser.parse_args()
     if not args.claude:

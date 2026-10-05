@@ -12,7 +12,7 @@ from .capture import describe_results, gate, policy as capture_policy
 from .common import KernelError, canonical, digest, text, timestamp_offset
 from .inference import infer
 from .language import fold
-from .planner import NeedPlan
+from .planner import NeedPlan, generic_question
 from .protocol import parse_json
 from .turns import close_turn, do_not_remember, forget_request, open_turn, trivial_continuation
 
@@ -110,12 +110,14 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         if not store.db.execute("SELECT 1 FROM processed_events WHERE scope=? AND event_id=?", (store.scope, event_id)).fetchone():
             notice = propose_command(store, prompt, event_id)
     gate_count = 0
-    if judge and turn["origin"] == "interactive" and "do_not_remember" not in flags and not trivial_continuation(prompt) \
-            and capture_policy(store)["auto_capture"] and (deadline is None or deadline.allows(4)):
+    if judge and turn["origin"] == "interactive" and not flags and not trivial_continuation(prompt) \
+            and not generic_question(prompt, store.records()) and capture_policy(store)["auto_capture"] \
+            and (deadline is None or deadline.allows(4)):
         try:
             judge.require_local(capture_policy(store)["allow_remote_judge"])
             result = gate(judge, prompt, deadline)
-            if result["facts"] and result["instruction"] < 0.8:
+            # A message often states a fact and asks something; the instruction score is not a veto.
+            if result["facts"]:
                 gate_count = result["facts"]
                 marker["capture"] = {"facts_stated": gate_count, "call": "memory_capture",
                                      "how": "Extract each as entity.predicate = value, reusing keys already in memory."}
@@ -164,9 +166,11 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
     if line:
         notes.append(line)
     missing = turn["gate_count"] - len(turn["captured_ids"])
-    if missing > 0 and turn["origin"] == "interactive":
-        notes.append(f"Memory: {missing} fact(s) from your message are not saved yet.")
-    elif turn["prompt_excerpt"]:
+    if missing > 0 and not turn["captured_ids"] and turn["origin"] == "interactive":
+        # The gate's count is an estimate; the user hears about it only when nothing was saved.
+        notes.append("Memory: something in your message looked worth remembering but was not saved.")
+    if missing <= 0 and turn["prompt_excerpt"]:
+        # Nothing left to validate against this message: its excerpt goes now, not at expiry.
         store.update_turn(turn["session_id"], turn["turn_key"], prompt_excerpt=None)
     if "forget_requested" in turn["flags"] and not store.operations_since(turn["opened_at"], ("forget", "revoke", "undo")):
         notes.append("Memory: nothing was forgotten in that turn.")
