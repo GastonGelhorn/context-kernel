@@ -10,7 +10,8 @@ from context_kernel.cli import main
 from context_kernel.common import KernelError, canonical, quantity
 from context_kernel.compiler import Compiler
 from context_kernel.mcp import Server
-from context_kernel.planner import infer_plan
+from context_kernel.planner import jev_plan
+from tests.fakes import FakeJudge
 from context_kernel.store import Store
 from context_kernel.grounding import currency_review
 
@@ -103,16 +104,6 @@ class ContextV02Tests(unittest.TestCase):
         row = self.add("user", "mobility_limit", "Cannot climb stairs")
         self.assertIn(row["id"], self.compiler.project("¿Me conviene este piso?").trace["selected"])
 
-    def test_model_omission_is_supplemented_and_counted(self):
-        class Missing:
-            def chat(self, *args):
-                return '{"available_needs":[],"missing_needs":[]}', {}
-        row = self.add("user", "allergy", "My friend cannot eat nuts")
-        plan, usage = infer_plan("A gift for my friend", self.store.records(), Missing())
-        result = self.compiler.project("A gift for my friend", plan=plan)
-        self.assertIn(row["id"], result.trace["selected"])
-        self.assertEqual(usage["rule_supplements"], 1)
-
     def test_plain_numeric_values_keep_unknown_currency(self):
         row = self.add("user", "salary", 42000)
         claim = json.loads(self.compiler.project("My salary").content)["claims"][0]
@@ -160,10 +151,14 @@ class ContextV02Tests(unittest.TestCase):
         self.store.approve(propose_command(self.store, "Al final llegó.")["id"])
         self.assertEqual({r["value"] for r in self.store.records() if r["predicate"] == "ownership_status"}, {"owned"})
 
-    def test_spanish_privacy_command_does_not_falsely_acknowledge(self):
-        with self.assertRaisesRegex(KernelError, "did not apply"):
-            hook_response({"cwd": str(self.workspace), "prompt": "Olvida: user.salary"},
-                          self.workspace, self.store, self.compiler)
+    def test_spanish_privacy_request_is_never_falsely_acknowledged(self):
+        from context_kernel.adapters import stop_response
+        event = {"cwd": str(self.workspace), "prompt": "Olvida: user.salary", "session_id": "s1", "prompt_id": "p1"}
+        response, _ = hook_response(event, self.workspace, self.store, self.compiler)
+        self.assertIn("memory_forget", json.loads(response["hookSpecificOutput"]["additionalContext"])["turn"]["privacy"])
+        stop = stop_response({"cwd": str(self.workspace), "hook_event_name": "Stop", "session_id": "s1", "prompt_id": "p1",
+                              "last_assistant_message": "Listo, lo olvidé."}, self.workspace, self.store)
+        self.assertIn("nothing was forgotten", stop["systemMessage"])
 
     def test_delivery_revalidation_retries_once_with_new_state(self):
         row = self.add("user", "manager", "Nyra Vale")
@@ -187,21 +182,15 @@ class ContextV02Tests(unittest.TestCase):
                 self.compiler.prepare("Who is my manager?")
             self.assertEqual(retry.call_count, 2)
 
-    def test_inference_failure_is_unavailable_not_missing_memory(self):
-        class Broken:
-            def chat(self, *args):
-                raise KernelError("Unavailable")
-        compiler = Compiler(self.store, ollama=Broken())
-        projection = compiler.project("Mi oferta laboral", strategy="inferred")
-        self.assertEqual(projection.trace["status"], "unavailable")
+    def test_judge_failure_falls_back_and_hook_still_delivers_the_turn(self):
+        self.add("user", "salary", 42000)
+        compiler = Compiler(self.store, jev=FakeJudge(fail="down"))
         event = {"cwd": str(self.workspace), "prompt": "Mi oferta laboral"}
-        response, projection_id = hook_response(event, self.workspace, self.store, compiler, strategy="inferred")
-        self.assertIsNone(projection_id)
-        self.assertEqual(response["hookSpecificOutput"]["additionalContext"], "")
-        self.assertIn("not evidence", response["systemMessage"])
-        self.assertEqual(self.store.traces(1)[0]["delivery"], "failed")
-        with self.assertRaisesRegex(KernelError, "not evidence"):
-            hook_response(event, self.workspace, self.store, compiler, strategy="inferred", fail_closed=True)
+        response, projection_id = hook_response(event, self.workspace, self.store, compiler, strategy="jev")
+        packet = json.loads(response["hookSpecificOutput"]["additionalContext"])
+        self.assertTrue(packet["turn"]["token"])
+        self.assertIn("jev_unavailable", packet["warnings"])
+        self.assertIsNotNone(projection_id)
 
     def test_mcp_argument_error_is_structured_and_not_empty_context(self):
         server = Server(self.store)
@@ -272,16 +261,15 @@ class ContextV02Tests(unittest.TestCase):
         finally:
             private.close()
 
-    def test_model_cannot_silently_resolve_known_alias_ambiguity(self):
-        class Forbidden:
-            def chat(self, *args):
-                raise AssertionError("Known ambiguity must not be delegated to inference")
+    def test_judge_cannot_silently_resolve_known_alias_ambiguity(self):
         for entity in ("aurora", "boreal"):
             self.add(entity, "project_status", "Ready", kind="project")
             self.store.add_alias(entity, "the platform")
-        plan, usage = infer_plan("Deploy the platform", self.store.records(), Forbidden())
+        judge = FakeJudge()
+        plan, usage = jev_plan("Deploy the platform", self.store.records(), judge)
         self.assertIn("clarification_required", plan.warnings)
         self.assertEqual(usage["calls"], 0)
+        self.assertEqual(judge.calls, [])
 
     def test_conflicting_evidence_has_explicit_result_status(self):
         self.add("user", "salary", 42000)

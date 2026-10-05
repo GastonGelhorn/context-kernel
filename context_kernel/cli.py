@@ -5,10 +5,16 @@ import json
 import sqlite3
 import sys
 
-from .adapters import HookBlock, configuration, envelope, hook_response
+import shutil
+from pathlib import Path
+
+from .adapters import HookBlock, block, configuration, envelope, hook_response, session_start_response, stop_response
+from .budget import Budget
+from .capture import policy as capture_policy
 from .common import KernelError, canonical, quantity
 from .compiler import Compiler
-from .planner import Jev, NeedPlan, Ollama
+from .judge import JevCommand
+from .planner import NeedPlan
 from .protocol import parse_json, read_event
 from .store import Store
 
@@ -23,8 +29,15 @@ def parser():
     root.add_argument("--scope", default="personal", help="Owner-selected scope; not supplied by an agent tool")
     root.add_argument("--pretty", action="store_true", help="Print readable JSON for owner commands")
     commands = root.add_subparsers(dest="command", required=True)
-    for name in ("init", "status", "proposals"):
+    for name in ("init", "status", "proposals", "inventory", "metrics"):
         commands.add_parser(name)
+    undo = commands.add_parser("undo", help="Remove a captured statement and restore the version it replaced")
+    undo.add_argument("id")
+    policy = commands.add_parser("policy", help="Show or change which kinds of facts are captured automatically")
+    policy.add_argument("--enable", nargs="*", default=[])
+    policy.add_argument("--disable", nargs="*", default=[])
+    policy.add_argument("--allow-remote-judge", choices=("yes", "no"))
+    policy.add_argument("--auto-capture", choices=("on", "off"))
     serve = commands.add_parser("serve", help="Stdio MCP server with a fixed scope")
     traces = commands.add_parser("traces")
     traces.add_argument("--limit", type=int, default=20, help="Latest scoped projection metadata, 1-100")
@@ -49,7 +62,7 @@ def parser():
         command.add_argument("--unit", help="Explicit quantity unit; absent means unknown")
         command.add_argument("--currency", help="Explicit three-letter uppercase currency label")
         command.add_argument("--period", help="Explicit quantity period, for example year or month")
-    for name in ("inspect", "revoke", "forget", "approve", "reject", "why", "dependents", "reaffirm"):
+    for name in ("inspect", "revoke", "forget", "approve", "reject", "why", "dependents", "reaffirm", "confirm"):
         item = commands.add_parser(name)
         item.add_argument("id")
         if name in {"inspect", "dependents"}:
@@ -82,14 +95,11 @@ def parser():
     hook = commands.add_parser("hook")
     hook.add_argument("--client", choices=("codex", "claude"), required=True)
     hook.add_argument("--workspace", required=True)
+    hook.add_argument("--event", choices=("prompt", "stop", "session-start"), default="prompt")
     hook.add_argument("--proposals", action="store_true", help="Opt in to bounded command proposals, never automatic approval")
     hook.add_argument("--fail-closed", action="store_true", help="Block the prompt when memory is unavailable (default: proceed without memory)")
     for item in (project, hook, serve):
-        item.add_argument("--strategy", choices=("rules", "fts", "inferred", "jev"), default="rules")
-        item.add_argument("--ollama-url", default="http://127.0.0.1:11434")
-        item.add_argument("--model", default="qwen3.5:9b")
-        item.add_argument("--ollama-timeout", type=float, default=45 if item is project else 10,
-                          help="Local model timeout in seconds (hooks capped at 10)")
+        item.add_argument("--strategy", choices=("rules", "fts", "jev"), default="rules")
         item.add_argument("--jev-command", default="jev", help="jev executable; its own config decides local or hosted")
         item.add_argument("--jev-timeout", type=float, default=10)
         item.add_argument("--jev-critical", type=float, default=0.6, help="P at or above which a pair is critical")
@@ -102,7 +112,7 @@ def parser():
     adapter.add_argument("--workspace", required=True)
     adapter.add_argument("--mode", choices=("hook", "mcp"), default="hook")
     adapter.add_argument("--proposals", action="store_true")
-    adapter.add_argument("--strategy", choices=("rules", "fts", "inferred", "jev"), default="rules")
+    adapter.add_argument("--strategy", choices=("rules", "fts", "jev"), default="rules")
     adapter.add_argument("--fail-closed", action="store_true")
     adapter.add_argument("--jev-command", default="jev", help="Resolved to an absolute path in the generated configuration")
     adapter.add_argument("--python")
@@ -129,8 +139,26 @@ def execute(args, store):
         return store.inspect(args.id, args.as_of)
     if command == "list":
         return store.records(args.as_of, args.history)
-    if command in {"revoke", "forget", "approve", "reject", "reaffirm"}:
+    if command in {"revoke", "forget", "approve", "reject", "reaffirm", "confirm"}:
         return getattr(store, command)(args.id)
+    if command == "undo":
+        return store.undo_capture(args.id)
+    if command == "inventory":
+        from .mcp import Server
+        return Server(store, parent=[]).inventory()
+    if command == "metrics":
+        return {"captures": store.capture_metrics(), "status": store.status()}
+    if command == "policy":
+        stored = store.policy() or {}
+        if args.enable or args.disable:
+            stored["categories"] = dict(stored.get("categories", {}), **{c: True for c in args.enable}, **{c: False for c in args.disable})
+        if args.allow_remote_judge:
+            stored["allow_remote_judge"] = args.allow_remote_judge == "yes"
+        if args.auto_capture:
+            stored["auto_capture"] = args.auto_capture == "on"
+        if args.enable or args.disable or args.allow_remote_judge or args.auto_capture:
+            store.set_policy(stored)
+        return capture_policy(store)
     if command == "dependents":
         return store.dependents(args.id, args.as_of)
     if command == "stale":
@@ -154,22 +182,29 @@ def execute(args, store):
         return store.traces(args.limit)
     if command == "why":
         return store.trace(args.id)
-    if args.strategy == "inferred" and (not 0 < args.ollama_timeout <= 60 or (command == "hook" and args.ollama_timeout > 10)):
-        raise KernelError("Ollama timeout must be 1-60 seconds; prompt hooks allow at most 10.")
     if args.strategy == "jev" and command == "hook" and args.jev_timeout > 10:
         raise KernelError("Prompt hooks allow a jev timeout of at most 10 seconds.")
-    ollama = Ollama(args.ollama_url, args.model, args.ollama_timeout) if args.strategy == "inferred" else None
-    jev = Jev(args.jev_command, args.jev_timeout, args.jev_critical, args.jev_supporting, args.jev_question, args.jev_band, args.jev_max_pairs) if args.strategy == "jev" else None
-    compiler = Compiler(store, getattr(args, "budget", 2048), ollama, jev)
+    judge = make_judge(args)
+    rules = capture_policy(store)
+    budget = Budget(8) if command == "hook" else None
+    compiler = Compiler(store, getattr(args, "budget", 2048), judge if args.strategy == "jev" else None,
+                        deadline=budget, allow_remote=rules["allow_remote_judge"])
     if command == "serve":
         from .mcp import serve
-        serve(store, sys.stdin.buffer, sys.stdout, compiler, args.strategy)
+        serve(store, sys.stdin.buffer, sys.stdout, compiler, args.strategy, judge)
         return None
     if command == "project":
         plan = NeedPlan.from_dict(store.load_plan(args.plan_id)) if args.plan_id else None
         return compiler.project(args.query, args.strategy, plan, args.as_of).to_dict()
     event = read_event(sys.stdin.buffer)
-    response, projection_id = hook_response(event, args.workspace, store, compiler, args.strategy, args.proposals, args.fail_closed)
+    if args.event == "stop":
+        print(canonical(stop_response(event, args.workspace, store, judge, Budget(15))), flush=True)
+        return None
+    if args.event == "session-start":
+        print(canonical(session_start_response(event, args.workspace, store, args.client)), flush=True)
+        return None
+    response, projection_id = hook_response(event, args.workspace, store, compiler, args.strategy, args.proposals,
+                                            args.fail_closed, args.client, judge, budget)
     # "Emitted" means this process wrote the envelope, never host acknowledgement.
     print(canonical(response), flush=True)
     if projection_id is None:
@@ -179,6 +214,18 @@ def execute(args, store):
     except (KernelError, sqlite3.Error, OSError) as exc:
         raise DeliveryError("Memory trace update failed after output. Delivery confirmation is unavailable; retry after checking local storage.") from exc
     return None
+
+
+def make_judge(args):
+    """The jev client when it is installed; capture, inference, and owner actions need it even when
+    selection uses rules. Missing jev is not an error here: those features report it when used."""
+    command = getattr(args, "jev_command", "jev")
+    resolved = command if Path(command).is_absolute() else shutil.which(command)
+    if not resolved and getattr(args, "strategy", "rules") != "jev":
+        return None
+    return JevCommand(resolved or command, getattr(args, "jev_timeout", 10), getattr(args, "jev_critical", 0.6),
+                      getattr(args, "jev_supporting", 0.5), getattr(args, "jev_question", None),
+                      getattr(args, "jev_band", 0.35), getattr(args, "jev_max_pairs", 48))
 
 
 def main(argv=None):
@@ -208,8 +255,10 @@ def main(argv=None):
             except (KernelError, sqlite3.Error, OSError):
                 pass  # The visible response below does not depend on a working log.
         if args.command == "hook":
-            if isinstance(exc, HookBlock) or args.fail_closed:
-                print(canonical({"decision": "block", "reason": "Context Kernel: " + message}), flush=True)
+            if args.event != "prompt":
+                print(canonical({"systemMessage": "Context Kernel: " + message}), flush=True)
+            elif isinstance(exc, HookBlock) or args.fail_closed:
+                print(canonical(block("Context Kernel: " + message)), flush=True)
             else:
                 # Fail open: a memory add-on must not stop the prompt; the host hears why there is no context.
                 print(canonical(envelope("", ["Context Kernel unavailable: " + message])), flush=True)

@@ -124,7 +124,11 @@ class InterfaceTests(unittest.TestCase):
     def test_mcp_tools_do_not_expose_owner_mutations(self):
         server = self.ready()
         tools = server.dispatch({"jsonrpc": "2.0", "id": 3, "method": "tools/list"})["result"]["tools"]
-        self.assertEqual({t["name"] for t in tools}, {"memory_context", "memory_inspect", "memory_status", "memory_why", "memory_propose"})
+        names = {t["name"] for t in tools}
+        self.assertTrue({"memory_context", "memory_inspect", "memory_status", "memory_why", "memory_propose", "memory_capture",
+                         "memory_forget", "memory_inventory"} <= names)
+        forget = self.call(server, "memory_forget", {"token": "x" * 12, "id": "missing-statement"})
+        self.assertTrue(forget["result"]["isError"])
         proposal = self.call(server, "memory_propose", {"operation": "remember", "payload": {
             "entity": "user", "predicate": "constraint", "value": "No late meetings"}})
         self.assertFalse(proposal["result"]["isError"])
@@ -207,7 +211,9 @@ class InterfaceTests(unittest.TestCase):
         for client in ("codex", "claude"):
             process = self.run_cli("hook", "--client", client, "--workspace", str(self.workspace), stdin=event)
             self.assertEqual(process.returncode, 0, process.stderr)
-            self.assertEqual(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"], "")
+            packet = json.loads(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"])
+            self.assertEqual(packet["claims"], [])
+            self.assertTrue(packet["turn"]["token"])
 
     def test_hook_subprocess_invalid_event_fails_open_unless_closed(self):
         process = self.run_cli("hook", "--client", "codex", "--workspace", str(self.workspace), stdin="not json")
@@ -218,10 +224,16 @@ class InterfaceTests(unittest.TestCase):
         process = self.run_cli("hook", "--client", "claude", "--workspace", str(self.workspace), "--fail-closed", stdin="not json")
         self.assertEqual(json.loads(process.stdout)["decision"], "block")
 
-    def test_privacy_command_blocks_even_when_failing_open(self):
+    def test_forget_request_is_flagged_for_the_bound_tools_not_blocked(self):
         event = canonical({"prompt": "Forget: user.salary", "cwd": str(self.workspace)})
         process = self.run_cli("hook", "--client", "codex", "--workspace", str(self.workspace), stdin=event)
-        self.assertEqual(json.loads(process.stdout)["decision"], "block")
+        packet = json.loads(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("never say it is done", packet["turn"]["privacy"])
+
+    def test_block_output_speaks_both_hosts(self):
+        from context_kernel.adapters import block
+        output = block("stop")
+        self.assertEqual((output["decision"], output["continue"]), ("block", False))
 
     def test_post_output_log_failure_never_writes_second_json_envelope(self):
         event = canonical({"prompt": "Explain SQLite", "cwd": str(self.workspace)})

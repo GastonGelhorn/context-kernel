@@ -38,6 +38,12 @@ def timestamp(value=None):
     return value.astimezone(timezone.utc).isoformat(timespec="microseconds")
 
 
+def timestamp_offset(value, seconds):
+    from datetime import timedelta
+    moved = datetime.fromisoformat(timestamp(value)) + timedelta(seconds=seconds)
+    return moved.isoformat(timespec="microseconds")
+
+
 def key(value, name="key"):
     if not isinstance(value, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}", value):
         raise KernelError(f"Invalid {name}; use letters, numbers, underscores, or hyphens.")

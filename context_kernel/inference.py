@@ -1,0 +1,97 @@
+"""Dependencies the user never has to declare: which facts a recommendation rested on.
+
+At the end of a turn the host hands the hook the agent's final reply. If it recommends something,
+jev judges which of the turn's premises it rests on: the claims the kernel delivered, plus facts
+captured from the user's message in that same turn (a constraint said just now, not yet in memory).
+Nothing else is a candidate: not the whole memory, not facts recorded later. The recommendation is
+stored as an inference, never delivered as evidence, and linked with provenance `inferred`. When a
+premise later changes, the kernel says the recommendation needs review, which is not the same as
+saying it is wrong.
+"""
+
+import re
+
+from .common import KernelError
+from .judge import JudgeError
+from .language import fold
+from .turns import mask_secrets
+
+
+RECOMMENDS = re.compile(
+    r"\b(should|recommend|suggest|go ahead|i would|i'd|propose|better to|the plan is|worth it|"
+    r"deberias|deberiamos|deberia|recomiendo|sugiero|conviene|propongo|mejor seria|te aconsejo|vale la pena|"
+    r"yo (haria|iria))\b")
+RESTS_ON = ("Does the recommendation or decision in `query` rest on `candidate` being true, so that if "
+            "`candidate` changed the recommendation might need to change?")
+THRESHOLD = 0.7
+REPLY_LIMIT = 4000
+
+
+def first_sentence(reply):
+    flat = re.sub(r"\s+", " ", reply).strip()
+    match = re.search(r"(.+?[.!?])(\s|$)", flat)
+    return (match.group(1) if match else flat)[:300]
+
+
+def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
+    """Record a recommendation and its inferred premises. Returns metadata only."""
+    if not turn or not reply or len(reply) < 80 or not RECOMMENDS.search(fold(reply)):
+        return {"calls": 0, "linked": 0}
+    current = {r["id"]: r for r in store.records()}
+    premise_ids = [i for i in dict.fromkeys(turn["delivered_ids"] + turn["captured_ids"]) if i in current]
+    if not premise_ids:
+        return {"calls": 0, "linked": 0}
+    lines = [f"{current[i]['entity_key']} {current[i]['predicate'].replace('_', ' ')}: {current[i]['value']}" for i in premise_ids]
+    query = mask_secrets(reply)[:REPLY_LIMIT]
+    try:
+        judge.require_local(allow_remote)
+        timeout = deadline.timeout(judge.timeout) if deadline else None
+        scores, usage = judge.rank(query, [re.sub(r"\s+", " ", l) for l in lines], no_cache=True,
+                                   timeout=timeout, question=RESTS_ON)
+    except JudgeError as exc:
+        return {"calls": 1, "linked": 0, "failure": str(exc)}
+    premises = [(scores.get(n, 0.0), i) for n, i in enumerate(premise_ids) if scores.get(n, 0.0) >= THRESHOLD]
+    if not premises:
+        return {"calls": 1, "linked": 0, "scores": {current[i]["entity_key"] + "." + current[i]["predicate"]: round(scores.get(n, 0.0), 3)
+                                                     for n, i in enumerate(premise_ids)}}
+    premises.sort(reverse=True)
+    anchor = current[premises[0][1]]
+    # A premise forgotten while the judge ran must not be linked or resurrected.
+    live = {r["id"] for r in store.records()}
+    premises = [(p, i) for p, i in premises if i in live and not store.tombstoned_since(
+        current[i]["entity_key"], current[i]["predicate"], turn["opened_at"])]
+    if not premises:
+        return {"calls": 1, "linked": 0}
+    with store.db:
+        recommendation = store._insert(anchor["entity_key"], "recommendation", first_sentence(reply),
+                                       first_sentence(reply), assertion_kind="inference", source_kind="agent_reply",
+                                       source_ref=f"turn:{turn['token'][:8]}", trust="captured", category="project_decisions",
+                                       kind=anchor["kind"])
+    for _, premise in premises:
+        store.depend(recommendation, premise, provenance="inferred")
+    # Decisions the user stated in this turn rest on the same premises.
+    for decision in turn["captured_ids"]:
+        row = current.get(decision)
+        if row and row["predicate"] in {"decision", "plan"}:
+            for _, premise in premises:
+                if premise != decision:
+                    try:
+                        store.depend(decision, premise, provenance="inferred")
+                    except KernelError:
+                        pass  # a cycle or an inactive decision: the link is simply not added
+    return {"calls": 1, "linked": len(premises), "recommendation_id": recommendation,
+            "latency_ms": usage.get("latency_ms")}
+
+
+def stale_recommendations(records):
+    """Inferred recommendations whose premises changed, with the pairs those premises described."""
+    by_id = {r["id"]: r for r in records}
+    found = []
+    for row in records:
+        if row["assertion_kind"] != "inference" or row["effective_state"] != "active" or not row["stale"]:
+            continue
+        changed = [a for a in row["assumptions"] if a["effective_state"] != "active"]
+        pairs = {(by_id[a["id"]]["entity_key"], by_id[a["id"]]["predicate"]) for a in changed if a["id"] in by_id}
+        found.append({"id": row["id"], "recorded_at": row["recorded_at"], "changed": [a["id"] for a in changed],
+                      "pairs": sorted(pairs)})
+    return found

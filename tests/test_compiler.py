@@ -5,7 +5,8 @@ import unittest
 
 from context_kernel.common import KernelError, canonical, timestamp
 from context_kernel.compiler import Compiler, lexical_scores
-from context_kernel.planner import Need, NeedPlan, Ollama, infer_plan
+from context_kernel.planner import Need, NeedPlan, jev_plan
+from tests.fakes import FakeJudge
 from context_kernel.store import Store
 
 
@@ -111,27 +112,47 @@ class CompilerTests(unittest.TestCase):
         with self.assertRaises(KernelError):
             NeedPlan.from_dict({"needs": [], "principal": "admin"})
 
-    def test_remote_ollama_and_redirect_targets_are_rejected(self):
-        for url in ["https://api.example.com", "http://example.com", "http://localhost.evil", "http://user:password@localhost"]:
-            with self.assertRaises(KernelError):
-                Ollama(url)
-
-    def test_planner_failure_is_explicit_and_does_not_inject_memory(self):
-        class Broken:
-            def chat(self, *args):
-                raise KernelError("Unavailable")
+    def test_hosted_judge_never_receives_memory_text(self):
         self.add("salary", 42000)
-        result = Compiler(self.store, ollama=Broken()).project("My job offer", strategy="inferred")
-        self.assertIn("planner_failed", result.trace["warnings"])
-        self.assertEqual(result.trace["selected"], [])
+        judge = FakeJudge(local=False)
+        result = Compiler(self.store, jev=judge).project("My job offer", strategy="jev")
+        self.assertIn("judge_remote", result.trace["warnings"])
+        self.assertEqual(judge.calls, [])
+        self.assertTrue(result.trace["selected"])  # rules still serve the question
 
-    def test_inferred_generic_question_does_not_call_model(self):
-        class Forbidden:
-            def chat(self, *args):
-                self.fail("Must not call Ollama")
-        plan, usage = infer_plan("What is SQLite?", self.store.records(), Forbidden())
+    def test_judge_failure_is_explicit_and_falls_back(self):
+        self.add("salary", 42000)
+        result = Compiler(self.store, jev=FakeJudge(fail="down")).project("My job offer", strategy="jev")
+        self.assertIn("jev_unavailable", result.trace["warnings"])
+        self.assertNotEqual(result.trace["status"], "unavailable")
+
+    def test_generic_question_does_not_call_the_judge(self):
+        self.add("salary", 42000)
+        judge = FakeJudge()
+        plan, usage = jev_plan("What is SQLite?", self.store.records(), judge)
         self.assertEqual(plan.needs, ())
         self.assertEqual(usage["calls"], 0)
+        self.assertEqual(judge.calls, [])
+
+    def test_repeated_question_is_judged_once(self):
+        self.add("salary", 42000)
+        judge = FakeJudge(rank=lambda q, line, question: 0.9)
+        compiler = Compiler(self.store, jev=judge)
+        first = compiler.project("My job offer", strategy="jev")
+        second = compiler.project("My job offer", strategy="jev")
+        self.assertEqual(len([c for c in judge.calls if c[0] == "rank"]), 1)
+        self.assertEqual(second.trace["usage"]["calls"], 0)
+        self.assertEqual(second.trace["usage"]["cached"], 1)
+        self.assertEqual(first.trace["selected"], second.trace["selected"])
+
+    def test_corrected_value_is_judged_again(self):
+        row = self.add("salary", 42000)
+        judge = FakeJudge(rank=lambda q, line, question: 0.9)
+        compiler = Compiler(self.store, jev=judge)
+        compiler.project("My job offer", strategy="jev")
+        self.store.correct(row["id"], 52000, "Raise.")
+        compiler.project("My job offer", strategy="jev")
+        self.assertEqual(len([c for c in judge.calls if c[0] == "rank"]), 2)
 
 
 if __name__ == "__main__":

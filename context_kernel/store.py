@@ -5,10 +5,10 @@ import os
 from pathlib import Path
 import sqlite3
 
-from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp
+from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp, timestamp_offset
 
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS entities(
@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS statements(
  valid_until TEXT, recorded_at TEXT NOT NULL,
  lifecycle TEXT NOT NULL CHECK(lifecycle IN ('active','superseded','revoked')),
  superseded_by TEXT REFERENCES statements(id),
+ trust TEXT NOT NULL DEFAULT 'confirmed' CHECK(trust IN ('confirmed','captured','quarantined')),
+ category TEXT, last_confirmed_at TEXT,
  CHECK(valid_until IS NULL OR valid_until > valid_from
        OR (lifecycle='superseded' AND valid_until=valid_from)));
 CREATE INDEX IF NOT EXISTS statement_lookup ON statements(scope,entity_id,predicate,lifecycle);
@@ -36,6 +38,8 @@ CREATE TABLE IF NOT EXISTS relations(
  to_statement TEXT REFERENCES statements(id) ON DELETE CASCADE,
  from_entity TEXT REFERENCES entities(id) ON DELETE CASCADE,
  to_entity TEXT REFERENCES entities(id) ON DELETE CASCADE,
+ provenance TEXT NOT NULL DEFAULT 'declared' CHECK(provenance IN ('declared','inferred')),
+ recorded_at TEXT,
  CHECK((kind IN ('corrects','depends_on') AND from_statement IS NOT NULL AND to_statement IS NOT NULL
         AND from_entity IS NULL AND to_entity IS NULL)
     OR (kind='part_of' AND from_entity IS NOT NULL AND to_entity IS NOT NULL
@@ -53,7 +57,38 @@ CREATE TABLE IF NOT EXISTS operations(
  metadata TEXT NOT NULL, recorded_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS processed_events(
  scope TEXT NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY(scope,event_id));
+CREATE TABLE IF NOT EXISTS sessions(
+ scope TEXT NOT NULL, session_id TEXT NOT NULL, host TEXT NOT NULL, chain TEXT NOT NULL,
+ seen_at TEXT NOT NULL, PRIMARY KEY(scope,session_id));
+CREATE TABLE IF NOT EXISTS turns(
+ scope TEXT NOT NULL, session_id TEXT NOT NULL, turn_key TEXT NOT NULL, token TEXT NOT NULL UNIQUE,
+ origin TEXT NOT NULL CHECK(origin IN ('interactive','continuation','unknown')),
+ prompt_digest TEXT NOT NULL, prompt_excerpt TEXT, projection_id TEXT,
+ delivered_ids TEXT NOT NULL DEFAULT '[]', captured_ids TEXT NOT NULL DEFAULT '[]',
+ gate_count INTEGER NOT NULL DEFAULT 0, flags TEXT NOT NULL DEFAULT '[]', opened_at TEXT NOT NULL, closed_at TEXT,
+ expires_at TEXT NOT NULL, PRIMARY KEY(scope,session_id,turn_key));
+CREATE TABLE IF NOT EXISTS judgments(
+ scope TEXT NOT NULL, kind TEXT NOT NULL, question TEXT NOT NULL, model TEXT NOT NULL,
+ state_digest TEXT NOT NULL, candidate_digest TEXT NOT NULL, p REAL NOT NULL, judged_at TEXT NOT NULL,
+ PRIMARY KEY(scope,kind,question,model,state_digest,candidate_digest));
+CREATE TABLE IF NOT EXISTS captures_log(
+ scope TEXT NOT NULL, session_id TEXT NOT NULL, turn_key TEXT, statement_id TEXT,
+ outcome TEXT NOT NULL, reason TEXT, recorded_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS tombstones(
+ scope TEXT NOT NULL, entity_key TEXT NOT NULL, predicate TEXT NOT NULL, at TEXT NOT NULL,
+ PRIMARY KEY(scope,entity_key,predicate));
+CREATE TABLE IF NOT EXISTS scopes(scope TEXT PRIMARY KEY, policy TEXT NOT NULL);
 """
+
+# Columns added after the tables first shipped; a migration adds whichever are missing.
+ADDED_COLUMNS = (
+    ("statements", "trust", "TEXT NOT NULL DEFAULT 'confirmed' CHECK(trust IN ('confirmed','captured','quarantined'))"),
+    ("statements", "category", "TEXT"),
+    ("statements", "last_confirmed_at", "TEXT"),
+    ("relations", "provenance", "TEXT NOT NULL DEFAULT 'declared' CHECK(provenance IN ('declared','inferred'))"),
+    ("relations", "recorded_at", "TEXT"),
+)
+RELATION_COLUMNS = "id,scope,kind,from_statement,to_statement,from_entity,to_entity"
 
 
 class Store:
@@ -84,20 +119,25 @@ class Store:
             if os.name == "posix":
                 self.path.chmod(0o600)
         version = self.db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
-        if version and version[0] == "1":
-            self._migrate_v1()
+        if version and version[0] in {"1", "2"}:
+            self._migrate(version[0])
             version = (SCHEMA_VERSION,)
         if not version or version[0] != SCHEMA_VERSION:
             raise KernelError("Unsupported memory schema.")
 
-    def _migrate_v1(self):
-        # Version 1 only differs in the relation kinds its CHECK accepts. SQLite cannot
-        # alter a CHECK in place, so the table is rebuilt with every row copied; nothing is dropped.
+    def _migrate(self, version):
+        """Copy-based and additive: no row is dropped. v1 -> v2 rebuilds `relations` (SQLite
+        cannot alter a CHECK in place); v2 -> v3 adds columns and tables."""
         with self.db:
-            self.db.execute("ALTER TABLE relations RENAME TO relations_v1")
+            if version == "1":
+                self.db.execute("ALTER TABLE relations RENAME TO relations_v1")
+                self._schema()
+                self.db.execute(f"INSERT INTO relations({RELATION_COLUMNS}) SELECT {RELATION_COLUMNS} FROM relations_v1")
+                self.db.execute("DROP TABLE relations_v1")
             self._schema()
-            self.db.execute("INSERT INTO relations SELECT * FROM relations_v1")
-            self.db.execute("DROP TABLE relations_v1")
+            for table, column, ddl in ADDED_COLUMNS:
+                if column not in {r[1] for r in self.db.execute(f"PRAGMA table_info({table})")}:
+                    self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
             self.db.execute("UPDATE metadata SET value=? WHERE key='schema_version'", (SCHEMA_VERSION,))
 
     def _schema(self):
@@ -187,8 +227,16 @@ class Store:
             ids = self._transition(entity, event, evidence)
         return {"event": event, "statements": [self.inspect(i) for i in ids]}
 
+    def _relation(self, kind, from_statement=None, to_statement=None, from_entity=None, to_entity=None, provenance="declared"):
+        relation_id = identifier()
+        self.db.execute("""INSERT INTO relations(id,scope,kind,from_statement,to_statement,from_entity,to_entity,provenance,recorded_at)
+                           VALUES(?,?,?,?,?,?,?,?,?)""", (relation_id, self.scope, kind, from_statement, to_statement,
+                                                        from_entity, to_entity, provenance, self.clock()))
+        return relation_id
+
     def _insert(self, entity, predicate, value, evidence, valid_from=None, valid_until=None,
-                assertion_kind="user_statement", source_kind="user_statement", label=None, kind="person", source_ref=None):
+                assertion_kind="user_statement", source_kind="user_statement", label=None, kind="person", source_ref=None,
+                trust="confirmed", category=None):
         predicate = key(predicate, "predicate")
         encoded = checked_value(value)
         evidence = text(evidence)
@@ -203,9 +251,13 @@ class Store:
         statement_id, evidence_id = identifier(), identifier()
         self.db.execute("INSERT INTO evidence VALUES(?,?,?,?,?,?)",
                         (evidence_id, self.scope, source_kind, source_ref, evidence, self.clock()))
-        self.db.execute("INSERT INTO statements VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-                        (statement_id, self.scope, entity_id, predicate, encoded, assertion_kind,
-                         evidence_id, start, end, self.clock(), "active", None))
+        if trust not in {"confirmed", "captured", "quarantined"}:
+            raise KernelError("Invalid trust level.")
+        self.db.execute("""INSERT INTO statements(id,scope,entity_id,predicate,value,assertion_kind,evidence_id,valid_from,
+                           valid_until,recorded_at,lifecycle,superseded_by,trust,category,last_confirmed_at)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                        (statement_id, self.scope, entity_id, predicate, encoded, assertion_kind, evidence_id, start, end,
+                         self.clock(), "active", None, trust, category, self.clock() if trust == "confirmed" else None))
         return statement_id
 
     def remember(self, entity, predicate, value, evidence, **kwargs):
@@ -270,7 +322,9 @@ class Store:
         states = {p: self._decode(self._row(p), as_of) for p in parents}
         return self._attach_assumptions([row], states)[0]
 
-    def records(self, as_of=None, history=False):
+    def records(self, as_of=None, history=False, quarantined=False):
+        """Current eligible evidence. Quarantined captures are stored but never delivered; the
+        owner sees them in the inventory (`quarantined=True`) or the history."""
         rows = self.db.execute(self.ROWS + " ORDER BY s.recorded_at, s.id", (self.scope, self.scope, self.scope))
         records = [self._decode(r, as_of) for r in rows]
         states = {r["id"]: r for r in records}
@@ -278,9 +332,10 @@ class Store:
         if history:
             return records
         return [r for r in records if r["effective_state"] == "active"
-                and r["assertion_kind"] in {"user_statement", "observed"}]
+                and r["assertion_kind"] in {"user_statement", "observed"}
+                and (quarantined or r["trust"] != "quarantined")]
 
-    def depend(self, statement_id, assumption_id):
+    def depend(self, statement_id, assumption_id, provenance="declared"):
         """Declare that a statement (a decision, a recommendation) rests on another one.
 
         The owner declares dependencies explicitly; the kernel never infers them. The link
@@ -306,10 +361,10 @@ class Store:
                 if node not in seen:
                     seen.add(node)
                     frontier.extend(links.get(node, ()))
-            relation_id = identifier()
-            self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
-                            (relation_id, self.scope, "depends_on", child["id"], parent["id"], None, None))
-            self._event("depend", {"relation_id": relation_id})
+            if provenance not in {"declared", "inferred"}:
+                raise KernelError("Invalid dependency provenance.")
+            relation_id = self._relation("depends_on", child["id"], parent["id"], provenance=provenance)
+            self._event("depend", {"relation_id": relation_id, "provenance": provenance})
         return {"id": relation_id, "kind": "depends_on", "status": "added"}
 
     def dependents(self, statement_id, as_of=None):
@@ -341,10 +396,11 @@ class Store:
                     successor = self.inspect(successor)["superseded_by"]
                 if not successor or successor in seen:
                     raise KernelError("A changed assumption has no current successor; correct or revoke the dependent instead.")
+                previous = self.db.execute("""SELECT provenance FROM relations WHERE scope=? AND kind='depends_on'
+                                              AND from_statement=? AND to_statement=?""", (self.scope, row["id"], assumption["id"])).fetchone()
                 self.db.execute("DELETE FROM relations WHERE scope=? AND kind='depends_on' AND from_statement=? AND to_statement=?",
                                 (self.scope, row["id"], assumption["id"]))
-                self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
-                                (identifier(), self.scope, "depends_on", row["id"], successor, None, None))
+                self._relation("depends_on", row["id"], successor, provenance=previous[0] if previous else "declared")
                 moved.append({"from": assumption["id"], "to": successor})
             self._event("reaffirm", {"statement_id": row["id"], "moved": len(moved)})
         return {"id": row["id"], "status": "reaffirmed", "moved": moved}
@@ -363,7 +419,7 @@ class Store:
             "SELECT trace FROM projections WHERE scope=? ORDER BY recorded_at DESC,id DESC LIMIT ?",
             (self.scope, limit))]
 
-    def _correct(self, statement_id, value, evidence, valid_from=None, valid_until=None):
+    def _correct(self, statement_id, value, evidence, valid_from=None, valid_until=None, **origin):
         old = self._row(statement_id)
         if old["lifecycle"] != "active" or self._decode(old)["effective_state"] != "active":
             raise KernelError("Correction target is no longer active.")
@@ -371,11 +427,10 @@ class Store:
         if start < old["valid_from"]:
             raise KernelError("Correction cannot start before its target.")
         new_id = self._insert(old["entity_key"], old["predicate"], value, evidence,
-                              valid_from=start, valid_until=valid_until)
+                              valid_from=start, valid_until=valid_until, **origin)
         end = min(start, old["valid_until"]) if old["valid_until"] else start
         self.db.execute("UPDATE statements SET lifecycle='superseded', valid_until=?, superseded_by=? WHERE id=?", (end, new_id, statement_id))
-        self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
-                        (identifier(), self.scope, "corrects", new_id, statement_id, None, None))
+        self._relation("corrects", new_id, statement_id)
         self._event("correct", {"statement_id": new_id})
         return new_id
 
@@ -386,8 +441,9 @@ class Store:
 
     def revoke(self, statement_id):
         with self.db:
-            self._row(statement_id)
+            row = self._row(statement_id)
             self.db.execute("UPDATE statements SET lifecycle='revoked' WHERE id=?", (statement_id,))
+            self._tombstone(row["entity_key"], row["predicate"])
             self._event("revoke", {"statement_id": statement_id})
         return {"status": "revoked", "id": statement_id}
 
@@ -407,9 +463,7 @@ class Store:
                     if row[0] not in ancestors:
                         ancestors.add(row[0])
                         frontier.append(row[0])
-            relation_id = identifier()
-            self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
-                            (relation_id, self.scope, "part_of", None, None, child_id, parent_id))
+            relation_id = self._relation("part_of", from_entity=child_id, to_entity=parent_id)
             self._event("relate", {"relation_id": relation_id})
         return {"id": relation_id, "kind": "part_of"}
 
@@ -425,9 +479,13 @@ class Store:
                             (self.scope, row["entity_id"], row["predicate"]))
             self.db.execute("DELETE FROM evidence WHERE scope=? AND id NOT IN (SELECT evidence_id FROM statements)", (self.scope,))
             self.db.execute("DELETE FROM entities WHERE scope=? AND id NOT IN (SELECT entity_id FROM statements)", (self.scope,))
-            # Conservative invalidation prevents forgotten content surviving in derived records.
-            for table in ("plans", "projections", "proposals", "operations", "processed_events"):
+            # Conservative invalidation prevents forgotten content surviving in derived records,
+            # including turn excerpts and cached judgments that embed values.
+            for table in ("plans", "projections", "proposals", "operations", "processed_events", "turns", "judgments"):
                 self.db.execute(f"DELETE FROM {table} WHERE scope=?", (self.scope,))
+            # A tombstone stops any write already in flight (a slow capture or inference) whose
+            # evidence predates this request from bringing the property back.
+            self._tombstone(row["entity_key"], row["predicate"])
             self._event("forget", {"removed_count": len(ids)})
         return {"status": "forgotten", "removed_count": len(ids),
                 "limits": "Host history, external backups, and forensic disk erasure are not covered."}
@@ -546,7 +604,179 @@ class Store:
         with self.db:
             self._event("failure", {"operation": key(operation, "operation"), "code": "local_request_failed"})
 
+    # Captures, tombstones, policy, sessions, turns, and cached judgments.
+
+    def _tombstone(self, entity_key, predicate):
+        self.db.execute("INSERT OR REPLACE INTO tombstones VALUES(?,?,?,?)", (self.scope, entity_key, predicate, self.clock()))
+
+    def tombstoned_since(self, entity_key, predicate, since):
+        row = self.db.execute("SELECT at FROM tombstones WHERE scope=? AND entity_key=? AND predicate=?",
+                              (self.scope, entity_key, predicate)).fetchone()
+        return bool(row and row[0] >= since)
+
+    def policy(self):
+        row = self.db.execute("SELECT policy FROM scopes WHERE scope=?", (self.scope,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def set_policy(self, policy):
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO scopes VALUES(?,?)", (self.scope, checked_value(policy)))
+            self._event("policy", {"categories": len(policy.get("categories", {}))})
+        return policy
+
+    def register_session(self, session_id, host, chain):
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO sessions VALUES(?,?,?,?,?)",
+                            (self.scope, text(session_id, 256), host, canonical(chain), self.clock()))
+
+    def sessions_for_parent(self, parent):
+        """Sessions whose recorded hook ancestry contains this (pid, start)."""
+        if not parent:
+            return []
+        rows = self.db.execute("SELECT session_id, chain, seen_at FROM sessions WHERE scope=? ORDER BY seen_at DESC", (self.scope,))
+        return [r["session_id"] for r in rows if list(parent) in json.loads(r["chain"])]
+
+    def open_turn(self, session_id, turn_key, token, origin, prompt_digest, excerpt, expires_at):
+        with self.db:
+            self.db.execute("""INSERT OR REPLACE INTO turns(scope,session_id,turn_key,token,origin,prompt_digest,prompt_excerpt,
+                               opened_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)""",
+                            (self.scope, session_id, turn_key, token, origin, prompt_digest, excerpt, self.clock(), expires_at))
+
+    def update_turn(self, session_id, turn_key, **fields):
+        allowed = {"projection_id", "delivered_ids", "captured_ids", "gate_count", "flags", "closed_at", "prompt_excerpt", "expires_at"}
+        if set(fields) - allowed:
+            raise KernelError("Unsupported turn fields.")
+        assignments = ",".join(f"{name}=?" for name in fields)
+        values = [canonical(v) if isinstance(v, list) else v for v in fields.values()]
+        with self.db:
+            self.db.execute(f"UPDATE turns SET {assignments} WHERE scope=? AND session_id=? AND turn_key=?",
+                            (*values, self.scope, session_id, turn_key))
+
+    def turn(self, session_id, turn_key):
+        row = self.db.execute("SELECT * FROM turns WHERE scope=? AND session_id=? AND turn_key=?",
+                              (self.scope, session_id, turn_key)).fetchone()
+        return self._turn(row)
+
+    def turn_by_token(self, token):
+        row = self.db.execute("SELECT * FROM turns WHERE scope=? AND token=?", (self.scope, token)).fetchone()
+        return self._turn(row)
+
+    def recent_turns(self, session_id, limit=4):
+        return [self._turn(r) for r in self.db.execute(
+            "SELECT * FROM turns WHERE scope=? AND session_id=? ORDER BY opened_at DESC LIMIT ?", (self.scope, session_id, limit))]
+
+    @staticmethod
+    def _turn(row):
+        if not row:
+            return None
+        turn = dict(row)
+        turn["delivered_ids"] = json.loads(turn["delivered_ids"])
+        turn["captured_ids"] = json.loads(turn["captured_ids"])
+        turn["flags"] = json.loads(turn["flags"])
+        return turn
+
+    def expire_turns(self):
+        """Excerpts live only until their captures are resolved; rows are kept a day for metrics."""
+        now = self.clock()
+        with self.db:
+            # Facts the gate saw but nobody captured before the excerpt expired count as missed.
+            for row in self.db.execute("""SELECT session_id, turn_key, gate_count - json_array_length(captured_ids)
+                                          FROM turns WHERE scope=? AND expires_at<=? AND prompt_excerpt IS NOT NULL
+                                          AND origin='interactive' AND gate_count > json_array_length(captured_ids)""",
+                                       (self.scope, now)).fetchall():
+                for _ in range(row[2]):
+                    self.db.execute("INSERT INTO captures_log VALUES(?,?,?,?,?,?,?)",
+                                    (self.scope, row[0], row[1], None, "missed", "excerpt_expired", now))
+            self.db.execute("UPDATE turns SET prompt_excerpt=NULL WHERE scope=? AND expires_at<=?", (self.scope, now))
+            self.db.execute("DELETE FROM turns WHERE scope=? AND expires_at<=? AND opened_at<=?",
+                            (self.scope, now, timestamp_offset(now, -86400)))
+
+    def judgments(self, kind, question, model, state_digest, digests):
+        if not digests:
+            return {}
+        marks = ",".join("?" * len(digests))
+        rows = self.db.execute(f"""SELECT candidate_digest, p FROM judgments WHERE scope=? AND kind=? AND question=?
+                                   AND model=? AND state_digest=? AND candidate_digest IN ({marks})""",
+                               (self.scope, kind, question, model, state_digest, *digests))
+        return {r[0]: r[1] for r in rows}
+
+    def save_judgments(self, kind, question, model, state_digest, scores):
+        with self.db:
+            self.db.executemany("INSERT OR REPLACE INTO judgments VALUES(?,?,?,?,?,?,?,?)",
+                                [(self.scope, kind, question, model, state_digest, d, p, self.clock()) for d, p in scores.items()])
+            count = self.db.execute("SELECT count(*) FROM judgments WHERE scope=?", (self.scope,)).fetchone()[0]
+            if count > 20000:
+                self.db.execute("""DELETE FROM judgments WHERE rowid IN (SELECT rowid FROM judgments WHERE scope=?
+                                   ORDER BY judged_at LIMIT ?)""", (self.scope, count - 20000))
+
+    def log_capture(self, session_id, turn_key, outcome, statement_id=None, reason=None):
+        with self.db:
+            self.db.execute("INSERT INTO captures_log VALUES(?,?,?,?,?,?,?)",
+                            (self.scope, session_id, turn_key, statement_id, outcome, reason, self.clock()))
+
+    def capture_counts(self, session_id, turn_key):
+        def count(where, *args):
+            return self.db.execute(f"SELECT count(*) FROM captures_log WHERE scope=? AND outcome IN ('captured','quarantined') {where}",
+                                   (self.scope, *args)).fetchone()[0]
+        return {"turn": count("AND session_id=? AND turn_key=?", session_id, turn_key),
+                "session": count("AND session_id=?", session_id),
+                "day": count("AND recorded_at>=?", timestamp_offset(self.clock(), -86400))}
+
+    def pending_proposal_count(self):
+        return self.db.execute("SELECT count(*) FROM proposals WHERE scope=? AND status='pending'", (self.scope,)).fetchone()[0]
+
+    def captures_for_turn(self, session_id, turn_key):
+        return [dict(r) for r in self.db.execute("""SELECT statement_id, outcome, reason FROM captures_log
+                    WHERE scope=? AND session_id=? AND turn_key=? ORDER BY recorded_at""", (self.scope, session_id, turn_key))]
+
+    def last_capture(self, session_id):
+        for row in self.db.execute("""SELECT statement_id FROM captures_log WHERE scope=? AND session_id=?
+                                      AND outcome IN ('captured','quarantined') ORDER BY recorded_at DESC""", (self.scope, session_id)):
+            if self.db.execute("SELECT 1 FROM statements WHERE scope=? AND id=?", (self.scope, row[0])).fetchone():
+                return row[0]
+        return None
+
+    def operations_since(self, since, names):
+        marks = ",".join("?" * len(names))
+        return self.db.execute(f"SELECT count(*) FROM operations WHERE scope=? AND recorded_at>=? AND operation IN ({marks})",
+                               (self.scope, since, *names)).fetchone()[0]
+
+    def capture_metrics(self):
+        rows = self.db.execute("SELECT outcome, reason, count(*) FROM captures_log WHERE scope=? GROUP BY outcome, reason", (self.scope,))
+        return [{"outcome": r[0], "reason": r[1], "count": r[2]} for r in rows]
+
+    def confirm(self, statement_id):
+        """Owner (or a validated chat turn) promotes a capture to confirmed."""
+        with self.db:
+            row = self._row(statement_id)
+            if row["lifecycle"] != "active":
+                raise KernelError("Only an active statement can be confirmed.")
+            self.db.execute("UPDATE statements SET trust='confirmed', last_confirmed_at=? WHERE id=?", (self.clock(), statement_id))
+            self._event("confirm", {"statement_id": statement_id})
+        return self.inspect(statement_id)
+
+    def undo_capture(self, statement_id):
+        """Remove a captured version entirely and restore the version it replaced, if any."""
+        with self.db:
+            row = self._row(statement_id)
+            if row["trust"] == "confirmed":
+                raise KernelError("Only captured or quarantined statements can be undone; use revoke for confirmed facts.")
+            previous = self.db.execute("""SELECT to_statement FROM relations WHERE scope=? AND kind='corrects'
+                                          AND from_statement=?""", (self.scope, statement_id)).fetchone()
+            self.db.execute("UPDATE statements SET superseded_by=NULL WHERE scope=? AND superseded_by=?", (self.scope, statement_id))
+            self.db.execute("DELETE FROM statements WHERE scope=? AND id=?", (self.scope, statement_id))
+            self.db.execute("DELETE FROM evidence WHERE scope=? AND id=?", (self.scope, row["evidence_id"]))
+            restored = None
+            if previous:
+                old = self._row(previous[0])
+                self.db.execute("""UPDATE statements SET lifecycle='active', valid_until=CASE WHEN valid_until=? THEN NULL
+                                   ELSE valid_until END WHERE id=? AND lifecycle='superseded'""", (row["valid_from"], old["id"]))
+                restored = old["id"]
+            self._event("undo", {"statement_id": statement_id})
+        return {"status": "undone", "id": statement_id, "restored": restored}
+
     def status(self):
         return {"scope": self.scope, "current_statements": len(self.records()),
                 "stored_statements": self.db.execute("SELECT count(*) FROM statements WHERE scope=?", (self.scope,)).fetchone()[0],
-                "pending_proposals": self.db.execute("SELECT count(*) FROM proposals WHERE scope=? AND status='pending'", (self.scope,)).fetchone()[0]}
+                "pending_proposals": self.db.execute("SELECT count(*) FROM proposals WHERE scope=? AND status='pending'", (self.scope,)).fetchone()[0],
+                "quarantined": len([r for r in self.records(quarantined=True) if r["trust"] == "quarantined"])}

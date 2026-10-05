@@ -1,11 +1,19 @@
-"""Small stdio MCP server: local reads and proposals, no owner mutations.
+"""Small stdio MCP server: reads, chat-driven capture, and owner actions bound to a real turn.
+
+Read tools work for any client of this server. Tools that write, delete, confirm, or change policy
+require a turn token that the prompt hook injected, from a session the hook bound to this server's
+own host process, and (for deletions and promotions) a turn a person typed whose recorded text asks
+for it. The model's arguments are never the authority.
 
 Implements the common tools subset of MCP 2024-11-05 through 2025-06-18.
 Newer clients receive the explicit 2025-06-18 protocol negotiation fallback.
 """
 
+from .binding import parent_key
+from .capture import CATEGORIES, capture, describe_results, fact_line, policy as capture_policy, segments
 from .common import KernelError, canonical
 from .compiler import Compiler, READER_RULES
+from .judge import JudgeError
 from . import __version__
 from .protocol import parse_json
 
@@ -18,6 +26,13 @@ def schema(properties=None, required=None):
 
 
 STRING = {"type": "string", "minLength": 1, "maxLength": 16384}
+TOKEN = {"type": "string", "minLength": 8, "maxLength": 64,
+         "description": "The turn token from the memory context packet of the current user message (turn.token)."}
+FACT = schema({"entity": STRING | {"description": "Short snake_case key: user, a project, a person, an object."},
+               "predicate": STRING | {"description": "Short snake_case property, e.g. manager, deadline, decision."},
+               "value": {"description": "The value as the user stated it; a string, number, or small object."}},
+              ["entity", "predicate", "value"])
+ID = {"id": STRING}
 TOOLS = [
     {"name": "memory_context", "description": "Get current scoped evidence. Always supply query: the actual user question, in English or Spanish. Never call with {}. A failed/unavailable call is NOT evidence that no fact exists; retry invalid arguments once with the original question. A successful empty result means no context was selected, not that the whole database was searched exhaustively.",
      "inputSchema": schema({"query": STRING | {"description": "Required original question, for example: Who is the current release approver?"}}, ["query"])},
@@ -32,10 +47,46 @@ TOOLS = [
                                                "value": {}, "evidence": STRING, "valid_from": STRING, "valid_until": STRING,
                                                "event": {"type": "string", "enum": ["ordered", "not_arrived", "arrived", "returned"]}})},
                            ["operation", "payload"])},
+    {"name": "memory_capture", "description": "Save durable facts, decisions, constraints, or preferences the user stated in their message, so later conversations know them without being told again. Call it when the memory packet says facts_stated, or whenever the user states something they would want remembered. One item per fact; reuse entity/predicate keys already in memory when the user changes a value. The kernel checks each item against the user's own message and may hold it for review; report its receipt line, never more.",
+     "inputSchema": schema({"token": TOKEN, "facts": {"type": "array", "minItems": 1, "maxItems": 4, "items": FACT}}, ["token", "facts"])},
+    {"name": "memory_undo", "description": "Take back the last fact captured in this session, when the user says that was wrong or asks to undo it. Restores the previous value if there was one.",
+     "inputSchema": schema({"token": TOKEN}, ["token"])},
+    {"name": "memory_inventory", "description": "What memory holds in this scope, grouped by entity, with trust (confirmed, captured, quarantined), category, and age. Use for 'what do you know/remember about me'. Quarantined items are held for review and are not evidence.",
+     "inputSchema": schema()},
+    {"name": "memory_history", "description": "Every version of the property a statement id belongs to, oldest first.",
+     "inputSchema": schema(ID, ["id"])},
+    {"name": "memory_dependents", "description": "Decisions and recommendations that rest on a statement, including earlier recommendations flagged for review when it changed.",
+     "inputSchema": schema(ID, ["id"])},
+    {"name": "memory_forget", "description": "Delete every version of a remembered property, when the user's current message asks to forget it. Validated against the user's own words; refused otherwise.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
+    {"name": "memory_revoke", "description": "Stop using a statement as evidence (kept in history), when the user's current message says it no longer applies.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
+    {"name": "memory_confirm", "description": "Mark a captured or held statement as confirmed, when the user's current message confirms it.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
+    {"name": "memory_reaffirm", "description": "The user says a decision flagged for review still stands under the changed facts: move its links to their current versions.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
+    {"name": "memory_depend", "description": "Record that a decision rests on another statement, when the user says so explicitly.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING, "assumption_id": STRING}, ["token", "id", "assumption_id"])},
+    {"name": "memory_policy", "description": "Show which kinds of facts are captured automatically in this scope; with enable/disable, change it when the user's current message asks to.",
+     "inputSchema": schema({"token": TOKEN, "enable": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": sorted(CATEGORIES)}},
+                            "disable": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": sorted(CATEGORIES)}}})},
 ]
+READ_ONLY = {"memory_context", "memory_inspect", "memory_status", "memory_why", "memory_inventory", "memory_history", "memory_dependents"}
+DESTRUCTIVE = {"memory_forget", "memory_revoke", "memory_undo"}
 for tool in TOOLS:
-    tool["annotations"] = {"readOnlyHint": tool["name"] != "memory_propose", "destructiveHint": False,
-                           "idempotentHint": tool["name"] != "memory_propose", "openWorldHint": False}
+    tool["annotations"] = {"readOnlyHint": tool["name"] in READ_ONLY, "destructiveHint": tool["name"] in DESTRUCTIVE,
+                           "idempotentHint": tool["name"] in READ_ONLY, "openWorldHint": False}
+
+# What the user's recorded message must say before an owner action runs.
+ASKS = {
+    "memory_forget": "Does the writer of `text` ask to forget, delete, or stop remembering `fact`?",
+    "memory_revoke": "Does the writer of `text` say that `fact` no longer applies or should not be used?",
+    "memory_confirm": "Does the writer of `text` confirm that `fact` is correct?",
+    "memory_reaffirm": "Does the writer of `text` say that `fact` still stands or should go ahead despite the change?",
+    "memory_depend": "Does the writer of `text` say that `fact` depends on or rests on another fact?",
+    "memory_policy": "Does the writer of `text` ask to start or stop remembering `fact` automatically?",
+}
+ASK_THRESHOLD = 0.7
 
 
 class ArgumentError(KernelError):
@@ -59,15 +110,94 @@ def validate(arguments, contract):
                 raise ArgumentError("Unsupported tool operation.")
         if spec.get("type") == "object":
             validate(value, spec)
+        if spec.get("type") == "array":
+            if not isinstance(value, list) or not spec.get("minItems", 0) <= len(value) <= spec.get("maxItems", 64):
+                raise ArgumentError("Invalid tool list argument.")
+            for item in value:
+                if spec["items"].get("type") == "object":
+                    validate(item, spec["items"])
+                elif not isinstance(item, str) or item not in spec["items"].get("enum", [item]):
+                    raise ArgumentError("Invalid tool list item.")
+
+
+class Unbound(KernelError):
+    """This server cannot tie the call to a session the hook saw: nothing is written or deleted."""
 
 
 class Server:
-    def __init__(self, store, compiler=None, strategy="rules"):
+    def __init__(self, store, compiler=None, strategy="rules", judge=None, parent=None):
         self.store = store
         self.compiler = compiler or Compiler(store)
         self.strategy = strategy
+        self.judge = judge or getattr(self.compiler, "jev", None)
+        self.parent = parent if parent is not None else parent_key()
         self.initialized = False
         self.ready = False
+
+    def _turn(self, token, interactive=False):
+        """The turn behind a token, only if its session was bound by a hook running under the same
+        host process as this server."""
+        turn = self.store.turn_by_token(token)
+        if not turn:
+            raise Unbound("Unknown or expired turn token; use the token from the current memory packet.")
+        if turn["session_id"] not in self.store.sessions_for_parent(self.parent):
+            raise Unbound("This memory server is not bound to the session that issued the token.")
+        if turn["expires_at"] <= self.store.clock():
+            raise Unbound("The turn token expired; use the token from the current memory packet.")
+        if interactive and turn["origin"] != "interactive":
+            raise Unbound("Only a message the user typed can authorize this action.")
+        return turn
+
+    def _judge(self):
+        if not self.judge:
+            raise KernelError("This action needs the jev judge; configure it with --jev-command.")
+        self.judge.require_local(capture_policy(self.store)["allow_remote_judge"])
+        return self.judge
+
+    def _asked(self, name, turn, statement):
+        """The user's recorded words for this turn must ask for this action on this statement."""
+        authored, _ = segments(turn["prompt_excerpt"] or "")
+        if not authored:
+            raise KernelError("The user's message for this turn is not available; ask them to repeat the request.")
+        line = fact_line(statement["entity_key"], statement["predicate"], statement["value"]) if isinstance(statement, dict) else statement
+        answers, _ = self._judge().ask({"text": authored, "fact": line}, {"asked": ("noul", ASKS[name])})
+        if answers["asked"] < ASK_THRESHOLD:
+            raise KernelError("The user's message does not ask for this; nothing was changed.")
+
+    def _owner_action(self, name, arguments):
+        turn = self._turn(arguments["token"], interactive=True)
+        if name == "memory_policy":
+            rules = capture_policy(self.store)
+            change = {c: True for c in arguments.get("enable", [])} | {c: False for c in arguments.get("disable", [])}
+            if not change:
+                return rules
+            self._asked(name, turn, ", ".join(CATEGORIES[c] for c in change))
+            rules["categories"].update(change)
+            stored = self.store.policy() or {}
+            stored["categories"] = dict(stored.get("categories", {}), **change)
+            self.store.set_policy(stored)
+            return capture_policy(self.store)
+        statement = self.store.inspect(arguments["id"])
+        if name == "memory_depend":
+            self._asked(name, turn, statement)
+            return self.store.depend(arguments["id"], arguments["assumption_id"])
+        self._asked(name, turn, statement)
+        if name == "memory_forget":
+            return self.store.forget(arguments["id"])
+        if name == "memory_revoke":
+            return self.store.revoke(arguments["id"])
+        if name == "memory_confirm":
+            return self.store.confirm(arguments["id"])
+        return self.store.reaffirm(arguments["id"])
+
+    def inventory(self):
+        grouped = {}
+        for row in self.store.records(quarantined=True):
+            grouped.setdefault(row["entity_key"], []).append({
+                "id": row["id"], "predicate": row["predicate"], "value": row["value"], "trust": row["trust"],
+                "category": row["category"], "recorded_at": row["recorded_at"], "review_needed": row["stale"]})
+        return {"scope": self.store.scope, "entities": grouped,
+                "note": "quarantined items are held for review and are not evidence"}
 
     def call(self, name, arguments):
         tool = next((t for t in TOOLS if t["name"] == name), None)
@@ -88,7 +218,41 @@ class Server:
             return self.store.status()
         if name == "memory_why":
             return self.store.trace(arguments["id"])
-        return self.store.propose(arguments["operation"], arguments["payload"])
+        if name == "memory_propose":
+            return self.store.propose(arguments["operation"], arguments["payload"])
+        if name == "memory_inventory":
+            return self.inventory()
+        if name == "memory_history":
+            row = self.store.inspect(arguments["id"])
+            versions = [r for r in self.store.records(history=True)
+                        if r["entity_key"] == row["entity_key"] and r["predicate"] == row["predicate"]]
+            return {"versions": [{k: r[k] for k in ("id", "value", "trust", "effective_state", "valid_from", "valid_until", "source_kind")}
+                                 for r in versions]}
+        if name == "memory_dependents":
+            row = self.store.inspect(arguments["id"])
+            versions = {r["id"] for r in self.store.records(history=True)
+                        if r["entity_key"] == row["entity_key"] and r["predicate"] == row["predicate"]}
+            found = [r for r in self.store.records(history=True) if r["effective_state"] == "active"
+                     and any(a["id"] in versions for a in r["assumptions"])]
+            return {"dependents": [{"id": r["id"], "entity": r["entity_key"], "predicate": r["predicate"], "value": r["value"],
+                                    "kind": r["assertion_kind"], "review_needed": r["stale"],
+                                    "changed": [a["id"] for a in r["assumptions"] if a["effective_state"] != "active"]} for r in found]}
+        if name == "memory_capture":
+            turn = self._turn(arguments["token"])
+            if not self.judge:
+                raise KernelError("Capture needs the jev judge; configure it with --jev-command.")
+            # capture() applies the scope's privacy rule itself and answers per fact.
+            results = capture(self.store, self.judge, turn, arguments["facts"])
+            return {"results": results, "receipt": describe_results(results)}
+        if name == "memory_undo":
+            turn = self._turn(arguments["token"], interactive=True)
+            if "forget_requested" not in turn["flags"]:
+                raise KernelError("The user's message does not ask to undo anything; nothing was changed.")
+            last = self.store.last_capture(turn["session_id"])
+            if not last:
+                raise KernelError("Nothing captured in this session to undo.")
+            return self.store.undo_capture(last)
+        return self._owner_action(name, arguments)
 
     def dispatch(self, request):
         request_id = request.get("id") if isinstance(request, dict) else None
@@ -141,6 +305,8 @@ class Server:
                           "isError": value.get("status") in {"unavailable", "insufficient_context"}}
             except KernelError as exc:
                 arguments_error = isinstance(exc, ArgumentError)
+                if isinstance(exc, (Unbound, JudgeError)):
+                    arguments_error = False
                 value = {"status": "unavailable", "error": {
                     "code": "invalid_arguments" if arguments_error else "memory_operation_failed",
                     "message": str(exc), "retryable": arguments_error,
@@ -154,8 +320,8 @@ class Server:
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def serve(store, source, destination, compiler=None, strategy="rules"):
-    server = Server(store, compiler, strategy)
+def serve(store, source, destination, compiler=None, strategy="rules", judge=None):
+    server = Server(store, compiler, strategy, judge)
     while True:
         raw = source.readline(65537)
         if not raw:

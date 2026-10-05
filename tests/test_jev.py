@@ -19,7 +19,23 @@ from context_kernel.store import Store
 ROOT = Path(__file__).resolve().parent.parent
 FAKE = '''#!/usr/bin/env python3
 import json, os, sys
-candidates = [line for line in sys.stdin.read().split("\\n") if line]
+if "--dry-run" in sys.argv:
+    print(json.dumps({"url": os.environ.get("FAKE_JEV_URL", "http://localhost:11434/v1/systemone"), "body": {"model": "fake"}}))
+    sys.exit(0)
+raw = sys.stdin.read()
+if sys.argv[1] == "ask":
+    request = json.loads(raw)
+    preset = json.loads(os.environ.get("FAKE_JEV_ANSWERS", "{}"))
+    answers = {}
+    for qid, question in request["questions"].items():
+        if question["type"] == "noul":
+            answers[qid] = {"type": "noul", "noul": preset.get(qid, 0.9)}
+        else:
+            chosen = preset.get(qid, next(iter(question["criteria"])))
+            answers[qid] = {"type": "choice", "probabilities": {k: (1.0 if k == chosen else 0.0) for k in question["criteria"]}}
+    print(json.dumps({"answers": answers, "usage": {"input_tokens": 40}}))
+    sys.exit(0)
+candidates = [line for line in raw.split("\\n") if line]
 log = os.environ.get("FAKE_JEV_LOG")
 if log:
     with open(log, "a") as handle:
@@ -146,7 +162,8 @@ class JevTests(unittest.TestCase):
         self.assertNotIn(colour["id"], result.trace["selected"])
         self.assertEqual(result.trace["usage"]["lexical_rescues"], ["user.manager"])
         os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.2})
-        self.assertEqual(self.compiler.project("quien es mi manager?", strategy="jev").trace["selected"], [])
+        # A new question is judged afresh (the first answer is cached for its own wording only).
+        self.assertEqual(self.compiler.project("y mi manager actual?", strategy="jev").trace["selected"], [])
 
     def test_inventory_beyond_the_cap_judges_mentioned_then_recent_pairs(self):
         os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.9, "old note": 0.9})
@@ -162,6 +179,26 @@ class JevTests(unittest.TestCase):
         self.assertIn(manager["id"], result.trace["selected"])
         self.assertNotIn("old.note", result.trace["usage"]["scores"])
         self.assertEqual(len(self.calls()[0]["candidates"]), 3)
+
+    def test_a_hosted_backend_never_receives_the_inventory(self):
+        self.add("allergy", "My friend cannot eat nuts")
+        os.environ["FAKE_JEV_URL"] = "https://openrouter.ai/api/v1/systemone"
+        try:
+            result = Compiler(self.store, jev=Jev(str(self.fake))).project("A gift for my friend", strategy="jev")
+        finally:
+            os.environ.pop("FAKE_JEV_URL")
+        self.assertIn("judge_remote", result.trace["warnings"])
+        self.assertEqual(self.calls(), [])  # only the dry run ran, and it sends nothing
+
+    def test_ask_sends_the_request_on_stdin_and_reads_both_question_types(self):
+        os.environ["FAKE_JEV_ANSWERS"] = json.dumps({"a": 0.7, "c": "roles"})
+        try:
+            out, usage = Jev(str(self.fake)).ask({"text": "secret words"}, {"a": ("noul", "Is `text` x?"),
+                                                                              "c": ("choice", "Which?", {"roles": "r", "limits": "l"})})
+        finally:
+            os.environ.pop("FAKE_JEV_ANSWERS")
+        self.assertEqual(out["a"], 0.7)
+        self.assertEqual(out["c"], {"roles": 1.0, "limits": 0.0})
 
     def test_thresholds_and_command_are_validated(self):
         for kwargs in ({"critical": 0.3, "supporting": 0.5}, {"supporting": 0}, {"timeout": 0}, {"command": ""}, {"band": 0.55}, {"max_pairs": 0}):
