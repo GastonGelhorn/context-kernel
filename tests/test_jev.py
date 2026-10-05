@@ -26,6 +26,7 @@ if log:
         handle.write(json.dumps({"argv": sys.argv[1:], "candidates": candidates}) + "\\n")
 mode = os.environ.get("FAKE_JEV_MODE", "score")
 if mode == "crash":
+    print(json.dumps({"error": "7 questions would take about 14 s on the local model, more than the 10 s this call has", "exit_code": 4}), file=sys.stderr)
     sys.exit(4)
 if mode == "garbage":
     print("not json"); sys.exit(0)
@@ -103,6 +104,9 @@ class JevTests(unittest.TestCase):
             self.assertIn(allergy["id"], result.trace["selected"])
             self.assertIn("failure", result.trace["usage"])
         self.assertNotIn("Traceback", canonical(result.trace))
+        os.environ["FAKE_JEV_MODE"] = "crash"
+        result = self.compiler.project("A gift for my friend", strategy="jev")
+        self.assertIn("status 4: {\"error\": \"7 questions", result.trace["usage"]["failure"])
 
     def test_missing_executable_fails_open_in_the_hook(self):
         self.add("allergy", "My friend cannot eat nuts")

@@ -306,8 +306,11 @@ class Jev:
         except (OSError, subprocess.SubprocessError) as exc:
             raise KernelError("jev is unavailable or timed out.") from exc
         if process.returncode != 0:
-            # stderr may describe the configuration; never the inventory. Keep the code only.
-            raise KernelError(f"jev exited with status {process.returncode}.")
+            # jev's last stderr line is its own error record (backend, budget, key status); it never
+            # echoes candidates. Keep it bounded so the trace explains the fallback.
+            detail = (process.stderr or "").strip().splitlines()
+            reason = re.sub(r"\s+", " ", detail[-1])[:300] if detail else "no diagnostic output"
+            raise KernelError(f"jev exited with status {process.returncode}: {reason}")
         result = parse_json(process.stdout)
         rows = result.get("results") if isinstance(result, dict) else None
         if not isinstance(rows, list):
