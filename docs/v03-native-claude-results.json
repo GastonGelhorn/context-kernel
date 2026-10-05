@@ -1,0 +1,101 @@
+{
+ "client": "Claude Code",
+ "version": "2.1.287 (Claude Code)",
+ "model": "client default",
+ "strategy": "rules",
+ "passed": true,
+ "hook_emitted_in_every_session": true,
+ "wall_seconds": 43.171,
+ "paid_api_calls": 0,
+ "global_settings_edited": false,
+ "permissions_bypassed": false,
+ "cost_usd_reported": [
+  0.453372,
+  0.33437175,
+  0.33434175,
+  0.35215575,
+  0.33825175,
+  0.34068375
+ ],
+ "evaluation_scope": "fictional lifecycle, dependency, and evidence-use checks through the real hook; not a quality benchmark",
+ "phases": [
+  {
+   "name": "empty_memory",
+   "answer": "UNKNOWN",
+   "expected": "UNKNOWN",
+   "passed": true,
+   "projection_status": [
+    "empty"
+   ],
+   "duration_seconds": 6.665,
+   "output_tokens": 9,
+   "cache_creation_input_tokens": 22596,
+   "cache_read_input_tokens": 0
+  },
+  {
+   "name": "registered_approver_fresh_session",
+   "answer": "Nyra Vale",
+   "expected": "Nyra Vale",
+   "passed": true,
+   "projection_status": [
+    "ok"
+   ],
+   "duration_seconds": 8.88,
+   "output_tokens": 9,
+   "cache_creation_input_tokens": 16505,
+   "cache_read_input_tokens": 11279
+  },
+  {
+   "name": "corrected_approver_fresh_session",
+   "answer": "Orin Keel",
+   "expected": "Orin Keel",
+   "passed": true,
+   "projection_status": [
+    "ok"
+   ],
+   "duration_seconds": 5.265,
+   "output_tokens": 8,
+   "cache_creation_input_tokens": 16506,
+   "cache_read_input_tokens": 11279
+  },
+  {
+   "name": "stale_recommendation_after_deadline_change",
+   "answer": "The recorded decision to rewrite the payment module before launch needs review before acting on it, because it rested on an assumption that has since been superseded by the current three-week deadline, and the context doesn't say whether the rewrite still fits that timeline.",
+   "expected": null,
+   "passed": true,
+   "projection_status": [
+    "review_required"
+   ],
+   "duration_seconds": 6.751,
+   "output_tokens": 78,
+   "cache_creation_input_tokens": 17228,
+   "cache_read_input_tokens": 10755
+  },
+  {
+   "name": "forgotten_approver_fresh_session",
+   "answer": "UNKNOWN",
+   "expected": "UNKNOWN",
+   "passed": true,
+   "projection_status": [
+    "review_required"
+   ],
+   "duration_seconds": 6.505,
+   "output_tokens": 9,
+   "cache_creation_input_tokens": 16699,
+   "cache_read_input_tokens": 11279
+  },
+  {
+   "name": "generic_question_no_personal_context",
+   "answer": "A SQLite primary key is a column or set of columns whose values uniquely identify each row in a table, and when declared as a single `INTEGER PRIMARY KEY` it becomes an alias for the table's built-in rowid.",
+   "expected": null,
+   "passed": true,
+   "projection_status": [
+    "empty"
+   ],
+   "duration_seconds": 9.105,
+   "output_tokens": 74,
+   "cache_creation_input_tokens": 16665,
+   "cache_read_input_tokens": 10755
+  }
+ ]
+}

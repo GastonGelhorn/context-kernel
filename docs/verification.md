@@ -96,7 +96,20 @@ Fixture-level metrics reported by the demo: 2 of 2 facts delivered in a fresh se
 
 Hooks were switched to fail open. The subprocess contract was re-verified for both clients: an unreadable event yields an empty-context envelope with a `systemMessage`, `--fail-closed` yields `decision: block`, and a `Forget:` prompt blocks in both modes.
 
-The owner ran the native Claude Code check (Claude Code 2.1.287, `claude -p`, rules strategy) in a fresh pilot directory. The hook fired in all six headless sessions: one emitted projection per prompt, with the expected statuses (`empty`, `ok`, `ok`, `review_required`, `review_required`, `empty`). This is the first native confirmation that a project-local `.claude/settings.local.json` hook delivers the kernel's context without any global setting or permission bypass. The model answers were not obtained: the CLI's OAuth session had expired and every call returned an authentication error, so evidence use by the model remains unverified in Claude Code. The runner now stops at the first authentication failure. The owner-trusted Codex hook walkthrough is still pending.
+The owner ran the native Claude Code check (Claude Code 2.1.287, `claude -p`, client default model, rules strategy) in a fresh pilot directory. A first attempt hit an expired CLI sign-in: the hook still fired in all six sessions, and the runner now stops at the first authentication failure. After `claude auth login`, the full check passed 6/6. [Native Claude Code results](v03-native-claude-results.json).
+
+| Phase | Projection | Answer |
+| --- | --- | --- |
+| Empty memory | `empty` | `UNKNOWN` |
+| Registered approver, fresh session | `ok` | `Nyra Vale` |
+| Corrected approver, fresh session | `ok` | `Orin Keel` |
+| Rewrite decision after the deadline moved | `review_required` | Needs review: it "rested on an assumption that has since been superseded by the current three-week deadline, and the context doesn't say whether the rewrite still fits that timeline" |
+| Forgotten approver, fresh session | `review_required` | `UNKNOWN` |
+| Generic SQLite question | `empty` | Definition, no fixture names |
+
+This is the first native confirmation that a project-local `.claude/settings.local.json` hook delivers the kernel's context and that the model uses it: a correction replaced the old name in a fresh session, forgetting removed it, a stale decision was flagged with its changed assumption rather than restated or silently replaced, and a generic question received no personal context. No global setting or permission bypass was involved. Six sessions took 43.2 seconds of wall time; the client reported 2.15 USD-equivalent across them and 16-23k cache-creation tokens per session, which is Claude Code's own system prompt plus the projection, not the kernel's cost. One observation: the question about the approver also carried the stale rewrite decision (`review_required`) because the rules family for project questions includes `decision`; harmless here, but a reason to prefer judged selection.
+
+Still pending: the owner-trusted Codex hook walkthrough, and the same Claude Code check with `--strategy jev`.
 
 ## Native Codex CLI
 
