@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import tempfile
 import unittest
+
+from context_kernel.adapters import packet_of
 from unittest.mock import patch
 
 from context_kernel.adapters import hook_response, propose_command
@@ -155,7 +157,7 @@ class ContextV02Tests(unittest.TestCase):
         from context_kernel.adapters import stop_response
         event = {"cwd": str(self.workspace), "prompt": "Olvida: user.salary", "session_id": "s1", "prompt_id": "p1"}
         response, _ = hook_response(event, self.workspace, self.store, self.compiler)
-        self.assertIn("memory_forget", json.loads(response["hookSpecificOutput"]["additionalContext"])["turn"]["privacy"])
+        self.assertIn("memory_forget", packet_of(response["hookSpecificOutput"]["additionalContext"])["turn"]["privacy"])
         stop = stop_response({"cwd": str(self.workspace), "hook_event_name": "Stop", "session_id": "s1", "prompt_id": "p1",
                               "last_assistant_message": "Listo, lo olvidé."}, self.workspace, self.store)
         self.assertIn("nothing was forgotten", stop["systemMessage"])
@@ -187,7 +189,7 @@ class ContextV02Tests(unittest.TestCase):
         compiler = Compiler(self.store, jev=FakeJudge(fail="down"))
         event = {"cwd": str(self.workspace), "prompt": "Mi oferta laboral"}
         response, projection_id = hook_response(event, self.workspace, self.store, compiler, strategy="jev")
-        packet = json.loads(response["hookSpecificOutput"]["additionalContext"])
+        packet = packet_of(response["hookSpecificOutput"]["additionalContext"])
         self.assertTrue(packet["turn"]["token"])
         self.assertIn("jev_unavailable", packet["warnings"])
         self.assertIsNotNone(projection_id)

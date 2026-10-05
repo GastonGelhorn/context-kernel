@@ -22,7 +22,7 @@ Agent: That recommendation assumed three months; with three weeks it needs revie
 
 Nothing in that exchange was typed as a memory command. The kernel:
 
-1. **Captures from the conversation.** On every prompt a hook asks jev whether the message states something worth keeping. If it does, the delivered context asks the agent to call `memory_capture`. The kernel checks each proposed fact against your own words in that message, classifies it, and stores it, holds it for review, or refuses it. The agent cannot make up a fact you did not say.
+1. **Captures from the conversation.** On every prompt a hook asks jev whether the message states something worth keeping. If it does, the kernel asks the agent, in plain text outside the data packet, to call `memory_capture`. It also lists related stored facts, so a change can name the fact it `replaces`. When two sessions name the same fact differently, the kernel resolves the keys. The kernel checks each proposed fact against your own words in that message, classifies it, and stores it, holds it for review, or refuses it. The agent cannot make up a fact you did not say.
 2. **Keeps versions, not summaries.** A change is a new version linked to the old one. History stays inspectable, and you can undo by saying so.
 3. **Links recommendations to their premises.** When the agent recommends something, the Stop hook asks jev which premises it rested on: the facts the kernel delivered in that turn, plus facts you stated in that same message. It records those links as inferences.
 4. **Flags rather than replaces.** When a premise changes, the next projection that touches it says an earlier recommendation needs review. It does not say the recommendation is wrong, and it does not inject the old text. The agent can ask `memory_dependents` for details.
@@ -31,8 +31,9 @@ Nothing in that exchange was typed as a memory command. The kernel:
 ## Trust, consent and privacy
 
 - **Three trust levels.** `confirmed` comes from you, through the owner CLI or by restating a captured value. `captured` was validated from the conversation and is delivered marked as such. `quarantined` is stored but never delivered: pasted or quoted text, private details about other people, uncertain readings, and turns that a person did not type.
-- **Autonomy within categories you allow.** Each scope has a policy. In `work`, project state, decisions, constraints, roles and preferences are captured automatically. Personal attributes and other people's private details are held until you enable them, which you can do by asking in chat. A captured value never silently overrides a confirmed one: you get a one-line question instead.
+- **Autonomy within categories you allow.** Each scope has a policy. In `work`, project state, decisions, constraints, roles and preferences are captured automatically. Personal attributes and other people's private details are held until you enable them, which you can do by asking in chat. A change you type to a confirmed fact is applied as a new version, and the receipt says what it was ("user.approver (was \"Gaston\")"). A question is asked only when the kernel itself chose which fact to change, or when two values already disagree.
 - **"Don't remember this" means nothing is stored**, not even in quarantine, and the turn's excerpt is dropped too.
+- **Undo takes back only the last save, and only when you don't name something else.** "Forget the checkout deadline" is a forget of that fact, never an undo of whatever was saved last. That holds even when the judge is down.
 - **Deletions need your words and a real turn.** `memory_forget`, `revoke`, `confirm`, `reaffirm` and policy changes need three things:
   - a turn token that only the hook injects;
   - a session that the hook bound to the MCP server's own host process (by process ancestry, outside the model);

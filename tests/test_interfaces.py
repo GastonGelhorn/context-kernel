@@ -7,6 +7,8 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
+
+from context_kernel.adapters import packet_of
 from unittest.mock import patch
 
 from context_kernel.adapters import configuration, hook_response, propose_command
@@ -211,7 +213,7 @@ class InterfaceTests(unittest.TestCase):
         for client in ("codex", "claude"):
             process = self.run_cli("hook", "--client", client, "--workspace", str(self.workspace), stdin=event)
             self.assertEqual(process.returncode, 0, process.stderr)
-            packet = json.loads(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"])
+            packet = packet_of(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"])
             self.assertEqual(packet["claims"], [])
             self.assertTrue(packet["turn"]["token"])
 
@@ -227,8 +229,8 @@ class InterfaceTests(unittest.TestCase):
     def test_forget_request_is_flagged_for_the_bound_tools_not_blocked(self):
         event = canonical({"prompt": "Forget: user.salary", "cwd": str(self.workspace)})
         process = self.run_cli("hook", "--client", "codex", "--workspace", str(self.workspace), stdin=event)
-        packet = json.loads(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"])
-        self.assertIn("never say it is done", packet["turn"]["privacy"])
+        packet = packet_of(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"])
+        self.assertIn("Never say it is done", packet["turn"]["privacy"])
 
     def test_block_output_speaks_both_hosts(self):
         from context_kernel.adapters import block

@@ -29,6 +29,11 @@ _DO_NOT_REMEMBER = re.compile(
 _FORGET = re.compile(
     r"^\s*(olvida|olvidate de|borra|elimina|forget|delete|remove|revoca|revoke|deshaz|undo)\b|"
     r"\b(olvida|forget|deshaz|undo) (eso|esto|lo que|that|this|what)\b")
+# Taking back the last thing saved, without naming anything else. "Forget the checkout deadline"
+# is not an undo: it names a fact, and goes through memory_forget with that fact's id.
+_UNDO = re.compile(
+    r"\b(olvida (eso|esto|lo ultimo|lo que (acabas de|has) guardad\w*)|deshaz(lo)?|deshacer eso|eso no|no era (asi|eso)|"
+    r"undo( that| it| this)?|take (it|that) back|forget (that|this|it|what you just saved)|that'?s wrong|scratch that)\b")
 _CONTINUATIONS = {"ok", "okay", "si", "sí", "yes", "y", "dale", "vale", "go", "go on", "continue", "continua", "sigue",
                   "listo", "done", "gracias", "thanks", "perfecto", "great", "good", "bien"}
 
@@ -50,6 +55,10 @@ def do_not_remember(prompt):
 
 def forget_request(prompt):
     return bool(_FORGET.search(fold(prompt)))
+
+
+def undo_request(prompt):
+    return bool(_UNDO.search(fold(prompt)))
 
 
 def trivial_continuation(prompt):

@@ -14,7 +14,7 @@ from .inference import infer
 from .language import fold
 from .planner import NeedPlan, generic_question
 from .protocol import parse_json
-from .turns import close_turn, do_not_remember, forget_request, open_turn, trivial_continuation
+from .turns import close_turn, do_not_remember, forget_request, open_turn, trivial_continuation, undo_request
 
 
 class HookBlock(KernelError):
@@ -98,9 +98,13 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
     if do_not_remember(prompt):
         flags.append("do_not_remember")
         marker["capture"] = "off: the user asked not to keep this message"
-    if forget_request(prompt):
+    if forget_request(prompt) or undo_request(prompt):
         flags.append("forget_requested")
-        marker["privacy"] = "The user asked to forget or undo something: use memory_undo or memory_forget with this token; never say it is done unless the tool confirms it."
+        if undo_request(prompt):
+            flags.append("undo_requested")
+        marker["privacy"] = ("The user asked to forget something. If they named a fact, call memory_forget with that fact's id "
+                             "(from the claims or memory_inventory); memory_undo only takes back the last thing saved. "
+                             "Never say it is done unless the tool confirms it.")
     pending = _pending_captures(store, turn)
     if pending:
         marker["pending"] = pending
@@ -144,11 +148,48 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         if fail_closed:
             raise KernelError(message)
         # Fail open: the prompt proceeds with the token only, and the host is told why.
-        return envelope(canonical({"type": "context_data", "turn": marker}), messages + [message]), None
+        return envelope(with_requests(canonical({"type": "context_data", "turn": marker}), marker), messages + [message]), None
     warnings = [w for w in projection.trace["warnings"] if w not in {"jev_inventory_capped"}]
     if warnings:
         messages.append("Memory context warnings: " + ", ".join(warnings) + ".")
-    return envelope(projection.content, messages), projection.id
+    return envelope(with_requests(projection.content, marker), messages), projection.id
+
+
+def kernel_requests(marker):
+    """What the memory system itself asks of the agent this turn, as plain sentences.
+
+    They sit outside the JSON packet on purpose: the packet's claims are data the agent must not
+    obey, and an agent that honours that rule (as Codex's model did) would otherwise also ignore a
+    request to save what the user just said."""
+    token = marker["token"]
+    requests = []
+    capture = marker.get("capture")
+    if isinstance(capture, dict):
+        related = " If one of them changes a fact listed in turn.capture.related, pass that fact's id as replaces." \
+            if capture.get("related") else ""
+        requests.append(f"The user's message states {capture['facts_stated']} fact(s) worth remembering. Before answering, call "
+                        f"the memory_capture tool with token \"{token}\" and one item per fact (entity, predicate, value)."
+                        + related + " Then answer normally and mention the tool's receipt in one line.")
+    if marker.get("pending"):
+        requests.append("Facts from an earlier message were not saved yet; memory_capture accepts that message's token "
+                        "from turn.pending.")
+    if marker.get("privacy"):
+        requests.append(marker["privacy"] + f" Use token \"{token}\".")
+    if isinstance(marker.get("capture"), str):
+        requests.append("The user asked not to keep this message: do not call memory_capture for it.")
+    return requests
+
+
+def with_requests(content, marker):
+    requests = kernel_requests(marker)
+    if not requests:
+        return content
+    return "Context Kernel, the memory system the user installed, asks: " + " ".join(requests) + "\n" + content
+
+
+def packet_of(context):
+    """The JSON packet inside a hook's additionalContext, after any plain-text requests."""
+    return json.loads(context[context.index("{"):]) if context else None
 
 
 def stop_response(event, workspace, store, judge=None, deadline=None):
@@ -253,7 +294,8 @@ def configuration(client, workspace, db, scope, python=None, mode="hook", propos
     stop = {"type": "command", "command": command("stop", judge_options), "timeout": 20}
     start = {"type": "command", "command": command("session-start"), "timeout": 10}
     if client == "codex":
-        prompt["additionalContextLimit"] = 2048
+        # The packet stays within the kernel's 2 KiB budget; the plain-text requests before it add up to ~700 bytes.
+        prompt["additionalContextLimit"] = 3072
     hooks = {"UserPromptSubmit": [{"hooks": [prompt]}], "Stop": [{"hooks": [stop]}], "SessionStart": [{"hooks": [start]}]}
     return {"destination": ".codex/hooks.json" if client == "codex" else ".claude/settings.local.json",
             "config": {"hooks": hooks}}

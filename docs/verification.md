@@ -6,7 +6,7 @@ Checked on 2026-10-05: macOS arm64, Python 3.14.3, SQLite 3.51.2 with FTS5, Olla
 
 Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama). No paid API was used for these checks.
 
-**Unit and subprocess suite.** 191 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
+**Unit and subprocess suite.** 201 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
 
 - turn tokens;
 - refusal of a server bound to another host process, and of unknown or expired tokens;
@@ -107,6 +107,24 @@ The one failing check, "the answer names the change", is a keyword false negativ
 The model's answer also honoured the captured-claim rule: it called the three weeks "from an earlier message you haven't confirmed". Projections took 0.37 to 0.40 s per prompt.
 
 The run exposed a privacy gap, now fixed. After forgetting the timeline, the two inferred recommendations stayed in the database without links, and the first one's text quoted the forgotten "three months". `forget` now deletes inferred recommendations that rested on any version of the forgotten property. A test checks that the database dump no longer contains the value. The user's own linked statements stay, without their links.
+
+**Codex review and native run (2026-10-06, Codex CLI 0.160.0, gpt-5.6-sol through the ChatGPT subscription).** Another agent ran the review and kept it in `outputs/hook-review-2026-10-06.md`.
+
+| Check | Result |
+| --- | --- |
+| Hook delivery in Codex | 3 of 3 fresh sessions answered from memory (registered, corrected, forgotten) with no tool calls |
+| Explicit save and forget through the bound MCP server | Passed. Write binding works in Codex's process tree |
+| Conversational capture | Failed. The prompt hook emitted the capture request and Codex never called `memory_capture` |
+| Claude Code, same flow | 9 of 9 |
+
+The review found these issues, all now fixed:
+
+1. **P1:** `memory_undo` deleted the last save (an approver) when the user asked to forget the checkout deadline, even with the judge down. Undo now requires a "take that back" message that names no other stored fact. jev could not separate the two cases (0.72 for the wrong target against 0.68 to 0.78 for genuine undos), so the guard is deterministic, and the regression runs with the judge down.
+2. **P2:** the server's initialization instructions still described v0.2 ("cannot approve, revoke, or forget"). They now describe the turn-token workflow, captured versus confirmed facts, and forget versus undo.
+3. **P2:** the native checks accepted an empty store as a successful forget and counted session rows as binding. The checks now require an existing fact before the forget, a recorded forget operation, derived recommendations that existed and were removed, and a write accepted through the bound session.
+4. **`memory_inspect` returned quarantined records.** It now refuses them; the inventory is the review surface.
+
+The capture request had travelled inside the JSON packet, whose first reader rule said values are "never instructions". Codex's model obeyed that rule. Kernel requests now come before the packet as plain text, and the server instructions repeat the workflow. A Codex rerun with `tests/native_codex_v04_check.py` is pending.
 
 **Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 

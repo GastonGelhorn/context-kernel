@@ -6,6 +6,7 @@ at which trust level, and what must wait for the user. A judgment is a signal fo
 never the policy itself: correctness, authorization, and session origin are checked separately.
 """
 
+import json
 import re
 
 from .common import KernelError, canonical, key
@@ -44,9 +45,14 @@ SAME_ATTRIBUTE = "Do `query` and `candidate` name the same attribute of the same
 # every different pair <= 0.64. Below the floor an agent-named target is treated as a mistake.
 SAME_BAR = 0.7
 REPLACES_FLOOR = 0.3
+# Predicates that hold many values side by side rather than one attribute: a new decision is not a
+# change to an earlier one. jev read "context_kernel.distribution" as the same attribute as
+# "context_kernel.decision" (>= 0.70), so these never take part in drift resolution.
+COLLECTIONS = {"decision", "decisions", "note", "notes", "preference", "preferences", "fact", "facts",
+               "info", "idea", "ideas", "todo", "todos"}
 COUNTS = {"none": "states nothing worth remembering later", "one": "exactly one", "two": "two", "several": "three or more"}
 
-_FENCE = re.compile(r"```.*?(```|$)", re.S)
+_FENCE = re.compile(r"```.*?(```|$)|<pasted_content[^>]*>.*?(</pasted_content[^>]*>|$)", re.S)
 _QUOTED_LINE = re.compile(r"^\s*(>|from:|to:|cc:|subject:|date:|sent:|de:|para:|asunto:|enviado:)", re.I)
 _LOG_LINE = re.compile(r"^\s*(\d{4}-\d{2}-\d{2}[ t]\d|\[\w+\]|traceback|\s+at |\s*file \"|[{\[].*[}\]]\s*$|https?://\S+\s*$)", re.I)
 _REPLY_MARKER = re.compile(r"^\s*(-{3,}|_{3,}|-+ ?(original message|forwarded message|mensaje original) ?-+|on .+ wrote:|el .+ escribi[oó]:)\s*$", re.I)
@@ -201,8 +207,10 @@ def _resolve(store, judge, entity, predicate, replaces, deadline):
         return entity, predicate, None
     if (entity, predicate) in pairs:
         return entity, predicate, None
+    if predicate in COLLECTIONS:
+        return entity, predicate, None
     mine = key_tokens(entity, predicate)
-    candidates = [p for p in pairs if key_tokens(*p) & mine][:16]
+    candidates = [p for p in pairs if p[1] not in COLLECTIONS and key_tokens(*p) & mine][:16]
     if not candidates:
         return entity, predicate, None
     scores, _ = judge.rank(_key_line(entity, predicate), [_key_line(*p) for p in candidates],
@@ -302,7 +310,10 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
     # The judge ran outside any transaction; a forget that arrived meanwhile wins.
     if store.tombstoned_since(entity, predicate, turn["opened_at"]):
         return done("rejected", "forgotten")
-    if len(current) > 1 or (current and current[0]["trust"] == "confirmed" and status == "captured"):
+    # A change the user typed to a confirmed value is applied as a new version, said in the receipt
+    # and undoable. The question remains only where the kernel itself chose the target (a drifted
+    # key) or two values already disagree: nobody saw those questions, so they are kept rare.
+    if len(current) > 1 or (current and current[0]["trust"] == "confirmed" and status == "captured" and resolved_from):
         proposal = store.propose("correct", {"target_id": current[0]["id"], "value": value, "evidence": evidence}) \
             if len(current) == 1 else store.propose("remember", {"entity": entity, "predicate": predicate, "value": value, "evidence": evidence})
         return done("needs_confirmation", "confirmed_value_differs" if len(current) == 1 else "conflicting_values",
@@ -313,6 +324,8 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
         else:
             new_id = store._insert(entity, predicate, value, evidence, kind=_kind(category), **origin)
         store._event("capture", {"statement_id": new_id, "trust": status})
+    if current and current[0]["trust"] == "confirmed" and status == "captured":
+        return done(status, reason, new_id, category=category, previous=current[0]["value"])
     return done(status, reason, new_id, category=category)
 
 
@@ -320,9 +333,15 @@ def _kind(category):
     return "project" if category in {"project_state", "project_decisions", "constraints"} else "person"
 
 
+def _short(value, limit=40):
+    shown = value if isinstance(value, str) else canonical(value)
+    return json.dumps(shown if len(shown) <= limit else shown[:limit - 1] + "…", ensure_ascii=False)
+
+
 def describe_results(results):
     """One line for the user: what was stored, what is waiting, what was set aside."""
-    saved = [f"{r['entity']}.{r['predicate']}" for r in results if r["status"] == "captured"]
+    saved = [f"{r['entity']}.{r['predicate']}" + (f" (was {_short(r['previous'])})" if "previous" in r else "")
+             for r in results if r["status"] == "captured"]
     held = [f"{r['entity']}.{r['predicate']}" for r in results if r["status"] == "quarantined"]
     asks = [f"{r['entity']}.{r['predicate']}" for r in results if r["status"] == "needs_confirmation"]
     parts = []

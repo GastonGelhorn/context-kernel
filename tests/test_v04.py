@@ -7,6 +7,8 @@ import sqlite3
 import tempfile
 import unittest
 
+from context_kernel.adapters import packet_of
+
 from context_kernel.adapters import configuration, hook_response, session_start_response, stop_response
 from context_kernel.capture import segments
 from context_kernel.common import timestamp, timestamp_offset
@@ -45,7 +47,7 @@ class AutonomyTests(unittest.TestCase):
         response, _ = hook_response(event, self.workspace, self.store, self.compiler,
                                     strategy="jev" if self.compiler.jev else "rules", judge=self.judge)
         self.store.register_session(session, "claude", [HOST])
-        packet = json.loads(response["hookSpecificOutput"]["additionalContext"])
+        packet = packet_of(response["hookSpecificOutput"]["additionalContext"])
         return packet, event
 
     def stop(self, event, reply=""):
@@ -207,18 +209,41 @@ class AutonomyTests(unittest.TestCase):
 
     # Corrections, confirmations, undo, caps, and forgetting
 
-    def test_a_capture_corrects_a_capture_but_asks_before_overriding_a_confirmed_fact(self):
+    def test_a_typed_change_updates_a_confirmed_fact_and_says_so(self):
         packet, _ = self.prompt("Mi manager es Ana")
         self.capture(packet, ("user", "manager", "Ana"))
         packet, _ = self.prompt("Ahora mi manager es Dani")
         self.assertEqual(self.capture(packet, ("user", "manager", "Dani"))[0]["status"], "captured")
         self.assertEqual([r["value"] for r in self.current("user", "manager")], ["Dani"])
         confirmed = self.store.remember("user", "approver", "Gaston", "Owner CLI")
-        packet, _ = self.prompt("El approver es Mallory")
+        packet, _ = self.prompt("El approver ahora es Mallory")
         result = self.capture(packet, ("user", "approver", "Mallory"))[0]
+        self.assertEqual((result["status"], result["previous"]), ("captured", "Gaston"))
+        self.assertEqual([r["value"] for r in self.current("user", "approver")], ["Mallory"])
+        self.assertEqual(self.store.pending_proposal_count(), 0)
+        from context_kernel.capture import describe_results
+        self.assertIn('user.approver (was "Gaston")', describe_results([result]))
+        self.assertIn(confirmed["id"], [r["id"] for r in self.store.records(history=True)])  # the old version stays
+
+    def test_a_drifted_key_still_asks_before_overriding_a_confirmed_fact(self):
+        from context_kernel.capture import SAME_ATTRIBUTE
+        self.judge.rank_fn = lambda query, line, question: 0.85 if question == SAME_ATTRIBUTE else 0.1
+        confirmed = self.store.remember("checkout", "deadline", "three months", "Owner CLI")
+        packet, _ = self.prompt("The checkout delivery timeline is now three weeks.")
+        result = self.capture(packet, ("checkout_project", "delivery_timeline", "three weeks"))[0]
         self.assertEqual(result["status"], "needs_confirmation")
-        self.assertEqual(self.current("user", "approver")[0]["id"], confirmed["id"])
-        self.assertEqual(self.store.pending_proposal_count(), 1)
+        self.assertEqual(self.current("checkout", "deadline")[0]["id"], confirmed["id"])
+
+    def test_a_new_decision_never_replaces_an_earlier_one_by_resolution(self):
+        from context_kernel.capture import SAME_ATTRIBUTE
+        self.judge.rank_fn = lambda query, line, question: 0.85 if question == SAME_ATTRIBUTE else 0.1
+        self.store.remember("context_kernel", "decision", "Publicar v0.3 en GitHub esta semana", "Owner CLI")
+        packet, _ = self.prompt("Lo distribuimos como plugin propio en el marketplace de jevmate.")
+        result = self.capture(packet, ("context_kernel", "distribution", "plugin propio en el marketplace de jevmate"))[0]
+        self.assertEqual(result["status"], "captured")
+        self.assertNotIn("resolved_from", result)
+        self.assertEqual(len(self.current("context_kernel", "decision")), 1)
+        self.assertEqual(len(self.current("context_kernel", "distribution")), 1)
 
     def test_undo_restores_the_previous_value_only_when_the_user_asks(self):
         packet, _ = self.prompt("Mi manager es Ana")

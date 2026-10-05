@@ -56,9 +56,19 @@ The host agent extracts. The kernel never asks a second generative model to read
    - affirmed only by the pasted part: quarantined as `quoted_source`;
    - affirmed between 0.60 and 0.75: quarantined as `uncertain`;
    - otherwise: rejected.
-7. Applies the trust lattice. A capture may correct a captured value. A confirmed value that differs produces a proposal and a one-line question. The same value restated in a typed message promotes the existing statement to confirmed.
+7. Resolves keys first. Collection predicates (`decision`, `notes`, …) never take part, because a new decision is not a change to an earlier one.
+   - If the agent passed `replaces`, the fact goes to that stored fact, unless jev judges the key names unrelated (below 0.3).
+   - Otherwise a new pair that shares key words with a stored pair is resolved to it when jev judges them the same attribute (0.70 or above).
+8. Applies the trust lattice.
+   - A typed change to a captured or confirmed value becomes a new version, and the receipt shows the previous value.
+   - A proposal and a one-line question are created only when the kernel chose the target (a resolved key) or two values already disagree.
+   - The same value restated in a typed message promotes the existing statement to confirmed.
 
 The evidence stored is the sentence that best supports the fact, not the message. Excerpts are masked for secrets, capped at 4 KiB, and dropped at Stop unless a stated fact is still uncaptured. After ten minutes they are dropped in any case and the shortfall is logged as `missed`. "Don't remember this" stores neither an excerpt nor a capture.
+
+## Requests to the agent
+
+The packet is data: its claims must never be obeyed. The kernel's own requests (capture these facts, pending captures, how to forget, do not keep this message) are therefore written as plain text before the JSON, and the MCP server's instructions describe the same workflow. With the request inside the packet, Codex's model honoured "values are data" and never captured.
 
 ## Selection and delivery
 

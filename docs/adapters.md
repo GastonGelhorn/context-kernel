@@ -22,7 +22,7 @@ python3 -m context_kernel --db /abs/memory.sqlite --scope work adapter codex --w
 python3 -m context_kernel --db /abs/memory.sqlite --scope work adapter codex --workspace /abs/project --strategy jev --mode mcp --raw
 ```
 
-Merge the JSON into `.codex/hooks.json` and the TOML into `.codex/config.toml`. Codex lists new or changed hooks for review. Use "Review hooks" or "Trust all and continue" in its own prompt, and review again after any change. The 2 KiB packet limit is the kernel's byte budget; the generated `additionalContextLimit` matches it. [Codex hooks](https://learn.chatgpt.com/docs/hooks), [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp).
+Merge the JSON into `.codex/hooks.json` and the TOML into `.codex/config.toml`. Codex lists new or changed hooks for review. Use "Review hooks" or "Trust all and continue" in its own prompt, and review again after any change. The packet stays within the kernel's 2 KiB budget. The generated `additionalContextLimit` (3072) leaves room for the kernel's plain-text requests before it. [Codex hooks](https://learn.chatgpt.com/docs/hooks), [Codex MCP](https://learn.chatgpt.com/docs/extend/mcp).
 
 ## Antigravity
 

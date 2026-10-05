@@ -79,6 +79,7 @@ def snapshot(database):
             "captures": store.capture_metrics(),
             "last_trace": (store.traces(1) or [{}])[0],
             "sessions": store.db.execute("SELECT count(*) FROM sessions").fetchone()[0],
+            "forget_ops": store.db.execute("SELECT count(*) FROM operations WHERE operation='forget'").fetchone()[0],
         }
     finally:
         store.close()
@@ -107,31 +108,39 @@ def run(claude, workspace, model=None, strategy="jev", jev_command="jev"):
             report["phases"].append(dict(result, name=name))
             break
         report["phases"].append(dict(result, name=name, state=snapshot(database)))
-    states = {p["name"]: p.get("state") for p in report["phases"]}
-    checks = {}
-    if len(states) == len(PHASES) and all(states.values()):
-        first, second, third, fourth, fifth = (states[n] for n, _ in PHASES)
-        answer = (report["phases"][2]["answer"] or "").casefold()
-        checks = {
-            "constraint_captured_from_conversation": any("month" in str(v).lower() for v in first["deadline_current"]),
-            "recommendation_linked_by_inference": first["inferred_links"] > 0,
-            "change_captured_as_new_version": len(second["deadline_pairs"]) == 1 and len(second["deadline"]) >= 2
-                                              and all("week" in str(v).lower() for v in second["deadline_current"]),
-            "recommendation_flagged_after_change": any(r["stale"] for r in second["recommendations"]),
-            "fresh_session_projection_requires_review": third["last_trace"].get("status") == "review_required"
-                                                         or "review_recommended" in third["last_trace"].get("warnings", []),
-            "fresh_session_answer_names_the_change": ("week" in answer or "semana" in answer)
-                                                     and any(w in answer for w in ("review", "revis", "reconsider", "changed", "no longer",
-                                                                                   "second look", "assumed", "re-examin", "re-evaluat")),
-            "forget_removed_the_deadline": not fourth["deadline"],
-            "generic_question_carried_no_claims": not fifth["last_trace"].get("selected"),
-            "sessions_bound": fifth["sessions"] >= len(PHASES),
-        }
+    checks = evaluate(report["phases"])
     report["checks"] = checks
     report["passed"] = bool(checks) and all(checks.values()) and "aborted" not in report
     report["wall_seconds"] = round(sum(p["duration_seconds"] for p in report["phases"]), 3)
     report["cost_usd_reported"] = [p.get("cost_usd") for p in report["phases"]]
     return report
+
+
+def evaluate(phases):
+    """Checks fixed before any run, shared by the Claude Code and Codex runners. Each one needs
+    positive evidence in the kernel database: an empty store does not count as a successful forget."""
+    states = {p["name"]: p.get("state") for p in phases}
+    if len(states) != len(PHASES) or not all(states.values()):
+        return {}
+    first, second, third, fourth, fifth = (states[n] for n, _ in PHASES)
+    answer = (phases[2].get("answer") or "").casefold()
+    return {
+        "constraint_captured_from_conversation": any("month" in str(v).lower() for v in first["deadline_current"]),
+        "write_accepted_through_bound_session": any(c["outcome"] == "captured" for c in first["captures"]),
+        "recommendation_linked_by_inference": first["inferred_links"] > 0,
+        "change_captured_as_new_version": len(second["deadline_pairs"]) == 1 and len(second["deadline"]) >= 2
+                                          and all("week" in str(v).lower() for v in second["deadline_current"]),
+        "recommendation_flagged_after_change": any(r["stale"] for r in second["recommendations"]),
+        "fresh_session_projection_requires_review": third["last_trace"].get("status") == "review_required"
+                                                     or "review_recommended" in third["last_trace"].get("warnings", []),
+        "fresh_session_answer_names_the_change": ("week" in answer or "semana" in answer)
+                                                 and any(w in answer for w in ("review", "revis", "reconsider", "changed", "no longer",
+                                                                               "second look", "assumed", "re-examin", "re-evaluat")),
+        "forget_removed_an_existing_deadline": bool(third["deadline_current"]) and not fourth["deadline_current"]
+                                                and fourth["forget_ops"] > third["forget_ops"],
+        "forget_removed_derived_recommendations": bool(third["recommendations"]) and not fourth["recommendations"],
+        "generic_question_carried_no_claims": not fifth["last_trace"].get("selected"),
+    }
 
 
 def main():
