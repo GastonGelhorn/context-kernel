@@ -48,11 +48,16 @@ def parser():
         command.add_argument("--unit", help="Explicit quantity unit; absent means unknown")
         command.add_argument("--currency", help="Explicit three-letter uppercase currency label")
         command.add_argument("--period", help="Explicit quantity period, for example year or month")
-    for name in ("inspect", "revoke", "forget", "approve", "reject", "why"):
+    for name in ("inspect", "revoke", "forget", "approve", "reject", "why", "dependents", "reaffirm"):
         item = commands.add_parser(name)
         item.add_argument("id")
-        if name == "inspect":
+        if name in {"inspect", "dependents"}:
             item.add_argument("--as-of")
+    stale = commands.add_parser("stale", help="Current statements whose declared assumptions changed")
+    stale.add_argument("--as-of")
+    depend = commands.add_parser("depend", help="Declare that a decision rests on another statement")
+    depend.add_argument("id")
+    depend.add_argument("assumption_id")
     alias = commands.add_parser("alias")
     alias.add_argument("entity")
     alias.add_argument("alias")
@@ -112,8 +117,14 @@ def execute(args, store):
         return store.inspect(args.id, args.as_of)
     if command == "list":
         return store.records(args.as_of, args.history)
-    if command in {"revoke", "forget", "approve", "reject"}:
+    if command in {"revoke", "forget", "approve", "reject", "reaffirm"}:
         return getattr(store, command)(args.id)
+    if command == "dependents":
+        return store.dependents(args.id, args.as_of)
+    if command == "stale":
+        return store.stale(args.as_of)
+    if command == "depend":
+        return store.depend(args.id, args.assumption_id)
     if command == "alias":
         store.add_alias(args.entity, args.alias)
         return {"status": "added"}

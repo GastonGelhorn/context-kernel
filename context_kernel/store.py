@@ -8,6 +8,7 @@ import sqlite3
 from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp
 
 
+SCHEMA_VERSION = "2"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS entities(
@@ -35,10 +36,11 @@ CREATE TABLE IF NOT EXISTS relations(
  to_statement TEXT REFERENCES statements(id) ON DELETE CASCADE,
  from_entity TEXT REFERENCES entities(id) ON DELETE CASCADE,
  to_entity TEXT REFERENCES entities(id) ON DELETE CASCADE,
- CHECK((kind='corrects' AND from_statement IS NOT NULL AND to_statement IS NOT NULL
+ CHECK((kind IN ('corrects','depends_on') AND from_statement IS NOT NULL AND to_statement IS NOT NULL
         AND from_entity IS NULL AND to_entity IS NULL)
     OR (kind='part_of' AND from_entity IS NOT NULL AND to_entity IS NOT NULL
         AND from_statement IS NULL AND to_statement IS NULL)));
+CREATE INDEX IF NOT EXISTS relation_target ON relations(scope,kind,to_statement);
 CREATE TABLE IF NOT EXISTS proposals(
  id TEXT PRIMARY KEY, scope TEXT NOT NULL, operation TEXT NOT NULL,
  payload TEXT NOT NULL, status TEXT NOT NULL, recorded_at TEXT NOT NULL);
@@ -76,14 +78,33 @@ class Store:
         self.db.execute("PRAGMA secure_delete=ON")
         self.db.execute("PRAGMA journal_mode=DELETE")
         if create:
-            self.db.executescript(SCHEMA)
-            self.db.execute("INSERT OR IGNORE INTO metadata VALUES('schema_version','1')")
-            self.db.commit()
+            with self.db:
+                self._schema()
+                self.db.execute("INSERT OR IGNORE INTO metadata VALUES('schema_version',?)", (SCHEMA_VERSION,))
             if os.name == "posix":
                 self.path.chmod(0o600)
         version = self.db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
-        if not version or version[0] != "1":
+        if version and version[0] == "1":
+            self._migrate_v1()
+            version = (SCHEMA_VERSION,)
+        if not version or version[0] != SCHEMA_VERSION:
             raise KernelError("Unsupported memory schema.")
+
+    def _migrate_v1(self):
+        # Version 1 only differs in the relation kinds its CHECK accepts. SQLite cannot
+        # alter a CHECK in place, so the table is rebuilt with every row copied; nothing is dropped.
+        with self.db:
+            self.db.execute("ALTER TABLE relations RENAME TO relations_v1")
+            self._schema()
+            self.db.execute("INSERT INTO relations SELECT * FROM relations_v1")
+            self.db.execute("DROP TABLE relations_v1")
+            self.db.execute("UPDATE metadata SET value=? WHERE key='schema_version'", (SCHEMA_VERSION,))
+
+    def _schema(self):
+        # Statement by statement: executescript would commit the surrounding transaction.
+        for statement in SCHEMA.split(";"):
+            if statement.strip():
+                self.db.execute(statement)
 
     def close(self):
         self.db.close()
@@ -193,13 +214,14 @@ class Store:
             self._event("remember", {"statement_id": statement_id})
         return self.inspect(statement_id)
 
+    ROWS = """SELECT s.*, e.entity_key, e.label, e.kind, e.aliases,
+              v.source_kind, v.source_ref, v.source_text
+              FROM statements s JOIN entities e ON e.id=s.entity_id
+              JOIN evidence v ON v.id=s.evidence_id
+              WHERE s.scope=? AND e.scope=? AND v.scope=?"""
+
     def _row(self, statement_id):
-        row = self.db.execute("""SELECT s.*, e.entity_key, e.label, e.kind, e.aliases,
-                            v.source_kind, v.source_ref, v.source_text
-                            FROM statements s JOIN entities e ON e.id=s.entity_id
-                            JOIN evidence v ON v.id=s.evidence_id
-                            WHERE s.id=? AND s.scope=? AND e.scope=? AND v.scope=?""",
-                              (statement_id, self.scope, self.scope, self.scope)).fetchone()
+        row = self.db.execute(self.ROWS + " AND s.id=?", (self.scope, self.scope, self.scope, statement_id)).fetchone()
         if not row:
             raise KernelError("Statement not found in this scope.")
         return dict(row)
@@ -220,16 +242,108 @@ class Store:
         row["effective_state"] = state
         return row
 
+    def _assumption_links(self):
+        return [(r[0], r[1]) for r in self.db.execute(
+            "SELECT from_statement,to_statement FROM relations WHERE scope=? AND kind='depends_on' ORDER BY from_statement,to_statement",
+            (self.scope,))]
+
+    def _attach_assumptions(self, records, states):
+        """Staleness is computed at query time: an assumption that is no longer active marks its dependents."""
+        links = {}
+        for child, parent in self._assumption_links():
+            links.setdefault(child, []).append(parent)
+        for row in records:
+            assumptions = []
+            for parent in links.get(row["id"], []):
+                state = states.get(parent)
+                if state is None:
+                    continue
+                assumptions.append({"id": parent, "effective_state": state["effective_state"],
+                                    "superseded_by": state["superseded_by"]})
+            row["assumptions"] = assumptions
+            row["stale"] = any(a["effective_state"] != "active" for a in assumptions)
+        return records
+
     def inspect(self, statement_id, as_of=None):
-        return self._decode(self._row(statement_id), as_of)
+        row = self._decode(self._row(statement_id), as_of)
+        parents = [p for c, p in self._assumption_links() if c == row["id"]]
+        states = {p: self._decode(self._row(p), as_of) for p in parents}
+        return self._attach_assumptions([row], states)[0]
 
     def records(self, as_of=None, history=False):
-        ids = [r[0] for r in self.db.execute("SELECT id FROM statements WHERE scope=? ORDER BY id", (self.scope,))]
-        records = [self.inspect(i, as_of) for i in ids]
+        rows = self.db.execute(self.ROWS + " ORDER BY s.recorded_at, s.id", (self.scope, self.scope, self.scope))
+        records = [self._decode(r, as_of) for r in rows]
+        states = {r["id"]: r for r in records}
+        self._attach_assumptions(records, states)
         if history:
             return records
         return [r for r in records if r["effective_state"] == "active"
                 and r["assertion_kind"] in {"user_statement", "observed"}]
+
+    def depend(self, statement_id, assumption_id):
+        """Declare that a statement (a decision, a recommendation) rests on another one.
+
+        The owner declares dependencies explicitly; the kernel never infers them. The link
+        targets that exact version: when the assumption is corrected, the dependent becomes stale
+        until the owner corrects it, revokes it, or reaffirms it against the new version.
+        """
+        with self.db:
+            child, parent = self._row(statement_id), self._row(assumption_id)
+            if child["id"] == parent["id"]:
+                raise KernelError("A statement cannot depend on itself.")
+            if child["lifecycle"] != "active":
+                raise KernelError("Only an active statement can declare a dependency.")
+            links = {}
+            for c, p in self._assumption_links():
+                links.setdefault(c, set()).add(p)
+            if (child["id"], parent["id"]) in {(c, p) for c, ps in links.items() for p in ps}:
+                return {"id": None, "kind": "depends_on", "status": "exists"}
+            frontier, seen = [parent["id"]], set()
+            while frontier:
+                node = frontier.pop()
+                if node == child["id"]:
+                    raise KernelError("Dependency would create a cycle.")
+                if node not in seen:
+                    seen.add(node)
+                    frontier.extend(links.get(node, ()))
+            relation_id = identifier()
+            self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
+                            (relation_id, self.scope, "depends_on", child["id"], parent["id"], None, None))
+            self._event("depend", {"relation_id": relation_id})
+        return {"id": relation_id, "kind": "depends_on", "status": "added"}
+
+    def dependents(self, statement_id, as_of=None):
+        """Current statements that declared this exact version as an assumption."""
+        self._row(statement_id)
+        return [r for r in self.records(as_of) if any(a["id"] == statement_id for a in r["assumptions"])]
+
+    def stale(self, as_of=None):
+        return [r for r in self.records(as_of) if r["stale"]]
+
+    def reaffirm(self, statement_id):
+        """Owner decision: the dependent still holds under the assumption's current version.
+
+        Each stale link is moved to the successor of the changed assumption. An assumption that
+        was revoked or expired has no successor; the dependent must then be corrected or revoked.
+        """
+        with self.db:
+            row = self.inspect(statement_id)
+            if not row["stale"]:
+                raise KernelError("Statement has no stale assumptions.")
+            moved = []
+            for assumption in row["assumptions"]:
+                if assumption["effective_state"] == "active":
+                    continue
+                successor = assumption["superseded_by"]
+                if not successor or self.inspect(successor)["effective_state"] != "active":
+                    raise KernelError("A changed assumption has no current successor; correct or revoke the dependent instead.")
+                self.db.execute("DELETE FROM relations WHERE scope=? AND kind='depends_on' AND from_statement=? AND to_statement=?",
+                                (self.scope, row["id"], assumption["id"]))
+                self.db.execute("INSERT INTO relations VALUES(?,?,?,?,?,?,?)",
+                                (identifier(), self.scope, "depends_on", row["id"], successor, None, None))
+                moved.append({"from": assumption["id"], "to": successor})
+            self._event("reaffirm", {"statement_id": row["id"], "moved": len(moved)})
+        return {"id": row["id"], "status": "reaffirmed", "moved": moved}
 
     def context_relations(self, visible_keys):
         rows = self.db.execute("""SELECT c.entity_key AS child, p.entity_key AS parent
