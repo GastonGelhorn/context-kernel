@@ -81,6 +81,13 @@ def segments(prompt):
     return authored, "\n".join(quoted).strip()[:AUTHORED_LIMIT]
 
 
+def only_questions(prompt):
+    """Every authored sentence is a question: nothing is being stated, so the gate is skipped."""
+    authored, _ = segments(prompt)
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?\n])\s+", authored) if s.strip()]
+    return bool(sentences) and all(s.endswith("?") for s in sentences)
+
+
 def fact_line(entity, predicate, value):
     rendered = value if isinstance(value, str) else canonical(value)
     return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()

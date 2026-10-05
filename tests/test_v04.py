@@ -282,6 +282,7 @@ class AutonomyTests(unittest.TestCase):
         self.assertNotIn("not saved", receipt)  # the count is an estimate: no nagging once something was saved
         packet, _ = self.prompt("ok")
         self.assertEqual(packet["turn"]["pending"][0]["facts_not_captured"], 1)
+        self.assertEqual(packet["claims"], [])
         self.tick(700)
         self.prompt("otra cosa")
         self.assertIn({"outcome": "missed", "reason": "excerpt_expired", "count": 1}, self.store.capture_metrics())
@@ -291,6 +292,12 @@ class AutonomyTests(unittest.TestCase):
         self.assertIn("not saved", self.stop(event, "Ok.")["systemMessage"])
         before = len(self.judge.calls)
         packet, _ = self.prompt("Explain what a SQLite primary key is.")
+        self.assertNotIn("capture", packet["turn"])
+        self.assertEqual(len(self.judge.calls), before)
+
+    def test_a_message_made_only_of_questions_skips_the_gate(self):
+        before = len(self.judge.calls)
+        packet, _ = self.prompt("¿Quién aprueba las releases? ¿Y cuándo?")
         self.assertNotIn("capture", packet["turn"])
         self.assertEqual(len(self.judge.calls), before)
 

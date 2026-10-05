@@ -8,7 +8,7 @@ import shutil
 import sys
 
 from .binding import ancestors
-from .capture import describe_results, gate, policy as capture_policy
+from .capture import describe_results, gate, only_questions, policy as capture_policy
 from .common import KernelError, canonical, digest, text, timestamp_offset
 from .inference import infer
 from .language import fold
@@ -111,7 +111,8 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
             notice = propose_command(store, prompt, event_id)
     gate_count = 0
     if judge and turn["origin"] == "interactive" and not flags and not trivial_continuation(prompt) \
-            and not generic_question(prompt, store.records()) and capture_policy(store)["auto_capture"] \
+            and not generic_question(prompt, store.records()) and not only_questions(prompt) \
+            and capture_policy(store)["auto_capture"] \
             and (deadline is None or deadline.allows(4)):
         try:
             judge.require_local(capture_policy(store)["allow_remote_judge"])
@@ -123,7 +124,8 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
                                      "how": "Extract each as entity.predicate = value, reusing keys already in memory."}
         except KernelError:
             flags.append("gate_unavailable")
-    quiet = trivial_continuation(prompt) and not pending and not flags and not store.pending_proposal_count()
+    # Pending captures ride along in the marker; they do not justify judging an "ok" for relevance.
+    quiet = trivial_continuation(prompt) and not flags and not store.pending_proposal_count()
     if quiet:
         projection = compiler.project(prompt, plan=NeedPlan(strategy=strategy), extra={"turn": marker})
     else:
