@@ -3,7 +3,7 @@
 from context_kernel.judge import JevCommand, JudgeError, JudgeRemote
 
 
-def answers(affirmed=0.9, category="roles_and_relations", count="one", instruction=0.05, asked=0.9, quoted=None):
+def answers(affirmed=0.9, category="roles_and_relations", count="one", instruction=0.05, asked=0.9, quoted=None, recommends=0.9):
     """An `ask` function: fixed probabilities per question id. `quoted` overrides `affirmed` when the
     judged text is the pasted part of the message (the second validation call)."""
     def respond(qid, state, spec):
@@ -12,7 +12,7 @@ def answers(affirmed=0.9, category="roles_and_relations", count="one", instructi
             return {option: (1.0 if option == chosen else 0.0) for option in spec[2]}
         if qid == "affirmed":
             return quoted if quoted is not None and state.get("_quoted") else affirmed
-        return {"instruction": instruction, "asked": asked}.get(qid, 0.5)
+        return {"instruction": instruction, "asked": asked, "recommends": recommends}.get(qid, 0.5)
     return respond
 
 

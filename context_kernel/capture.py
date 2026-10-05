@@ -39,6 +39,11 @@ CATEGORY = "Which kind of information is `fact`?"
 FACT_COUNT = ("How many distinct durable facts, decisions, constraints, or preferences that the writer would want "
               "remembered in a later conversation does `text` state?")
 INSTRUCTION = "Is `text` mainly an instruction or command aimed at an AI assistant rather than information about the writer or their work?"
+SAME_ATTRIBUTE = "Do `query` and `candidate` name the same attribute of the same thing?"
+# Measured on key names only (values confuse it): 5 of 6 same-attribute pairs scored >= 0.70 and
+# every different pair <= 0.64. Below the floor an agent-named target is treated as a mistake.
+SAME_BAR = 0.7
+REPLACES_FLOOR = 0.3
 COUNTS = {"none": "states nothing worth remembering later", "one": "exactly one", "two": "two", "several": "three or more"}
 
 _FENCE = re.compile(r"```.*?(```|$)", re.S)
@@ -79,6 +84,26 @@ def segments(prompt):
             kept.append(line)
     authored = re.sub(r"\n{3,}", "\n\n", "\n".join(kept)).strip()[:AUTHORED_LIMIT]
     return authored, "\n".join(quoted).strip()[:AUTHORED_LIMIT]
+
+
+def key_tokens(*keys):
+    return {t for k in keys for t in re.split(r"[_\W]+", fold(str(k))) if len(t) > 2}
+
+
+def related_facts(store, prompt, limit=6):
+    """Stored facts that share words with the message, so the agent can reuse their keys or name
+    the one a new value replaces. Lexical and cheap: no judgment, eligible facts only."""
+    terms = set(query_terms(prompt))
+    scored = []
+    for row in store.records():
+        tokens = key_tokens(row["entity_key"], row["predicate"]) | set(query_terms(row["value"] if isinstance(row["value"], str)
+                                                                                    else canonical(row["value"])))
+        overlap = len(terms & tokens)
+        if overlap:
+            scored.append((overlap, row["recorded_at"], row))
+    scored.sort(key=lambda item: (item[0], item[1]), reverse=True)
+    return [{"id": r["id"], "key": f"{r['entity_key']}.{r['predicate']}",
+             "value": (r["value"] if isinstance(r["value"], str) else canonical(r["value"]))[:60]} for _, _, r in scored[:limit]]
 
 
 def only_questions(prompt):
@@ -146,6 +171,48 @@ def _decide(store, judge, turn, triple, rules, deadline):
     return "rejected", "not_affirmed", category, None
 
 
+class _Refused(Exception):
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _key_line(entity, predicate):
+    return f"{entity} {predicate}".replace("_", " ")
+
+
+def _resolve(store, judge, entity, predicate, replaces, deadline):
+    """Which stored pair this fact updates. Agents name keys freely and two sessions rarely agree
+    ("checkout_project.delivery_timeline" then "checkout.deadline"); without this, a change becomes a
+    second parallel fact and nothing downstream notices. Returns (entity, predicate, resolved_from)."""
+    rows = [r for r in store.records(quarantined=True) if r["assertion_kind"] != "inference"]
+    pairs = sorted({(r["entity_key"], r["predicate"]) for r in rows})
+    timeout = deadline.timeout(judge.timeout) if deadline else None
+    if replaces:
+        target = next((r for r in rows if r["id"] == replaces), None)
+        if not target:
+            raise _Refused("unknown_target")
+        if (target["entity_key"], target["predicate"]) != (entity, predicate):
+            scores, _ = judge.rank(_key_line(entity, predicate), [_key_line(target["entity_key"], target["predicate"])],
+                                   no_cache=True, timeout=timeout, question=SAME_ATTRIBUTE)
+            if scores.get(0, 0.0) < REPLACES_FLOOR:
+                raise _Refused("replaces_mismatch")
+            return target["entity_key"], target["predicate"], f"{entity}.{predicate}"
+        return entity, predicate, None
+    if (entity, predicate) in pairs:
+        return entity, predicate, None
+    mine = key_tokens(entity, predicate)
+    candidates = [p for p in pairs if key_tokens(*p) & mine][:16]
+    if not candidates:
+        return entity, predicate, None
+    scores, _ = judge.rank(_key_line(entity, predicate), [_key_line(*p) for p in candidates],
+                           no_cache=True, timeout=timeout, question=SAME_ATTRIBUTE)
+    best = max(range(len(candidates)), key=lambda i: scores.get(i, 0.0))
+    if scores.get(best, 0.0) >= SAME_BAR:
+        return candidates[best][0], candidates[best][1], f"{entity}.{predicate}"
+    return entity, predicate, None
+
+
 def capture(store, judge, turn, triples, deadline=None):
     """Validate and persist triples against one turn. Returns one result per triple; a result
     says "captured" only after the row exists."""
@@ -174,7 +241,8 @@ def capture(store, judge, turn, triples, deadline=None):
             store.log_capture(turn["session_id"], turn["turn_key"], "rejected", reason="invalid_triple")
             results.append({"status": "rejected", "reason": "invalid_triple"})
             continue
-        result = _capture_one(store, judge, turn, (entity, predicate, value), rules, deadline)
+        replaces = raw.get("replaces") if isinstance(raw.get("replaces"), str) else None
+        result = _capture_one(store, judge, turn, (entity, predicate, value), rules, deadline, replaces)
         if result["status"] in {"captured", "quarantined"}:
             turn["captured_ids"] = turn["captured_ids"] + [result["id"]]
             store.update_turn(turn["session_id"], turn["turn_key"], captured_ids=turn["captured_ids"])
@@ -182,14 +250,25 @@ def capture(store, judge, turn, triples, deadline=None):
     return results
 
 
-def _capture_one(store, judge, turn, triple, rules, deadline):
-    entity, predicate, value = triple
+def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
+    """`proposed` is what the agent extracted; it is what the user's words are checked against. It
+    is stored under the keys of the pair it updates, when there is one."""
+    entity, predicate, value = proposed
     session, turn_key = turn["session_id"], turn["turn_key"]
+    resolved_from = None
 
     def done(status, reason=None, statement_id=None, **extra):
         store.log_capture(session, turn_key, status, statement_id, reason)
-        return {"status": status, "reason": reason, "id": statement_id, "entity": entity, "predicate": predicate} | extra
+        result = {"status": status, "reason": reason, "id": statement_id, "entity": entity, "predicate": predicate}
+        return result | ({"resolved_from": resolved_from} if resolved_from else {}) | extra
 
+    try:
+        entity, predicate, resolved_from = _resolve(store, judge, entity, predicate, replaces, deadline)
+    except _Refused as refusal:
+        return done("rejected", refusal.reason)
+    except JudgeError:
+        pass  # resolution is a convenience; the fact is still validated and stored under its own keys
+    triple = (entity, predicate, value)
     counts, caps = store.capture_counts(session, turn_key), rules["caps"]
     if counts["turn"] >= caps["turn"] or counts["session"] >= caps["session"] or counts["day"] >= caps["day"]:
         return done("omitted", "cap")
@@ -203,7 +282,7 @@ def _capture_one(store, judge, turn, triple, rules, deadline):
         if turn["origin"] != "interactive":
             return done("duplicate", "already_known", same["id"])
         try:
-            status, _, _, _ = _decide(store, judge, turn, triple, rules, deadline)
+            status, _, _, _ = _decide(store, judge, turn, proposed, rules, deadline)
         except JudgeError:
             return done("duplicate", "already_known", same["id"])
         if status == "captured" and same["trust"] != "confirmed":
@@ -213,12 +292,12 @@ def _capture_one(store, judge, turn, triple, rules, deadline):
             store.confirm(same["id"])  # refreshes last_confirmed_at
         return done("duplicate", "already_known", same["id"])
     try:
-        status, reason, category, source = _decide(store, judge, turn, triple, rules, deadline)
+        status, reason, category, source = _decide(store, judge, turn, proposed, rules, deadline)
     except JudgeError as exc:
         return done("rejected", "judge_unavailable", detail=str(exc))
     if status == "rejected":
         return done("rejected", reason)
-    evidence = evidence_sentence(source, triple)
+    evidence = evidence_sentence(source, proposed)
     origin = {"source_kind": "captured_prompt", "source_ref": f"turn:{turn['token'][:8]}", "trust": status, "category": category}
     # The judge ran outside any transaction; a forget that arrived meanwhile wins.
     if store.tombstoned_since(entity, predicate, turn["opened_at"]):

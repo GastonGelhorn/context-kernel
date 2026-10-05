@@ -8,7 +8,7 @@ import shutil
 import sys
 
 from .binding import ancestors
-from .capture import describe_results, gate, only_questions, policy as capture_policy
+from .capture import describe_results, gate, only_questions, policy as capture_policy, related_facts
 from .common import KernelError, canonical, digest, text, timestamp_offset
 from .inference import infer
 from .language import fold
@@ -121,7 +121,10 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
             if result["facts"]:
                 gate_count = result["facts"]
                 marker["capture"] = {"facts_stated": gate_count, "call": "memory_capture",
-                                     "how": "Extract each as entity.predicate = value, reusing keys already in memory."}
+                                     "how": "Extract each as entity.predicate = value. If one changes a fact in related, pass its id as replaces."}
+                related = related_facts(store, prompt)
+                if related:
+                    marker["capture"]["related"] = related
         except KernelError:
             flags.append("gate_unavailable")
     # Pending captures ride along in the marker; they do not justify judging an "ok" for relevance.

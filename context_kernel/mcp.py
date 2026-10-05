@@ -30,7 +30,8 @@ TOKEN = {"type": "string", "minLength": 8, "maxLength": 64,
          "description": "The turn token from the memory context packet of the current user message (turn.token)."}
 FACT = schema({"entity": STRING | {"description": "Short snake_case key: user, a project, a person, an object."},
                "predicate": STRING | {"description": "Short snake_case property, e.g. manager, deadline, decision."},
-               "value": {"description": "The value as the user stated it; a string, number, or small object."}},
+               "value": {"description": "The value as the user stated it; a string, number, or small object."},
+               "replaces": STRING | {"description": "Id of a stored fact (from turn.capture.related or the claims) that this new value changes."}},
               ["entity", "predicate", "value"])
 ID = {"id": STRING}
 TOOLS = [
@@ -47,7 +48,7 @@ TOOLS = [
                                                "value": {}, "evidence": STRING, "valid_from": STRING, "valid_until": STRING,
                                                "event": {"type": "string", "enum": ["ordered", "not_arrived", "arrived", "returned"]}})},
                            ["operation", "payload"])},
-    {"name": "memory_capture", "description": "Save durable facts, decisions, constraints, or preferences the user stated in their message, so later conversations know them without being told again. Call it when the memory packet says facts_stated, or whenever the user states something they would want remembered. One item per fact; reuse entity/predicate keys already in memory when the user changes a value. The kernel checks each item against the user's own message and may hold it for review; report its receipt line, never more.",
+    {"name": "memory_capture", "description": "Save durable facts, decisions, constraints, or preferences the user stated in their message, so later conversations know them without being told again. Call it when the memory packet says facts_stated, or whenever the user states something they would want remembered. One item per fact. When the user changes something already stored (see turn.capture.related and the claims), pass that fact's id as replaces. The kernel checks each item against the user's own message and may hold it for review; report its receipt line, never more.",
      "inputSchema": schema({"token": TOKEN, "facts": {"type": "array", "minItems": 1, "maxItems": 4, "items": FACT}}, ["token", "facts"])},
     {"name": "memory_undo", "description": "Take back the last fact captured in this session, when the user says that was wrong or asks to undo it. Restores the previous value if there was one.",
      "inputSchema": schema({"token": TOKEN}, ["token"])},

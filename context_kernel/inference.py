@@ -13,14 +13,13 @@ import re
 
 from .common import KernelError
 from .judge import JudgeError
-from .language import fold
 from .turns import mask_secrets
 
 
-RECOMMENDS = re.compile(
-    r"\b(should|recommend|suggest|go ahead|i would|i'd|propose|better to|the plan is|worth it|"
-    r"deberias|deberiamos|deberia|recomiendo|sugiero|conviene|propongo|mejor seria|te aconsejo|vale la pena|"
-    r"yo (haria|iria))\b")
+RECOMMENDATION = ("Does `reply` recommend, advise, or decide a course of action (including advising against one), "
+                  "rather than only reporting, asking a question, or declining to answer?")
+# Measured: recommendations scored 0.80-0.95; reports, questions, and refusals 0.02-0.61.
+RECOMMENDATION_BAR = 0.7
 RESTS_ON = ("Does the recommendation or decision in `query` rest on `candidate` being true, so that if "
             "`candidate` changed the recommendation might need to change?")
 THRESHOLD = 0.7
@@ -35,7 +34,9 @@ def first_sentence(reply):
 
 def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
     """Record a recommendation and its inferred premises. Returns metadata only."""
-    if not turn or not reply or len(reply) < 80 or not RECOMMENDS.search(fold(reply)):
+    # The agent sometimes repeats the kernel's receipt in its answer; that is not part of the advice.
+    reply = "\n".join(line for line in (reply or "").splitlines() if not line.strip().startswith("Memory:")).strip()
+    if not turn or len(reply) < 40:
         return {"calls": 0, "linked": 0}
     current = {r["id"]: r for r in store.records()}
     premise_ids = [i for i in dict.fromkeys(turn["delivered_ids"] + turn["captured_ids"]) if i in current]
@@ -45,6 +46,10 @@ def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
     query = mask_secrets(reply)[:REPLY_LIMIT]
     try:
         judge.require_local(allow_remote)
+        timeout = deadline.timeout(judge.timeout) if deadline else None
+        verdict, _ = judge.ask({"reply": query}, {"recommends": ("noul", RECOMMENDATION)}, timeout=timeout)
+        if verdict["recommends"] < RECOMMENDATION_BAR:
+            return {"calls": 1, "linked": 0, "recommends": round(verdict["recommends"], 3)}
         timeout = deadline.timeout(judge.timeout) if deadline else None
         scores, usage = judge.rank(query, [re.sub(r"\s+", " ", l) for l in lines], no_cache=True,
                                    timeout=timeout, question=RESTS_ON)

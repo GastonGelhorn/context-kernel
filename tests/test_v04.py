@@ -348,10 +348,76 @@ class AutonomyTests(unittest.TestCase):
         self.assertNotIn("Recomiendo", projection.content)
 
     def test_no_recommendation_means_no_inference(self):
+        self.judge.ask_fn = answers(recommends=0.1)
         packet, event = self.prompt("Mi manager es Dani")
         self.capture(packet, ("user", "manager", "Dani"))
-        self.stop(event, "Anotado, Dani es tu manager.")
-        self.assertFalse([c for c in self.judge.calls if c[0] == "rank"])
+        self.stop(event, "Anotado: guardé que tu manager es Dani y lo tendré en cuenta en próximas conversaciones.")
+        self.assertFalse([c for c in self.judge.calls if c[0] == "rank" and c[3] == RESTS_ON])
+        self.assertEqual([r for r in self.store.records(history=True) if r["predicate"] == "recommendation"], [])
+
+    def test_the_kernels_receipt_repeated_by_the_agent_is_not_advice(self):
+        from context_kernel.inference import infer
+        packet, event = self.prompt("Mi manager es Dani")
+        self.capture(packet, ("user", "manager", "Dani"))
+        turn = self.store.turn("s1", event["prompt_id"])
+        self.assertEqual(infer(self.store, self.judge, turn, 'Memory: saved user.manager. Say "undo" to take it back.')["calls"], 0)
+
+    # Keys the agent invents in different sessions
+
+    def test_a_change_under_different_keys_updates_the_same_fact(self):
+        from context_kernel.capture import SAME_ATTRIBUTE
+        self.judge.ask_fn = answers(category="constraints")
+        self.judge.rank_fn = lambda query, line, question: 0.85 if question == SAME_ATTRIBUTE else 0.1
+        packet, _ = self.prompt("We have three months to deliver the checkout project.")
+        self.capture(packet, ("checkout_project", "delivery_timeline", "three months"))
+        packet, _ = self.prompt("Update: the checkout deadline changed, we now have three weeks.")
+        self.assertEqual(packet["turn"]["capture"]["related"][0]["key"], "checkout_project.delivery_timeline")
+        result = self.capture(packet, ("checkout", "deadline", "three weeks"))[0]
+        self.assertEqual((result["status"], result["resolved_from"]), ("captured", "checkout.deadline"))
+        self.assertEqual([r["value"] for r in self.current("checkout_project", "delivery_timeline")], ["three weeks"])
+        self.assertEqual(self.current("checkout", "deadline"), [])
+
+    def test_unrelated_keys_stay_separate(self):
+        self.judge.rank_fn = lambda query, line, question: 0.2
+        packet, _ = self.prompt("Mi manager es Ana")
+        self.capture(packet, ("user", "manager", "Ana"))
+        packet, _ = self.prompt("Mi salario es 50k")
+        self.capture(packet, ("user", "salary", "50k"))
+        self.assertEqual(len(self.store.records()), 2)
+
+    def test_the_agent_can_name_the_fact_a_value_replaces(self):
+        self.judge.rank_fn = lambda query, line, question: 0.5
+        packet, _ = self.prompt("We have three months to deliver checkout.")
+        old = self.capture(packet, ("checkout_project", "delivery_timeline", "three months"))[0]
+        packet, _ = self.prompt("Now we have three weeks.")
+        result, error = self.tool("memory_capture", {"token": packet["turn"]["token"], "facts": [
+            {"entity": "checkout", "predicate": "deadline", "value": "three weeks", "replaces": old["id"]}]})
+        self.assertFalse(error, result)
+        self.assertEqual([r["value"] for r in self.current("checkout_project", "delivery_timeline")], ["three weeks"])
+
+    def test_a_replaces_target_about_something_else_is_refused(self):
+        self.judge.rank_fn = lambda query, line, question: 0.1
+        salary = self.store.remember("user", "salary", "50k", "Owner CLI", trust="captured")
+        packet, _ = self.prompt("Mi manager es Dani")
+        result, _ = self.tool("memory_capture", {"token": packet["turn"]["token"], "facts": [
+            {"entity": "user", "predicate": "manager", "value": "Dani", "replaces": salary["id"]}]})
+        self.assertEqual(result["results"][0]["reason"], "replaces_mismatch")
+        self.assertEqual(self.current("user", "salary")[0]["value"], "50k")
+
+    def test_the_judge_reads_what_the_user_wrote_not_the_pasted_log(self):
+        self.store.remember("checkout", "deadline", "three weeks", "Owner CLI")
+        self.compiler = Compiler(self.store, jev=self.judge)
+        log = "```\n" + "\n".join(f"line {n} ERROR something failed" for n in range(400)) + "\n```\n"
+        self.prompt(log + "Does this affect the checkout deadline?")
+        query = next(c[1] for c in self.judge.calls if c[0] == "rank")
+        self.assertNotIn("ERROR", query)
+        self.assertLessEqual(len(query), 1500)
+
+    def test_a_definition_question_naming_a_stored_key_is_not_generic(self):
+        from context_kernel.planner import generic_question
+        self.store.remember("checkout_project", "delivery_timeline", "three weeks", "Owner CLI")
+        self.assertFalse(generic_question("What is the checkout deadline?", self.store.records()))
+        self.assertTrue(generic_question("What is a SQLite primary key?", self.store.records()))
 
     def test_stop_hook_reentry_does_nothing(self):
         _, event = self.prompt("hola")

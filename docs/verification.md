@@ -6,7 +6,7 @@ Checked on 2026-10-05: macOS arm64, Python 3.14.3, SQLite 3.51.2 with FTS5, Olla
 
 Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama). No paid API was used for these checks.
 
-**Unit and subprocess suite.** 184 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
+**Unit and subprocess suite.** 191 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
 
 - turn tokens;
 - refusal of a server bound to another host process, and of unknown or expired tokens;
@@ -63,6 +63,36 @@ The same affirmed fixtures rendered as single candidates for `jev tune` separate
 | cold question | 4.06 s |
 | fact plus question (gate and relevance) | 4.12 s |
 | the same question again (all judgments cached) | 0.33 s |
+
+**First native run (Claude Code 2.1.287, headless, five fresh sessions, no memory commands): 3 of 9 checks.**
+
+Passed:
+- all five sessions were bound;
+- the agent captured from conversation through the bound MCP server;
+- "Please forget the checkout deadline." removed it after validation against the typed message;
+- the generic question carried no claims.
+
+Failed, with causes:
+- **Key drift.** Session 1 stored `checkout_project.delivery_timeline = three months`. Session 2's agent, which did not see that fact, stored `checkout.deadline = three weeks` as a second, parallel fact. The change never reached the premise, so the recommendation was never flagged, and session 3 saw two disagreeing timelines.
+- **Lexical recommendation gate.** It missed "No, … don't rewrite the payment module" in session 1 and fired on "I can't tell you whether to go ahead…" in session 3.
+- **Over-generic question guard.** "What is the checkout deadline?" counted as generic because the stored entity is `checkout_project`.
+- **Oversized relevance query.** The owner's own hook timed out on a 10 KB pasted prompt and fell back to rules, as designed.
+
+Fixes, each measured with the real local jev before choosing a threshold:
+- the capture hint lists related stored facts (lexical, with ids);
+- `memory_capture` accepts `replaces`;
+- the kernel resolves a new pair to an existing one when jev, on key names only, judges them the same attribute: ≥ 0.70 on 5 of 6 true pairs, every false pair ≤ 0.64, and 0.723 for this exact case;
+- recommendations are judged ("does the reply recommend, advise, or decide a course of action"): 0.80 to 0.95 for advice, at most 0.61 for reports, questions and refusals; bar 0.70;
+- the judge reads only the authored part of the prompt, at most 1,500 characters;
+- a definition question that names stored key words is not generic.
+
+The scenario replayed through the kernel with the real jev and the same drifting keys:
+
+1. the drifting key was resolved to the stored pair, so the change became a second version;
+2. the session-1 recommendation was linked;
+3. session 3 returned `review_required` with the recommendation's id, and only the current "three weeks" was delivered.
+
+The native rerun is pending.
 
 **Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 

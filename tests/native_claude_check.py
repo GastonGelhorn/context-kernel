@@ -65,8 +65,14 @@ def snapshot(database):
     store = Store(database, scope="pilot")
     try:
         history = store.records(history=True)
+        # Keys are the agent's choice; the checks follow the values the user stated.
+        timeline = [r for r in history if r["assertion_kind"] != "inference"
+                    and any(w in json.dumps(r["value"]).lower() for w in ("month", "week", "mes", "semana"))]
+        pairs = {(r["entity_key"], r["predicate"]) for r in timeline}
         return {
-            "deadline": [(r["value"], r["trust"], r["effective_state"]) for r in history if r["predicate"] == "deadline"],
+            "deadline": [(r["value"], r["trust"], r["effective_state"], f"{r['entity_key']}.{r['predicate']}") for r in timeline],
+            "deadline_pairs": sorted(f"{e}.{p}" for e, p in pairs),
+            "deadline_current": [r["value"] for r in timeline if r["effective_state"] == "active"],
             "recommendations": [{"id": r["id"], "stale": r["stale"], "links": len(r["assumptions"])}
                                 for r in history if r["predicate"] == "recommendation"],
             "inferred_links": store.db.execute("SELECT count(*) FROM relations WHERE provenance='inferred'").fetchone()[0],
@@ -107,9 +113,10 @@ def run(claude, workspace, model=None, strategy="jev", jev_command="jev"):
         first, second, third, fourth, fifth = (states[n] for n, _ in PHASES)
         answer = (report["phases"][2]["answer"] or "").casefold()
         checks = {
-            "constraint_captured_from_conversation": bool(first["deadline"]),
+            "constraint_captured_from_conversation": any("month" in str(v).lower() for v in first["deadline_current"]),
             "recommendation_linked_by_inference": first["inferred_links"] > 0,
-            "change_captured_as_new_version": len(second["deadline"]) >= 2,
+            "change_captured_as_new_version": len(second["deadline_pairs"]) == 1 and len(second["deadline"]) >= 2
+                                              and all("week" in str(v).lower() for v in second["deadline_current"]),
             "recommendation_flagged_after_change": any(r["stale"] for r in second["recommendations"]),
             "fresh_session_projection_requires_review": third["last_trace"].get("status") == "review_required"
                                                          or "review_recommended" in third["last_trace"].get("warnings", []),

@@ -73,7 +73,12 @@ def generic_question(query, records=()):
                            r"recuerda|anterior|este|esta|esto|ese|esa|eso)\b", lowered)
     definition = re.search(r"\b(what is|what are|explain|define|how does|how do|write a|show an example|"
                            r"que es|que son|explica|explicame|define|como funciona|escribe un|muestra un ejemplo)\b", lowered)
-    return bool(definition and not contextual and not mentioned_entities(query, records))
+    if not (definition and not contextual and not mentioned_entities(query, records)):
+        return False
+    # "What is the checkout deadline?" names a stored key ("checkout_project.delivery_timeline") without
+    # naming the entity exactly; that is a question about memory, not a definition.
+    known = {t for r in records for t in re.split(r"[_\W]+", fold(r["entity_key"] + " " + r["predicate"])) if len(t) > 3}
+    return not (set(re.findall(r"[^\W_]+", lowered)) & known)
 
 
 def rules_plan(query, records, relations=()):
