@@ -8,23 +8,31 @@ import sys
 
 from .common import KernelError, digest, text
 from .protocol import parse_json
+from .language import fold
 
 
-COMMAND = re.compile(r'^(Remember|Correct): ([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+) = (.+)$')
+COMMAND = re.compile(r'^(Remember|Correct|Recuerda|Recordar|Corrige|Corregir): ([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+) = (.+)$', re.IGNORECASE)
 
 
 def propose_command(store, prompt, event_id=None):
     """A whole-message grammar creates proposals, never accepted facts."""
-    if prompt.strip().lower() in {"it finally arrived.", "it has not arrived.", "i returned it."}:
-        event = {"it finally arrived.": "arrived", "it has not arrived.": "not_arrived", "i returned it.": "returned"}[prompt.strip().lower()]
+    references = {"it finally arrived.": "arrived", "it has not arrived.": "not_arrived", "i returned it.": "returned",
+                  "al final llego.": "arrived", "todavia no llego.": "not_arrived", "aun no llego.": "not_arrived",
+                  "lo devolvi.": "returned"}
+    if fold(prompt.strip()) in references:
+        event = references[fold(prompt.strip())]
         entity = store.resolve_pending_delivery(event)
         return store.propose("transition", {"entity": entity, "event": event, "evidence": prompt}, event_id)
     transitions = ((r"I ordered ([a-zA-Z0-9_-]+)\.", "ordered"),
                    (r"([a-zA-Z0-9_-]+) has not arrived\.", "not_arrived"),
                    (r"([a-zA-Z0-9_-]+) arrived\.", "arrived"),
-                   (r"I returned ([a-zA-Z0-9_-]+)\.", "returned"))
+                   (r"I returned ([a-zA-Z0-9_-]+)\.", "returned"),
+                   (r"Pedi ([a-zA-Z0-9_-]+)\.", "ordered"),
+                   (r"([a-zA-Z0-9_-]+) no llego\.", "not_arrived"),
+                   (r"([a-zA-Z0-9_-]+) llego\.", "arrived"),
+                   (r"Devolvi ([a-zA-Z0-9_-]+)\.", "returned"))
     for grammar, event in transitions:
-        match = re.fullmatch(grammar, prompt.strip(), re.IGNORECASE)
+        match = re.fullmatch(grammar, fold(prompt.strip()), re.IGNORECASE)
         if match:
             return store.propose("transition", {"entity": match[1].lower(), "event": event, "evidence": prompt}, event_id)
     match = COMMAND.fullmatch(prompt.strip())
@@ -33,7 +41,7 @@ def propose_command(store, prompt, event_id=None):
     operation, entity, predicate, raw = match.groups()
     value = parse_json(raw)
     payload = {"value": value, "evidence": prompt}
-    if operation == "Remember":
+    if operation.casefold() in {"remember", "recuerda", "recordar"}:
         payload.update(entity=entity.lower(), predicate=predicate.lower())
         return store.propose("remember", payload, event_id)
     matches = [r for r in store.records() if r["entity_key"] == entity.lower() and r["predicate"] == predicate.lower()]
@@ -54,19 +62,18 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         raise KernelError("Hook workspace is outside the configured boundary.")
     prompt = text(event.get("prompt"), 16384)
     notice = None
-    if re.fullmatch(r"(?:Forget|Revoke): .+", prompt, re.IGNORECASE):
+    if re.fullmatch(r"(?:forget|revoke|olvida|olvidar|revoca|revocar): .+", fold(prompt), re.IGNORECASE):
         raise KernelError("Privacy changes require the owner CLI: memory forget or memory revoke. This hook did not apply the request.")
     if proposals:
         event_id = digest({"session": event.get("session_id"), "turn": event.get("turn_id"), "prompt": prompt})
         # No content-derived event hashes persist unless proposal capture is enabled.
         if not store.db.execute("SELECT 1 FROM processed_events WHERE scope=? AND event_id=?", (store.scope, event_id)).fetchone():
             notice = propose_command(store, prompt, event_id)
-    projection = compiler.project(prompt, strategy=strategy)
-    try:
-        compiler.revalidate(projection)
-    except KernelError:
+    projection = compiler.prepare(prompt, strategy=strategy)
+    if projection.trace["status"] in {"unavailable", "insufficient_context"}:
         store.mark_failed(projection.id)
-        raise
+        raise KernelError("Memory context is unavailable (" + projection.trace["status"] +
+                          "). This is not evidence that a fact does not exist; inspect the trace before retrying.")
     result = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
               "additionalContext": projection.content}}
     messages = []

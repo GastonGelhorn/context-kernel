@@ -231,6 +231,20 @@ class Store:
         return [r for r in records if r["effective_state"] == "active"
                 and r["assertion_kind"] in {"user_statement", "observed"}]
 
+    def context_relations(self, visible_keys):
+        rows = self.db.execute("""SELECT c.entity_key AS child, p.entity_key AS parent
+            FROM relations r JOIN entities c ON c.id=r.from_entity JOIN entities p ON p.id=r.to_entity
+            WHERE r.scope=? AND c.scope=? AND p.scope=? AND r.kind='part_of'
+            ORDER BY c.entity_key,p.entity_key""", (self.scope, self.scope, self.scope))
+        return [dict(row) for row in rows if row["child"] in visible_keys and row["parent"] in visible_keys]
+
+    def traces(self, limit=20):
+        if type(limit) is not int or not 1 <= limit <= 100:
+            raise KernelError("Trace limit must be between 1 and 100.")
+        return [json.loads(row[0]) for row in self.db.execute(
+            "SELECT trace FROM projections WHERE scope=? ORDER BY recorded_at DESC,id DESC LIMIT ?",
+            (self.scope, limit))]
+
     def _correct(self, statement_id, value, evidence, valid_from=None, valid_until=None):
         old = self._row(statement_id)
         if old["lifecycle"] != "active" or self._decode(old)["effective_state"] != "active":

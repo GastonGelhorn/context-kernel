@@ -10,6 +10,7 @@ import urllib.request
 
 from .common import KernelError, canonical, key, text
 from .protocol import parse_json
+from .language import ambiguous_entity_reference, fold, mentioned_entities, predicate_name, related_entities
 
 
 @dataclass(frozen=True)
@@ -65,32 +66,64 @@ class NeedPlan:
         return cls(tuple(needs), strategy, tuple(warnings))
 
 
-def generic_question(query):
-    lowered = query.lower()
-    personal = re.search(r"\b(my|our|mine|we|remember|previous|earlier)\b", lowered)
-    definition = re.search(r"\b(what is|what are|explain|define|how does|how do|write a|show an example)\b", lowered)
-    return bool(definition and not personal)
+def generic_question(query, records=()):
+    lowered = fold(query)
+    contextual = re.search(r"\b(my|our|mine|we|remember|previous|earlier|this|that|mi|mis|mio|nuestro|nuestra|"
+                           r"recuerda|anterior|este|esta|esto|ese|esa|eso)\b", lowered)
+    definition = re.search(r"\b(what is|what are|explain|define|how does|how do|write a|show an example|"
+                           r"que es|que son|explica|explicame|define|como funciona|escribe un|muestra un ejemplo)\b", lowered)
+    return bool(definition and not contextual and not mentioned_entities(query, records))
 
 
-def rules_plan(query, records):
-    if generic_question(query):
+def rules_plan(query, records, relations=()):
+    if generic_question(query, records):
         return NeedPlan()
-    lowered = query.lower()
-    present = {r["predicate"] for r in records}
-    if re.search(r"\b(job|offer|salary|career|employment|position)\b", lowered):
-        candidates = ("salary", "employment", "work_schedule", "availability", "constraint", "preference", "goal")
-    elif re.search(r"\b(delivery|package|arriv\w*|ordered|waiting|device|return\w*)\b", lowered):
+    if ambiguous_entity_reference(query, records):
+        return NeedPlan(warnings=("clarification_required",))
+    lowered = fold(query)
+    targets = related_entities(mentioned_entities(query, records), relations)
+    family = None
+    project_pattern = r"\b(project|architecture|migration|deploy\w*|repository|decision|release|proyecto|arquitectura|migracion|despliegue|despleg\w*|repositorio|lanzamiento)\b"
+    project_hint = bool(re.search(project_pattern, lowered)) or any(
+        r["entity_key"] in targets and r.get("kind") == "project" for r in records)
+    strong_career = bool(re.search(r"\b(job|offer|salary|career|employment|oferta|salario|sueldo|empleo|puesto de trabajo)\b", lowered))
+    if (re.search(r"\b(job|offer|salary|career|employment|position|trabajo|oferta|salario|sueldo|empleo|puesto)\b", lowered)
+            and (strong_career or not project_hint)):
+        family = "career"
+        candidates = ("salary", "employment", "work_schedule", "availability", "constraint")
+    elif re.search(r"\b(gift|present|cake|chocolate|dinner|restaurant|food|regalo|tarta|pastel|cena|restaurante|comida)\b", lowered):
+        family = "food_gift"
+        candidates = ("allergy", "dietary_constraint", "constraint")
+    elif re.search(r"\b(apartment|housing|house|stairs|elevator|piso|vivienda|casa|escaleras|ascensor)\b", lowered):
+        family = "housing"
+        candidates = ("mobility_limit", "accessibility", "budget", "constraint")
+    elif re.search(r"\b(delivery|package|arriv\w*|ordered|waiting|device|return\w*|entrega|paquete|lleg\w*|pedido|esperando|devolv\w*|devuel\w*)\b", lowered):
+        family = "delivery"
         candidates = ("delivery_status", "ownership_status", "open_loop", "constraint")
-        if re.search(r"\bit\b", lowered):
-            pending = {r["entity_key"] for r in records if r["predicate"] == "open_loop" and r["value"] == "awaiting_delivery"}
+        if not targets and re.search(r"\b(it|eso|ese|esa|lo)\b", lowered):
+            returning = bool(re.search(r"\b(return\w*|devolv\w*|devuel\w*)\b", lowered))
+            predicate, value = ("ownership_status", "owned") if returning else ("open_loop", "awaiting_delivery")
+            pending = {r["entity_key"] for r in records if r["predicate"] == predicate and r["value"] == value}
             if len(pending) != 1:
                 return NeedPlan(warnings=("clarification_required",))
-            return NeedPlan(tuple(Need((p,), tuple(pending)) for p in candidates if p in present))
-    elif re.search(r"\b(project|architecture|migration|deployment|repository|decision)\b", lowered):
-        candidates = ("project_status", "decision", "constraint", "goal", "open_loop")
+            targets = pending
+    elif project_hint:
+        family = "project"
+        candidates = ("project_status", "decision", "constraint", "goal", "open_loop", "release_approver")
+        if not targets and len({r["entity_key"] for r in records if r.get("kind") == "project"}) > 1:
+            return NeedPlan(warnings=("clarification_required",))
     else:
         candidates = ()
-    needs = tuple(Need((p,), critical=True) for p in candidates if p in present)
+    pairs = set()
+    for row in records:
+        if predicate_name(row["predicate"]) not in candidates:
+            continue
+        if targets and row["entity_key"] not in targets:
+            # Personal constraints can still matter for a named employer or home.
+            if family not in {"career", "housing"} or row["entity_key"] not in {"user", "usuario"}:
+                continue
+        pairs.add((row["entity_key"], row["predicate"]))
+    needs = tuple(Need((predicate,), (entity,), critical=True) for entity, predicate in sorted(pairs))
     return NeedPlan(needs, warnings=() if needs else ("unknown_task",))
 
 
@@ -163,10 +196,13 @@ NEED_SCHEMA = {"type": "object", "properties": {"needs": {"type": "array", "maxI
     "required": ["needs"], "additionalProperties": False}
 
 
-def infer_plan(query, records, ollama):
+def infer_plan(query, records, ollama, relations=()):
     # This conservative guard does not claim to understand arbitrary relevance.
-    if generic_question(query):
+    if generic_question(query, records):
         return NeedPlan(strategy="inferred"), {"calls": 0}
+    supported = rules_plan(query, records, relations)
+    if "clarification_required" in supported.warnings:
+        return NeedPlan(strategy="inferred", warnings=supported.warnings), {"calls": 0}
     inventory = [{"source": r["entity_key"] + "." + r["predicate"], "value": r["value"]} for r in records]
     request = canonical({"question": query, "authorized_inventory": inventory})
     if len(request.encode()) > 5000:
@@ -210,10 +246,19 @@ def infer_plan(query, records, ollama):
             entity, predicate = sources[item["source"]]
             known.append({"predicates": [predicate], "entities": [entity], "critical": item["critical"]})
         missing = NeedPlan.from_dict({"needs": raw.get("missing_needs", []), "strategy": "inferred"})
+        # Bounded rules supplement model omissions; this is not improved model recall.
+        known_pairs = {(tuple(n["entities"]), tuple(n["predicates"])) for n in known}
+        supplements = 0
+        for need in supported.to_dict()["needs"]:
+            identity = (tuple(need["entities"]), tuple(need["predicates"]))
+            if identity not in known_pairs:
+                known.append({k: v for k, v in need.items() if k != "unavailable"})
+                known_pairs.add(identity)
+                supplements += 1
         combined = known + [dict(n, unavailable=True) for n in missing.to_dict()["needs"]]
         raw = {"needs": combined}
         raw["strategy"] = "inferred"
-        return NeedPlan.from_dict(raw), usage | {"calls": 1}
+        return NeedPlan.from_dict(raw), usage | {"calls": 1, "rule_supplements": supplements}
     except KernelError as exc:
         return NeedPlan(strategy="inferred", warnings=("planner_failed",)), {"calls": 1, "failure": str(exc)}
     except (ValueError, TypeError):

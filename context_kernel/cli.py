@@ -6,7 +6,7 @@ import sqlite3
 import sys
 
 from .adapters import configuration, hook_response
-from .common import KernelError, canonical
+from .common import KernelError, canonical, quantity
 from .compiler import Compiler
 from .planner import NeedPlan, Ollama
 from .protocol import parse_json, read_event
@@ -25,6 +25,8 @@ def parser():
     commands = root.add_subparsers(dest="command", required=True)
     for name in ("init", "status", "proposals", "serve"):
         commands.add_parser(name)
+    traces = commands.add_parser("traces")
+    traces.add_argument("--limit", type=int, default=20, help="Latest scoped projection metadata, 1-100")
     listing = commands.add_parser("list")
     listing.add_argument("--history", action="store_true")
     listing.add_argument("--as-of")
@@ -43,6 +45,9 @@ def parser():
     for command in (remember, correct):
         command.add_argument("--valid-from")
         command.add_argument("--valid-until")
+        command.add_argument("--unit", help="Explicit quantity unit; absent means unknown")
+        command.add_argument("--currency", help="Explicit three-letter uppercase currency label")
+        command.add_argument("--period", help="Explicit quantity period, for example year or month")
     for name in ("inspect", "revoke", "forget", "approve", "reject", "why"):
         item = commands.add_parser(name)
         item.add_argument("id")
@@ -90,14 +95,19 @@ def parser():
 
 def execute(args, store):
     command = args.command
+    value = None
+    if command in {"remember", "correct"}:
+        value = parse_json(args.value)
+        if any(v is not None for v in (args.unit, args.currency, args.period)):
+            value = quantity(value, args.unit, args.currency, args.period)
     if command in {"init", "status"}:
         return store.status()
     if command == "remember":
-        return store.remember(args.entity, args.predicate, parse_json(args.value), args.evidence,
+        return store.remember(args.entity, args.predicate, value, args.evidence,
                               kind=args.kind, label=args.label, assertion_kind=args.assertion_kind,
                               valid_from=args.valid_from, valid_until=args.valid_until)
     if command == "correct":
-        return store.correct(args.id, parse_json(args.value), args.evidence, args.valid_from, args.valid_until)
+        return store.correct(args.id, value, args.evidence, args.valid_from, args.valid_until)
     if command == "inspect":
         return store.inspect(args.id, args.as_of)
     if command == "list":
@@ -117,6 +127,8 @@ def execute(args, store):
         return store.propose(args.operation, parse_json(args.payload))
     if command == "proposals":
         return store.proposals()
+    if command == "traces":
+        return store.traces(args.limit)
     if command == "why":
         return store.trace(args.id)
     if command == "serve":

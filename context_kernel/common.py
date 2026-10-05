@@ -55,6 +55,8 @@ def text(value, limit=4096):
 
 
 def checked_value(value):
+    if isinstance(value, dict) and value.get("type") == "quantity":
+        validate_quantity(value)
     try:
         encoded = canonical(value)
     except (TypeError, ValueError, RecursionError) as exc:
@@ -66,6 +68,25 @@ def checked_value(value):
     if size > 4096:
         raise KernelError("Value exceeds its size limit.")
     return encoded
+
+
+def validate_quantity(value):
+    if (set(value) - {"type", "amount", "unit", "currency", "period"}
+            or not {"type", "amount"} <= set(value) or type(value["amount"]) not in {int, float}):
+        raise KernelError("A quantity requires a numeric amount and only type, amount, unit, currency, and period fields.")
+    for name in ("unit", "period"):
+        label = value.get(name)
+        if label is not None and (not isinstance(label, str) or not re.fullmatch(r"[a-zA-Z][a-zA-Z0-9_/-]{0,31}", label)):
+            raise KernelError("Quantity unit and period must be short explicit labels or null.")
+    currency = value.get("currency")
+    if currency is not None and (not isinstance(currency, str) or not re.fullmatch(r"[A-Z]{3}", currency)):
+        raise KernelError("Quantity currency must be an explicit three-letter uppercase label or null.")
+
+
+def quantity(value, unit=None, currency=None, period=None):
+    result = {"type": "quantity", "amount": value, "unit": unit, "currency": currency, "period": period}
+    checked_value(result)
+    return result
 
 
 def reject_secrets(value):
