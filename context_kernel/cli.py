@@ -102,6 +102,7 @@ def parser():
     adapter.add_argument("--proposals", action="store_true")
     adapter.add_argument("--strategy", choices=("rules", "fts", "inferred", "jev"), default="rules")
     adapter.add_argument("--fail-closed", action="store_true")
+    adapter.add_argument("--jev-command", default="jev", help="Resolved to an absolute path in the generated configuration")
     adapter.add_argument("--python")
     adapter.add_argument("--raw", action="store_true", help="Print only the configuration content for manual merging")
     return root
@@ -184,7 +185,7 @@ def main(argv=None):
     try:
         if args.command == "adapter":
             result = configuration(args.client, args.workspace, args.db, args.scope, args.python, args.mode,
-                                   args.proposals, args.strategy, args.fail_closed)
+                                   args.proposals, args.strategy, args.fail_closed, args.jev_command)
             if args.raw:
                 print(result["content"] if "content" in result else canonical(result["config"]))
                 return 0

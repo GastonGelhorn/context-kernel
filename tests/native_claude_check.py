@@ -49,14 +49,14 @@ def invoke(claude, workspace, prompt, model=None):
             "cost_usd": raw.get("total_cost_usd") if isinstance(raw, dict) else None}
 
 
-def run(claude, workspace, model=None, strategy="rules"):
+def run(claude, workspace, model=None, strategy="rules", jev_command="jev"):
     workspace = Path(workspace).resolve()
     if not workspace.is_dir() or any(workspace.iterdir()):
         raise KernelError("Supply an empty disposable workspace for the native pilot.")
     database = workspace / "memory.sqlite"
     store = Store(database, scope="pilot", create=True)
     try:
-        config = configuration("claude", workspace, database, "pilot", strategy=strategy)
+        config = configuration("claude", workspace, database, "pilot", strategy=strategy, jev_command=jev_command)
         destination = workspace / config["destination"]
         destination.parent.mkdir(parents=True)
         destination.write_text(json.dumps(config["config"], indent=2))
@@ -71,7 +71,8 @@ def run(claude, workspace, model=None, strategy="rules"):
             traces = store.traces(100)
             emitted = [t for t in traces[:len(traces) - before] if t["delivery"] == "emitted"]
             result.update(name=name, expected=expected, new_traces=len(traces) - before, emitted_projections=len(emitted),
-                          projection_status=[t["status"] for t in emitted])
+                          projection_status=[t["status"] for t in emitted], projection_warnings=[t["warnings"] for t in emitted],
+                          selection_calls=[t["usage"].get("calls", 0) for t in emitted])
             answer = result["answer"] or ""
             result["passed"] = bool(emitted) and result["exit_code"] == 0 and (
                 check(answer) if check else expected.casefold() in answer.casefold())
@@ -115,12 +116,13 @@ def main():
     parser.add_argument("--claude", default=shutil.which("claude"))
     parser.add_argument("--model", help="Optional model override; default is the client's configured model")
     parser.add_argument("--strategy", choices=("rules", "fts", "jev"), default="rules")
+    parser.add_argument("--jev-command", default="jev")
     args = parser.parse_args()
     if not args.claude:
         print(canonical({"error": "claude CLI not found"}))
         return 1
     try:
-        report = run(args.claude, args.workspace, args.model, args.strategy)
+        report = run(args.claude, args.workspace, args.model, args.strategy, args.jev_command)
     except KernelError as exc:
         print(canonical({"error": str(exc)}))
         return 1

@@ -4,6 +4,7 @@ from pathlib import Path
 import json
 import re
 import shlex
+import shutil
 import sys
 
 from .common import KernelError, digest, text
@@ -98,22 +99,30 @@ def envelope(context, messages=()):
     return result
 
 
-def configuration(client, workspace, db, scope, python=None, mode="hook", proposals=False, strategy="rules", fail_closed=False):
+def configuration(client, workspace, db, scope, python=None, mode="hook", proposals=False, strategy="rules",
+                  fail_closed=False, jev_command="jev"):
     root = str(Path(workspace).resolve())
     checkout = str(Path(__file__).resolve().parent.parent)
     executable = python or sys.executable
     args = ["-m", "context_kernel", "--db", str(Path(db).resolve()), "--scope", scope]
+    strategy_options = []
+    if strategy != "rules":
+        strategy_options += ["--strategy", strategy]
+    if strategy == "jev":
+        # Hosts run hooks and servers with a minimal PATH; pin the executable the owner has now.
+        resolved = shutil.which(jev_command) if not Path(jev_command).is_absolute() else jev_command
+        if not resolved or not Path(resolved).is_file():
+            raise KernelError("jev was not found on this PATH; install jevmate or pass --jev-command with an absolute path.")
+        strategy_options += ["--jev-command", str(Path(resolved).resolve())]
     if mode == "mcp" or client == "antigravity":
-        server = {"command": executable, "args": args + ["serve"], "env": {"PYTHONPATH": checkout}}
+        server = {"command": executable, "args": args + ["serve"] + strategy_options, "env": {"PYTHONPATH": checkout}}
         if client == "codex":
             toml = "[mcp_servers.context-kernel]\ncommand = " + json.dumps(executable) + "\nargs = " + json.dumps(server["args"]) + "\n"
             toml += "\n[mcp_servers.context-kernel.env]\nPYTHONPATH = " + json.dumps(checkout) + "\n"
             return {"destination": ".codex/config.toml", "content": toml}
         return {"destination": ".mcp.json" if client == "claude" else ".agents/mcp_config.json",
                 "config": {"mcpServers": {"context-kernel": server}}}
-    options = (["--proposals"] if proposals else []) + (["--fail-closed"] if fail_closed else [])
-    if strategy != "rules":
-        options += ["--strategy", strategy]
+    options = (["--proposals"] if proposals else []) + (["--fail-closed"] if fail_closed else []) + strategy_options
     command = shlex.join(["env", "PYTHONPATH=" + checkout, executable] + args +
                          ["hook", "--client", client, "--workspace", root] + options)
     hook = {"type": "command", "command": command, "timeout": 15}

@@ -152,9 +152,14 @@ class JevTests(unittest.TestCase):
         self.assertEqual(process.returncode, 0, process.stderr)
         self.assertEqual(json.loads(process.stdout)["plan"]["strategy"], "jev")
         for client in ("codex", "claude"):
-            command = configuration(client, self.workspace, self.store.path, "personal", strategy="jev")["config"]["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
+            command = configuration(client, self.workspace, self.store.path, "personal", strategy="jev", jev_command=str(self.fake))["config"]["hooks"]["UserPromptSubmit"][0]["hooks"][0]["command"]
             self.assertIn("--strategy jev", command)
+            self.assertIn("--jev-command " + str(self.fake.resolve()), command)
             self.assertNotIn("--fail-closed", command)
+        server = configuration("claude", self.workspace, self.store.path, "personal", mode="mcp", strategy="jev", jev_command=str(self.fake))
+        self.assertIn("--jev-command", server["config"]["mcpServers"]["context-kernel"]["args"])
+        with self.assertRaisesRegex(KernelError, "not found"):
+            configuration("claude", self.workspace, self.store.path, "personal", strategy="jev", jev_command="definitely-missing-jev")
 
     def test_mcp_server_uses_the_configured_strategy(self):
         from context_kernel.mcp import Server
