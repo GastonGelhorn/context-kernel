@@ -43,16 +43,30 @@ This prepared hook is not yet owner-trusted or automatically active in the curre
 
 On another checkout, regenerate configuration using `memory adapter codex --workspace /your/pilot --raw` and review the new command. This pilot uses absolute paths specific to this host.
 
-## Claude Code
-
-The headless runner performs the same lifecycle through the real client, plus the dependency fixture:
+## Claude Code (v0.4, conversation only)
 
 ```sh
-mkdir -p work/claude-pilot && mktemp -d work/claude-pilot/run.XXXXXX
-python3 -m tests.native_claude_check --workspace /absolute/path/to/that/new/dir
-python3 -m tests.native_claude_check --workspace /absolute/path/to/another/new/dir --strategy jev
+mkdir -p work/claude-pilot
+python3 -m tests.native_claude_check --workspace "$(mktemp -d work/claude-pilot/run.XXXXXX)"
 ```
 
-It writes `.claude/settings.local.json` inside the empty pilot directory only, runs `claude -p` six times with file, shell, and web tools disallowed, and reads the kernel's own traces to confirm an emitted projection per prompt. Phases: empty memory, registered approver, corrected approver in a fresh session, the rewrite decision after its deadline moved (the answer must name the change and not restate three months), forgotten approver, and a generic question with no personal context. The owner starts it: it uses the owner's Claude Code sign-in and quota and sends fictional prompts to Anthropic. It never touches `~/.claude`, never bypasses permissions, and reports the client's own cost and usage fields.
+The runner writes the generated hooks into the empty pilot's `.claude/settings.local.json` and passes the memory MCP server with `--mcp-config`. It then runs five fresh `claude -p` sessions. File, shell and web tools are disallowed, and only the memory tools are allowed. No memory command is typed:
 
-An emitted trace plus a correct answer is evidence the hook delivered context to that headless session. It is not proof that the desktop app, with its own history and settings, behaves the same.
+1. "We have three months to deliver the checkout project. Should we rewrite its payment module?"
+2. "Update: the checkout deadline changed, we now have three weeks."
+3. "Should we still go ahead with what we discussed for the checkout payment module?"
+4. "Please forget the checkout deadline."
+5. A generic SQLite question.
+
+After each session it reads the kernel database directly. It checks capture, inferred linking, the new version, the review flag, the fresh-session projection and answer, removal, the absence of claims on the generic question, and that every session was bound. It uses your Claude Code sign-in and quota and sends fictional prompts to Anthropic. It never touches `~/.claude`.
+
+## Codex (v0.4)
+
+Generate both pieces for a pilot directory, merge them, then start Codex there and trust the hooks in its own review prompt:
+
+```sh
+python3 -m context_kernel --db /abs/pilot/memory.sqlite --scope pilot adapter codex --workspace /abs/pilot --strategy jev --raw
+python3 -m context_kernel --db /abs/pilot/memory.sqlite --scope pilot adapter codex --workspace /abs/pilot --strategy jev --mode mcp --raw
+```
+
+Ask the same five prompts in fresh sessions. Confirm with `memory --db /abs/pilot/memory.sqlite --scope pilot --pretty inventory`, `traces --limit 3`, and `metrics`. The server must report a bound session: a capture that comes back "not bound" means Codex starts the MCP server outside the hook's process tree, and writes stay refused there by design.

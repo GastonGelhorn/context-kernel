@@ -1,81 +1,84 @@
 # Architecture and safety
 
-The runtime is an independent Python package. Context Contract Compiler is a conceptual reference, not a dependency. No inherited requirement IDs are assumed to solve natural-language relevance.
+Three components with separate responsibilities:
+
+| Component | Responsibility |
+| --- | --- |
+| Kernel (`store`, `compiler`, `capture`, `inference`, `turns`, `binding`) | State, evidence, validity, corrections, trust, consent policy, dependencies, and what may be delivered |
+| Judgment client (`judge.py`) | Ask the configured jev backend, apply time budgets, return probabilities; nothing else |
+| Host integration (`adapters.py`, `mcp.py`) | Hooks for Claude Code and Codex, the stdio MCP server, generated configuration |
+
+The kernel imports nothing from jevmate. `judge.JevCommand` runs the `jev` executable with text on stdin. The kernel decides failure policy and privacy for each use.
 
 ```text
-Owner CLI -> transactional scoped state -> authorized current view
-                                             |
-Question -> NeedPlan -> scoped FTS/retrieval -> byte-bounded projection
-                                             |
-                                revalidate -> hook or MCP -> host
-                                             |
-                                   metadata-only trace
+UserPromptSubmit hook (≤ 8 s)                     MCP server (same host process)
+  open turn: token, origin, masked excerpt          memory_capture(token, facts)
+  bind session to host process ancestry  ─────────▶   turn ∈ sessions bound to my parent?
+  gate: does the message state facts? (jev ask)       jev: does the user's text assert this fact?
+  select: relevance per pair (jev rank, cached)       category policy, lattice, caps, tombstones
+  deliver packet + turn token + capture hint          write captured / quarantined / ask
+Stop hook                                          memory_forget / revoke / confirm / reaffirm / policy
+  close turn, truthful receipt, coverage              token + interactive origin + jev: does the
+  infer premises of a recommendation (jev rank)       user's text ask for this on this fact?
+  drop the excerpt once nothing is pending
 ```
 
 ## Data model
 
-The executable schema is `context_kernel/store.py:SCHEMA`. Schema version 2 adds the `depends_on` relation kind. A version 1 database is migrated on open by rebuilding the relations table with every row copied; unknown versions are rejected. Nothing is dropped.
+The executable schema is `store.SCHEMA` (version 3). Migrations from version 1 and version 2 are copy-based and additive; no row is dropped. Unknown versions are refused.
 
 | Table | Responsibility |
 | --- | --- |
-| entities | Scoped keys, labels, types, and exact aliases |
-| evidence | Original bounded source fragment, attribution, optional source reference, recorded timestamp |
-| statements | Entity/property/value, evidence, assertion kind, validity interval, lifecycle, replacement link |
-| relations | Typed `corrects`, acyclic `part_of`, and acyclic `depends_on` between statement versions; statement `about` is implicit in entity ownership |
-| proposals | Pending, accepted, or rejected owner-reviewed changes |
-| plans | Recorded evidence needs and uncertainty codes, not full conversations |
-| projections | IDs, selection reasons, exclusions, snapshot, policy, timing, size, delivery status |
-| operations | Minimal operation metadata and safe failure codes |
-| processed_events | Optional proposal-hook retry deduplication within a scope |
+| entities, evidence | Scoped keys, labels, aliases; the bounded source sentence and its attribution |
+| statements | Entity, property, value, assertion kind, validity, lifecycle, `trust`, `category`, `last_confirmed_at` |
+| relations | `corrects`, acyclic `part_of`, acyclic `depends_on` with `provenance` (declared or inferred) |
+| proposals | Changes waiting for a yes, such as a capture that differs from a confirmed value |
+| plans, projections, operations | Recorded needs; metadata-only traces; operation log |
+| sessions | Session id with the hook's process ancestry (pid and start time) |
+| turns | Token, origin, masked excerpt (expires), delivered and captured ids, gate count, flags |
+| judgments | Cached probabilities keyed by question, model, and digests of state and candidate, never text |
+| captures_log | Outcome per proposed fact: captured, quarantined, confirmed, duplicate, needs_confirmation, rejected, omitted, missed |
+| tombstones | Last forget or revoke per property; writes whose evidence predates it are refused |
+| scopes | Policy: categories, thresholds, auto capture, remote judge allowance |
 
-The database has foreign keys and indexes over scope, entity/property/lifecycle, and validity. FTS5 is built in memory from the already-authorized current view; hidden records do not affect corpus ranking. No embedding service or persistent search cache is involved.
+## Capture
 
-## State rules
+The host agent extracts. The kernel never asks a second generative model to read the conversation. For each proposed `(entity, predicate, value)` the kernel:
 
-`user_statement` and `observed` can enter current retrieval. `hypothesis` and `inference` remain stored but excluded. These names express attribution, not calibrated confidence or objective truth. Owner approval accepts an attributed claim, not a proof of it.
+1. Requires an open turn of a session bound to the server's host process. A turn of `continuation` or `unknown` origin can only produce quarantined captures.
+2. Rejects invalid keys, values over 200 characters, instruction-shaped values, and secrets.
+3. Enforces caps (2 per turn, 10 per session, 30 per day). Anything over a cap is logged as omitted, not dropped from metrics.
+4. Checks tombstones before and after judging.
+5. Asks jev, in one request, whether the authored part of the message asserts the fact and which category it belongs to. Authored text excludes fenced blocks, quoted lines, mail headers, text after a reply marker, and log, JSON or URL lines.
+6. Decides from the answers:
+   - affirmed at 0.75 or above, interactive origin, category enabled: captured;
+   - affirmed but category disabled or origin unverified: quarantined;
+   - affirmed only by the pasted part: quarantined as `quoted_source`;
+   - affirmed between 0.60 and 0.75: quarantined as `uncertain`;
+   - otherwise: rejected.
+7. Applies the trust lattice. A capture may correct a captured value. A confirmed value that differs produces a proposal and a one-line question. The same value restated in a typed message promotes the existing statement to confirmed.
 
-Validity is half-open: `valid_from <= as_of < valid_until`; no end means until changed. ISO timestamps without a timezone, and date-only inputs, are explicitly interpreted as UTC. Ambiguous natural dates are not parsed. The injectable clock makes boundary tests deterministic.
+The evidence stored is the sentence that best supports the fact, not the message. Excerpts are masked for secrets, capped at 4 KiB, and dropped at Stop unless a stated fact is still uncaptured. After ten minutes they are dropped in any case and the shortfall is logged as `missed`. "Don't remember this" stores neither an excerpt nor a capture.
 
-Corrections atomically create a statement and a `corrects` relation, close the previous interval, and retain history. Two unrelated statements with conflicting values stay conflicting; chronology alone does not settle them. Future corrections become effective at their specified start; revoking a future replacement does not resurrect its predecessor automatically. Reviewing or replacing a scheduled correction requires an explicit owner decision.
+## Selection and delivery
 
-`depends_on` links a statement to the exact version of another statement it assumed. A statement is stale when any assumption is no longer active (superseded, revoked, expired); the flag is computed at query time from the same clock, never stored. Correcting an assumption changes nothing about its dependents except that flag. The owner then corrects or revokes the dependent, or reaffirms it, which moves the link to the assumption's current version. A corrected dependent starts without links. Dependencies are declared, never inferred.
+`rules`, `fts` or `jev` strategies produce a NeedPlan. With jev, every authorized entity/property pair is judged once per distinct question and cached by digest. A pair in the uncertain band (0.35 to 0.5) is kept only with a lexical match. At most 48 pairs are judged per call: mentioned pairs first, then the most recent. If the judge is unavailable or remote, the rules plan is used with a warning. Captures that nobody confirmed for 180 days stop being evidence; the inventory still lists them.
 
-Delivery transitions update three properties together: delivery status, ownership status, and pending-loop state. Repeated equal transitions do not add versions. Exact entity/alias resolution and unique delivery-reference resolution are supported; unrestricted discourse or intention inference is not.
+Critical claims must fit whole within the byte budget. The packet carries reader rules, warnings, and the turn marker (token, capture hint, pending captures, privacy notice). Stale claims carry `stale_assumptions`. Stale inferred recommendations whose premises' entities the turn touches, or whose text the question names, appear under `review` as ids only. Before delivery the selected pairs and their relations are revalidated. One retry reuses the recorded plan.
 
-## NeedPlan and selection
+## Dependencies
 
-The manual rules cover career, delivery, project state, housing, and food/gift constraints in English and Spanish. Predicate aliases are read-time vocabulary, not automatic source rewrites. Explicit entity keys, labels, and aliases narrow selection; ambiguous aliases and unnamed multiple projects ask for clarification. Personal constraints remain eligible across named career/housing choices. Other questions fall back to scoped current-state FTS with stopword removal and a small bilingual vocabulary. A conservative generic-question guard returns no personal context, while contextual explanations such as "our deployment" remain eligible. These are bounded rules, not universal need discovery.
+Declared links (owner CLI, `memory_depend`) and inferred links behave the same way. The inferred candidates for a recommendation are exactly the premises available in that turn: claims delivered by the kernel and facts captured from the same message. Recommendations are stored with `assertion_kind: inference` and never become evidence. Staleness is computed when queried. `reaffirm` follows a premise's full correction chain to its current version.
 
-Explicit scoped `part_of` ancestors can add context for a named component up to two levels. Siblings are not traversed. Only relations whose endpoints have eligible current evidence enter the view, and the authorized relation view participates in the snapshot hash. Hidden-scope relations cannot change rankings or snapshots. Parent claims retain their original entity and attribution; the kernel does not manufacture an inferred child claim.
+## Trust boundaries
 
-Optional Qwen inference sees a bounded authorized inventory, not evaluator relevance labels. Its structured output selects existing source pairs and separately lists missing needs. Pair validation prevents invented subjects from being treated as available evidence. Missing needs have `unavailable: true` and cannot accidentally match existing claims. The resulting recorded NeedPlan uses the same compiler as the rules and oracle controls. Replay is reproducible from the plan and snapshot, not from independently rerunning a model.
-
-Every critical matched claim must fit as a whole. If the required packet exceeds the byte budget, no partial critical values are injected and the trace reports `insufficient_context`. Optional claims can be excluded with recorded reasons. Missing critical needs produce `incomplete` and warnings; oracle needs do not imply perfect evidence.
-
-Projections carry IDs, values, attribution, evidence IDs, and validity. Original evidence can be inspected on demand. Projections never update the source database. Immediately before delivery, the selected IDs and authorized snapshot are revalidated. Rules/FTS delivery retries one changed snapshot with a fresh projection; repeated changes fail visibly. Inferred delivery does not automatically repeat an expensive local model call.
-
-Schema version 1 remains compatible. A reserved JSON quantity value stores numeric amount plus optional unit, currency, and period. Plain historical numbers retain their values and receive null quantity metadata in projections. Unknown fields are not completed from locale, evidence-adjacent guesses, or model preference. Reader guidance is derived policy, not another source of facts. The narrow currency-review helper flags references absent from projected numeric metadata; it does not certify sentences, bind every claim to evidence, or disambiguate dollar/yen symbols.
-
-Valid inferred plans are supplemented with the same bounded family rules, with `rule_supplements` counted in local usage. This recovers some catalogued omissions without pretending the model discovered a novel need. Malformed plans, inventory overflow, and model failures remain unavailable; the supplement is not a silent success fallback.
-
-## Trust and deletion
-
-Scope and database are fixed by owner startup arguments, not prompt content or MCP tool arguments. Agents can read and propose through MCP but cannot approve or withdraw facts there. The stdio server implements the tools subset of MCP's supported handshake-era revisions and explicitly negotiates 2025-06-18 with newer compatible clients. It does not claim to implement every newer protocol feature. [MCP lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle).
-
-Agent inspection is restricted to eligible current evidence; it cannot resurface revoked, superseded, expired, future, or hypothetical values by supplying an old ID. The owner CLI can explicitly inspect history. Already-delivered host copies remain outside the kernel's withdrawal boundary.
-
-Invalid tool arguments return `isError: true` and structured `status: unavailable` data with required fields and bounded retry guidance. A successful `empty` projection is distinct from a failed query. The model can still misuse an error; the contract and native checks reduce this risk without guaranteeing compliance. Hooks block visibly on unavailable or insufficient critical context rather than claiming no memory exists.
-
-These controls do not sandbox a process already able to read the database or run the owner CLI. Use separate OS users/permissions if that threat matters. The SQLite file is mode 0600 on POSIX; newly created leaf directories use 0700. The database is not encrypted. Credential-pattern rejection is only a guardrail, not secret detection certification.
-
-`forget` deletes all versions of the selected entity/property, orphan evidence and entities, and all same-scope proposals, plans, traces, retry markers, and operation metadata. A new event records only the removed count. SQLite `secure_delete` is enabled and the kernel uses a rollback journal, not a persistent WAL. Other scopes are untouched. This is managed-content deletion, not forensic erasure, remote-provider deletion, or backup cleanup.
-
-Malicious values cannot change scope, add tools, approve proposals, or gain authority through the kernel. That does not guarantee that a model will ignore their instructions while answering. Capability authorization and answer contamination are tested separately. The current contamination check is one synthetic probe, not a security certification.
+- Scope and database are fixed by the host configuration, never by prompts or tool arguments.
+- Binding is by process ancestry, recorded by the hook and matched by the server. It establishes which session a call can belong to; the token picks the turn. Neither is a cryptographic proof against a process that already runs as the same user.
+- Origin tagging (`interactive`, `continuation`, `unknown`) is conservative and heuristic. Only `interactive` turns can authorize deletions, promotions, or policy changes, and only when jev reads the recorded text as asking for that action on that fact.
+- Values are data. Reader rules say so, and malicious values cannot change scope, tools, or policy. That does not guarantee a model ignores them.
+- `forget` removes every version of the property, orphan evidence, and same-scope plans, traces, proposals, operations, retry markers, turns, and cached judgments. It leaves a tombstone. It does not reach host transcripts, backups, or anything already delivered.
+- The SQLite file is mode 0600 and not encrypted.
 
 ## Observability
 
-Projection traces contain no duplicate claim values or evidence fragments. Plans contain source keys and needs; failures contain controlled error messages/codes. Forgotten scope derivatives are invalidated rather than retained for audit convenience.
-
-`prepared` means compiled; `emitted` means locally written; `failed` records failed revalidation or an unavailable projection the hook declined to deliver. Hooks fail open by default: the envelope goes out with empty context and a `systemMessage`; `--fail-closed` blocks instead, and privacy commands always block. `host_attachment` remains `unknown`. Hook/MCP traces observe the projection, not the full host request. Local demo traces instead measure the complete known message payload, its hash and byte length, plus model-reported token counts. No host transcript is scraped to fabricate a full-request trace.
-
-Ollama calls have no proxy use or redirects and accept only loopback HTTP. Inventory, message bytes, message counts, output tokens, response bytes, and timeouts are bounded. Truncated output, invalid structured responses, context-boundary counts, overflow, or unavailability never become accepted facts. Input byte ceilings are conservative controls, not exact tokenizer accounting.
+Traces record ids, reasons, exclusions, warnings, per-pair probabilities, cache hits, latency, and delivery state. They never record values or evidence. `memory metrics` reports capture outcomes by reason, which yields precision proxies (undo, quarantine) and coverage proxies (omitted, missed). The Stop receipt tells the user, in one line, what was saved, what is held, and what needs a yes. It also says when a requested forget did not happen.

@@ -1,46 +1,51 @@
-# v0.3 implementation plan
+# v0.4 plan and status
 
-This is the canonical English plan for this repository. Earlier conversation documents are historical background, not additional active instructions. The objective is a useful local kernel: register, correct, use current evidence in another session, inspect it, and withdraw it. It is not a paid API evaluation campaign or a universal memory platform.
+This is the canonical plan for the repository. The goal comes from the public hypothesis that started it: continuity across conversations and agents. Connect recommendations to the assumptions behind them, flag what needs review when an assumption changes, and do it without making the user maintain another layer of documentation. v0.3 proved the mechanism with owner commands. v0.4 removes the commands.
 
-## Delivered scope
+## Principles
 
-1. Scoped transactional SQLite state, attributed evidence, temporal queries, explicit corrections, revocation, and managed forgetting.
-2. An owner CLI with readable/JSON output, exact aliases, typed relations, proposals, approval/rejection, and atomic delivery transitions.
-3. Recorded NeedPlans, authorized FTS baseline, optional local Qwen planning, missing-evidence diagnostics, and bounded derived projections.
-4. Metadata-only projection/operation logs, pre-delivery revalidation, visible failures, and truthful observability boundaries.
-5. Codex and Claude prompt-hook adapters, a local MCP tool interface, and an Antigravity MCP configuration generator.
-6. Deterministic regression, subprocess contracts, injected Ollama failures, official SDK interoperability, an optional local model demo, and native Codex CLI MCP checks with recorded failures.
-7. English/Spanish selection and bounded proposal grammar, entity/alias narrowing, scoped containment ancestors, explicit quantities, structured unavailable/error results, and bounded pre-delivery revalidation retry.
-8. Owner-declared `depends_on` links between statement versions, query-time staleness, `review_required` projections that deliver the changed assumption with the stale decision, and `reaffirm`.
-9. Optional calibrated selection through the `jev` command line with per-pair traced probabilities and rules fallback; fail-open prompt hooks with `--fail-closed`; a delivery snapshot limited to the selected pairs; single-query record loading; a native Claude Code headless check.
+- No second LLM. The host agent extracts; jev judges; the kernel decides.
+- Judgments are signals for a policy. Correctness, authorization, and session origin are separate checks.
+- Autonomy within categories the user allowed for a scope, not approval per memory. Reversible is not a licence to store anything.
+- Writes and deletions are bound outside the model: a hook-issued token, a session bound to the server's host process, and a typed turn whose text asks for it.
+- Selection fails open, writes fail closed, and memory text never goes to a hosted judge unless the scope allows it.
+- Thresholds are measured, not guessed.
 
-Hooks do not authenticate human origin. Therefore the implementation narrows automatic ingestion to read-only operation by default, with opt-in proposal capture. Accepted changes require the owner CLI. Negation is supported in values and bounded delivery transitions; free-form extraction cannot certify semantics.
+## Delivered
 
-## Evidence questions
+| Phase | What the user stops doing by hand | Status |
+| --- | --- | --- |
+| 0 Plumbing | Nothing yet. Fewer judgments: cache, acknowledgement skip, plan reuse on retry | Done; schema v3, judge client, turns, binding, Ollama planner removed |
+| 1 Capture | `remember`, `correct`, approvals | Done; segmentation, categories, lattice, caps, quarantine, tombstones, do-not-remember, undo, receipts |
+| 2 Chat tools | `list`, `inspect`, `forget`, `revoke`, `dependents`, `reaffirm`, policy | Done; validated against the recorded turn |
+| 3 Inferred dependencies | `depend` | Done; premises delivered or captured in the same turn; review notices without text |
+| 4 Calibration and decay | Periodic cleanup, guessing thresholds | Done; `calibrate --score`, confirmation by use, 180-day eligibility, 90-day digest |
+| 5 One experience, two components | Installing two things | Next: offer the kernel from jevmate as an experimental memory module, after a three-way comparison |
 
-The three outcomes the kernel is meant to move, as stated publicly: fewer repeated explanations, fewer recommendations based on outdated assumptions, less work correcting the assistant. `context_kernel.demo` reports them as fixture-level counts under `metrics`; the reader-side count needs `--live`. They are measured on fictional fixtures and are not a benchmark.
+## Acceptance
 
-Can the planner discover a cross-domain constraint? Can a correction survive stale accumulated replies? Can retrieval avoid an irrelevant personal preference? These remain measured capabilities, not promises inferred from schemas.
+Unit and subprocess tests cover each phase with an in-memory judge and a fake `jev` executable. A local end-to-end smoke ran real processes: hook, bound MCP server, real jev capture, Stop inference. The native acceptance has five fresh `claude -p` sessions with no memory commands (`tests/native_claude_check.py`). It checks:
 
-Compare manual, inferred, and recorded oracle plans through the same compiler. If an oracle condition fails, first inspect which evidence was retrieved and delivered; use a direct sufficient-evidence reader control before blaming the model. A missing need remains missing, even when the planner identified it correctly.
+- the constraint is captured from conversation;
+- the recommendation is linked by inference;
+- the change is captured as a new version;
+- a fresh session flags the recommendation for review and the answer names the change;
+- asking to forget removes the fact;
+- a generic question carries no claims.
 
-The local history demo fixes three recipes before execution. Reconstruction retains the latest two prior user messages and latest assistant message in original order, then appends current projection and question. Accumulation retains the whole fixture history. Compaction encodes those same recent messages in a byte-limited JSON summary, without a gold-answer rewrite. All measure complete known local payloads. Results apply to these particular recipes, not all possible compaction strategies.
+The Codex walkthrough repeats the flow with the generated Codex bundle. Results are recorded in [verification](verification.md), including failures.
 
-The local fixture families include career, housing, deployment, gifts, and generic technical questions. They are small relevance probes, not a statistically representative held-out benchmark. The deterministic 120 scenario variants exercise state/retrieval invariants, not 120 exhaustive language or security tests.
+The "must-have" gate before widening from the `work` scope to personal scopes:
 
-## Acceptance gates
+- capture precision (undo and quarantine rates);
+- coverage (omitted and missed counts against gate estimates);
+- later usefulness (repeated explanations avoided, stale recommendations flagged, answers the owner corrected);
+- all three measured on real use, and the undo rate under about one in ten captures.
 
-- Dependency-free tests, CLI lifecycle, scope non-interference, proposal/alias ambiguity, temporal boundaries, and forgetting must pass.
-- The official MCP SDK must initialize, discover tools, retrieve, propose, observe an owner-approved correction, and handle a scoped error.
-- Real local Qwen results must be reported with misses, truncation, irrelevant selections, and missing evidence; no paid judge or API calls.
-- Native Codex CLI MCP was exercised in fresh fictional sessions with local Ollama and owner-authorized ChatGPT subscription access. The v0.2 subscription campaign passed its six functional checks and two controls. Local native Qwen still invented a currency and failed an abstention-format control. Earlier failed results remain historical evidence, and changed test protocols are not a controlled improvement benchmark. Automatic prompt-hook trust/activation and desktop history behavior remain pending. No global settings or unrelated workspaces are modified to simulate acceptance.
+## Phase 5: one experience, two components
 
-## What stays outside v0.3
+Context Kernel stays an independent component. It depends on a judgment client, not on the jevmate product. jevmate can be the thing people install, and offer the kernel as an experimental memory module with per-scope activation. Before that, compare jevmate alone, the kernel alone, and both on the same continuity tasks: repetitions, stale recommendations, added latency per turn, and manual maintenance. Consolidate only if both together win without adding wait or work. A shared repository is a maintenance decision for later.
 
-Cloud synchronization, bulk transcript ingestion, paid embeddings, automatic free-form fact promotion, unrestricted personal reasoning, inferred or generic dependency graphs (declared statement-to-statement links are in), cross-user authorization, autonomous policy learning, complete host-request replacement, and forensic/remote erasure. CCC stays a reference, not a runtime dependency.
+## Outside v0.4
 
-## Next release decisions
-
-Prefer `--strategy jev` over the rule families once its thresholds are tuned on the owner's inventory; the families remain the dependency-free fallback. Enable Qwen inference only where local relevance checks justify it. A pre-filter (jev or FTS top-K) before the Qwen planner is the way to lift its 5,000-byte inventory ceiling, not a larger context.
-
-Recheck native Codex MCP after v0.2 delivery and selection changes, preserving the earlier failed results. The new test protocol includes recovery guidance, a Spanish correction query, and an unforced generic turn; scores are not directly comparable with the earlier forced-tool protocol. Both prompt hooks are natively verified: Codex through the owner-trusted walkthrough in this checkout, Claude Code through the opt-in headless runner (`tests/native_claude_check.py`) and through live desktop sessions with the owner's real `work` scope. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.
+Cloud sync, bulk transcript ingestion, embeddings, a second generative extractor, inferred facts about third parties, cross-user authorization, autonomous policy learning, forensic or remote erasure.

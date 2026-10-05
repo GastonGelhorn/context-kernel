@@ -2,22 +2,79 @@
 
 Checked on 2026-10-05: macOS arm64, Python 3.14.3, SQLite 3.51.2 with FTS5, Ollama 0.34.4, and the existing `qwen3.5:9b` model. No model was downloaded and no paid model API was used.
 
-## Stable checks
+## v0.4 results
 
-```sh
-python3 -W error::ResourceWarning -m unittest discover -v
-python3 -m context_kernel.demo
-```
+Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama). No paid API was used for these checks.
 
-154 unit/integration tests passed. One parameterized regression includes 120 deterministic state/retrieval scenarios (15 variations of eight checks). These are not 120 independent language tasks or a claim of universal exhaustiveness. Six checks validate native evaluation authentication/command boundaries. The 36 new v0.2 checks cover bilingual relevance and proposal grammar, contextual versus generic questions, explicit/ambiguous entities, bounded containment, relation snapshot non-interference, quantities, bounded currency review, explicit unavailable/conflicted/clarification states, trace listing, empty-context minimum budgets, unused-index avoidance, project-work/career disambiguation, and pre-delivery retries.
+**Unit and subprocess suite.** 184 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
 
-Coverage includes attribution, temporal boundaries, future and immediate corrections, conflicting claims, excluded hypotheses, history, revocation, scoped non-interference, aliases and ambiguous references, managed forgetting, whole-claim byte budgets, deterministic plan replay, stale proposals, atomic delivery transitions, retry deduplication, pre-delivery changes, hook subprocess contracts, strict JSON, MCP transport recovery, and injected local model failures/limits.
+- turn tokens;
+- refusal of a server bound to another host process, and of unknown or expired tokens;
+- continuation and markup origins;
+- each row of the plan's message table:
+  - a project constraint without a first-person subject;
+  - a relation the user names;
+  - another person's allergy, held;
+  - a decision typed after a pasted log, captured, while the log's fact is held as `quoted_source`;
+  - an unaffirmed fact, rejected;
+  - "don't save it", which stores nothing;
+- instruction-shaped and oversized values;
+- a hosted judge, which stores nothing;
+- the trust lattice and a proposal instead of overriding a confirmed value;
+- undo only when asked;
+- caps counted as omissions;
+- a forget that lands during a slow capture, which wins;
+- forget, policy and confirmation only with the user's own words;
+- truthful receipts and missed-capture accounting;
+- acknowledgements that cost no judgment;
+- the 90-day digest and 180-day eligibility;
+- confirmation by restating;
+- the post's scenario with an empty memory. A premise stated in the same turn is linked by inference, and its later change flags the recommendation in a new projection, without its text;
+- the bundle for both clients;
+- additive migration from v1 and v2 databases.
 
-Ollama fault tests use a local HTTP fixture, not a remote service. Truncation, reported context-boundary input, oversized responses, redirects, HTTP failures, malformed plans, and request ceilings fail explicitly. Resource-warning-as-error checks found and fixed connection/HTTP-error cleanup issues.
+The Ollama/Qwen planner and its tests were removed.
 
-Editable package installation and the installed `memory --help` entry point also passed.
+**Official MCP SDK 2.3.0.** Negotiated 2025-06-18, listed the 16 tools with valid schemas, and retrieved scoped evidence without the private canary. It observed an owner-approved correction and read the inventory. It confirmed that a server no hook ever bound refuses `memory_capture` and `memory_forget` with a forged token.
 
-## Official MCP SDK
+**Local end-to-end smoke (real processes, real jev).** The steps:
+
+1. The prompt hook issued a token and asked for capture of "We have three months to deliver the checkout project. Should we rewrite its payment module?".
+2. A separate `serve` process accepted that token through process-ancestry binding.
+3. jev validated `checkout.deadline = three months` as `constraints`, and the fact was captured.
+4. The Stop hook reported the save and linked the recommendation in the reply to that fact.
+
+**Calibration with the kernel's own questions** (`memory calibrate KIND --score`, bilingual fixtures in `fixtures/calibration.jsonl`):
+
+| Judgment | Rows | Result |
+| --- | --- | --- |
+| The message asserts this fact (two-field state) | 30 | All 13 true rows score ≥ 0.762. False rows score ≤ 0.757, the highest being a question ("Who approves…?"). Default 0.75 keeps recall 1.0 with one false positive. [0.60, 0.75) is held as `uncertain`. |
+| The message states something worth keeping (1 - P(none)) | 20 | At P(none) < 0.15: recall 1.0, precision 0.91. The one false hit, "Please forget the checkout deadline.", is excluded by the forget check before the gate. |
+| The message asks to forget this fact | 6 | True rows 0.94 to 0.98, false rows ≤ 0.60. Default 0.70. |
+
+The same affirmed fixtures rendered as single candidates for `jev tune` separate worse: best threshold 0.58, ECE 0.29, eight rows within ±0.02 of the threshold. The kernel therefore calibrates with its own two-field question; the export for `jev tune` remains available. These are small authored sets, read as a trend, not a benchmark.
+
+**Gate behaviour measured on real prompts.** The instruction score is not a veto: "We have three months… Should we rewrite?" scored 0.82 on "instruction" while stating a fact. A generic question put P(none) at 0.27; fact-bearing messages put it at 0.04 or less. The gate is skipped for acknowledgements, question-only messages, generic questions and forget requests.
+
+**Prompt-hook latency** (ten stored facts, warm Ollama, subprocess with a minimal PATH):
+
+| Prompt | Time |
+| --- | --- |
+| cold question | 4.06 s |
+| fact plus question (gate and relevance) | 4.12 s |
+| the same question again (all judgments cached) | 0.33 s |
+
+**Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
+
+## Historical checks (v0.1 to v0.3)
+
+The sections below describe earlier versions. Their protocols differ, and they include the removed local Qwen planner.
+
+### Stable checks (v0.3)
+
+154 unit and integration tests passed at v0.3.
+
+### Official MCP SDK (v0.3)
 
 The test-only SDK is not a runtime dependency. To reproduce in an isolated environment:
 
@@ -29,7 +86,7 @@ work/mcp-check/bin/python -m tests.mcp_sdk_check
 
 SDK 2.3.0 negotiated the supported 2025-06-18 fallback, listed all five tools, validated their JSON schemas, retrieved only authorized evidence, created a pending proposal, observed an owner-approved correction in a subsequent call, inspected a trace, and handled a missing-statement tool error. This is a real cross-implementation check, not a full protocol conformance certificate. [Official SDK](https://github.com/modelcontextprotocol/python-sdk).
 
-## Real local Qwen
+### Real local Qwen (removed in v0.4)
 
 ```sh
 python3 -m context_kernel.demo --live --repetitions 1
@@ -59,7 +116,7 @@ Repetitions use temperature zero and a fixed seed; they are not independent tria
 
 Measured local calls varied from a few seconds to tens of seconds. Owner `project --strategy inferred` defaults to 45 seconds and permits an explicit timeout up to 60. Hooks remain capped at ten seconds, and use the fast rules selector by default. Byte ceilings and Ollama-reported counts are visible; no exact tokenizer preflight is claimed.
 
-## v0.2 results
+### v0.2 results
 
 The direct local demo passed four reader checks and all five selection checks. [v0.2 local results](v02-local-results.json). Career availability and the gift/allergy source each needed one deterministic rule supplement. The model alone did not demonstrate improved recall on these omissions. Housing and gift plans still marked missing task evidence; successful relevance selection does not establish sufficient context for a final decision.
 
@@ -84,7 +141,7 @@ Subscription session wall time totaled 126.774 seconds; usage events reported 18
 
 The separate prompt-hook pilot was prepared with fictional data and no proposal capture. Project-file and invocation-inline probes without user configuration emitted no kernel projection and answered UNKNOWN; they did not verify automatic attachment or establish a specific skip reason. The hook still requires the owner's normal project/definition review. Hooks are enabled by default in the installed CLI; no bypass or trust-state mutation was used. [Owner pilot instructions](hook-pilot.md), [official discovery/trust behavior](https://learn.chatgpt.com/docs/hooks#where-codex-looks-for-hooks).
 
-## v0.3 results
+### v0.3 results
 
 The direct local demo (`python3 -m context_kernel.demo --live --repetitions 1`, qwen3.5:9b) passed every check: three reader history conditions, the contamination probe, five selection probes (career and gift each still needed one rule supplement), and the new dependency fixture. [v0.3 local results](v03-local-results.json).
 
@@ -121,7 +178,7 @@ The owner then ran the Codex walkthrough: Codex CLI 0.160.0 (GPT-5.6-Sol, ChatGP
 
 Still pending: `jev tune` of the thresholds once the real inventory has enough labelled rows.
 
-## Native Codex CLI
+### Native Codex CLI
 
 The following paragraphs retain the historical v0.1 native results. Codex CLI 0.160.0 ran with invocation-specific MCP configuration in disposable fictional workspaces. Global configuration was not edited. Shell tools, apps, web search, and subagents were disabled. No hook-trust bypass was used. Every condition started a fresh ephemeral session.
 
@@ -158,7 +215,7 @@ python3 -m tests.native_codex_check --workspace /absolute/path/to/another/new/pi
 
 Use a new empty pilot for each run. The default uses the existing Ollama model and does not download it. Subscription mode requires an explicit model and refuses API-key authentication. Six sessions run by default; `--controls` adds two. These tests explicitly request memory use and do not establish autonomous relevance, statistical reliability, resistance to long accumulated desktop history, or complete ActiveRequestTrace visibility. Native CLI behavior is not proof of the exact model/settings of the current desktop chat.
 
-## Not yet verified
+### Not yet verified (v0.3)
 
 The automatic Codex prompt-hook and native Claude Code walkthrough still require the owner's normal project trust/approval step. Their hook envelopes were tested through subprocesses; native Codex MCP testing does not verify automatic hook injection. Antigravity was not installed here. Its adapter follows official MCP configuration, but native activation is unverified.
 
