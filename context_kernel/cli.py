@@ -2,7 +2,6 @@
 
 import argparse
 import json
-from pathlib import Path
 import sqlite3
 import sys
 
@@ -12,6 +11,10 @@ from .compiler import Compiler
 from .planner import NeedPlan, Ollama
 from .protocol import parse_json, read_event
 from .store import Store
+
+
+class DeliveryError(KernelError):
+    """The hook envelope was written, but its trace update failed."""
 
 
 def parser():
@@ -131,7 +134,10 @@ def execute(args, store):
     response, projection_id = hook_response(event, args.workspace, store, compiler, args.strategy, args.proposals)
     # "Emitted" means this process wrote the envelope, never host acknowledgement.
     print(canonical(response), flush=True)
-    store.mark_emitted(projection_id)
+    try:
+        store.mark_emitted(projection_id)
+    except (KernelError, sqlite3.Error, OSError) as exc:
+        raise DeliveryError("Memory trace update failed after output. Delivery confirmation is unavailable; retry after checking local storage.") from exc
     return None
 
 
@@ -152,6 +158,9 @@ def main(argv=None):
         return 0
     except (KernelError, sqlite3.Error, OSError) as exc:
         message = str(exc) if isinstance(exc, KernelError) else "Local storage or process I/O failed."
+        if isinstance(exc, DeliveryError):
+            print(message, file=sys.stderr)
+            return 2  # Block visibly without corrupting stdout with a second JSON envelope.
         if store is not None:
             try:
                 store.record_failure(args.command)

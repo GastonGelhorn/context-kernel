@@ -3,7 +3,6 @@
 from collections import defaultdict
 from contextlib import closing
 from dataclasses import dataclass
-import json
 import re
 import sqlite3
 import time
@@ -83,6 +82,16 @@ class Compiler:
                 reasons.setdefault(record_id, "lexical_match")
         by_id = {r["id"]: r for r in records}
         ordered = sorted(selected, key=lambda i: (i not in critical, -scores.get(i, 0), i))
+        deduplicated, duplicates, seen = [], {}, set()
+        for i in ordered:
+            row = by_id[i]
+            identity = canonical((row["entity_key"], row["predicate"], row["value"], row["source_kind"]))
+            if identity in seen:
+                duplicates[i] = "duplicate_evidence_value"
+            else:
+                seen.add(identity)
+                deduplicated.append(i)
+        ordered = deduplicated
         conflicts = defaultdict(set)
         for i in ordered:
             row = by_id[i]
@@ -102,7 +111,7 @@ class Compiler:
                     "value": row["value"], "attribution": row["source_kind"], "evidence_id": row["evidence_id"],
                     "valid_from": row["valid_from"], "valid_until": row["valid_until"]}
 
-        included, excluded = [], {}
+        included, excluded = [], dict(duplicates)
         required_packet = packet | {"claims": [entry(by_id[i]) for i in ordered if i in critical]}
         status = "ok"
         if len(canonical(required_packet).encode()) > self.budget:

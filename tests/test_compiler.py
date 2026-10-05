@@ -55,6 +55,14 @@ class CompilerTests(unittest.TestCase):
         result = self.compiler.project("Aurora", strategy="fts")
         self.assertEqual(result.trace["selected"], [row["id"]])
 
+    def test_equal_claims_render_once_without_deleting_provenance(self):
+        for _ in range(3):
+            self.add("salary", 42000)
+        projection = self.compiler.project("My salary")
+        self.assertEqual(len(projection.trace["selected"]), 1)
+        self.assertEqual(list(projection.trace["excluded"].values()), ["duplicate_evidence_value"] * 2)
+        self.assertEqual(len(self.store.records()), 3)
+
     def test_hidden_corpus_does_not_change_scores_or_snapshot(self):
         self.add("project_status", "Aurora active")
         before = self.compiler.project("Aurora", strategy="fts")

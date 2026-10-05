@@ -300,14 +300,18 @@ class Store:
         return {"status": "forgotten", "removed_count": len(ids),
                 "limits": "Host history, external backups, and forensic disk erasure are not covered."}
 
-    def propose(self, operation, payload):
-        if operation not in {"remember", "correct", "transition"} or not isinstance(payload, dict):
+    def propose(self, operation, payload, event_id=None):
+        if not isinstance(operation, str) or operation not in {"remember", "correct", "transition"} or not isinstance(payload, dict):
             raise KernelError("Unsupported memory proposal.")
         payload = dict(payload)
-        allowed = {"entity", "predicate", "value", "evidence", "valid_from", "valid_until"} if operation == "remember" else {"target_id", "value", "evidence", "valid_from", "valid_until"} if operation == "correct" else {"entity", "event", "evidence"}
+        contracts = {
+            "remember": ({"entity", "predicate", "value", "evidence", "valid_from", "valid_until"}, {"entity", "predicate", "value"}),
+            "correct": ({"target_id", "value", "evidence", "valid_from", "valid_until"}, {"target_id", "value"}),
+            "transition": ({"entity", "event", "evidence"}, {"entity", "event", "evidence"}),
+        }
+        allowed, required = contracts[operation]
         if set(payload) - allowed:
             raise KernelError("Proposal has unsupported fields.")
-        required = {"entity", "predicate", "value"} if operation == "remember" else {"target_id", "value"} if operation == "correct" else {"entity", "event", "evidence"}
         if not required <= set(payload):
             raise KernelError("Proposal is missing required fields.")
         if operation == "remember":
@@ -317,7 +321,7 @@ class Store:
             self._row(payload.get("target_id"))
         if operation == "transition":
             entity = key(payload["entity"], "entity")
-            if payload["event"] not in {"ordered", "not_arrived", "arrived", "returned"}:
+            if not isinstance(payload["event"], str) or payload["event"] not in {"ordered", "not_arrived", "arrived", "returned"}:
                 raise KernelError("Unsupported delivery transition.")
             if payload["event"] != "ordered":
                 self.resolve_entity(entity)
@@ -327,8 +331,12 @@ class Store:
         reject_secrets(encoded)
         proposal_id = identifier()
         with self.db:
+            if event_id and self.db.execute("SELECT 1 FROM processed_events WHERE scope=? AND event_id=?", (self.scope, event_id)).fetchone():
+                return None
             self.db.execute("INSERT INTO proposals VALUES(?,?,?,?,?,?)",
                             (proposal_id, self.scope, operation, encoded, "pending", self.clock()))
+            if event_id:
+                self.db.execute("INSERT INTO processed_events VALUES(?,?)", (self.scope, event_id))
             self._event("propose", {"proposal_id": proposal_id})
         return {"id": proposal_id, "status": "pending", "operation": operation}
 

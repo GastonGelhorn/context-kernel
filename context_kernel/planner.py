@@ -34,7 +34,7 @@ class NeedPlan:
     def from_dict(cls, value):
         if not isinstance(value, dict) or set(value) - {"needs", "strategy", "warnings", "version"}:
             raise KernelError("Invalid need plan fields.")
-        if value.get("version", 1) != 1:
+        if type(value.get("version", 1)) is not int or value.get("version", 1) != 1:
             raise KernelError("Unsupported need plan version.")
         raw_needs = value.get("needs")
         if not isinstance(raw_needs, list) or len(raw_needs) > 16:
@@ -57,10 +57,10 @@ class NeedPlan:
             needs.append(Need(tuple(key(p, "predicate") for p in predicates),
                               tuple(key(e, "entity") for e in entities), critical, unavailable))
         warnings = value.get("warnings", [])
-        if not isinstance(warnings, list) or any(w not in {"clarification_required", "unknown_task", "planner_failed", "inventory_overflow"} for w in warnings):
+        if not isinstance(warnings, list) or any(not isinstance(w, str) or w not in {"clarification_required", "unknown_task", "planner_failed", "inventory_overflow"} for w in warnings):
             raise KernelError("Invalid plan warning codes.")
         strategy = value.get("strategy", "recorded")
-        if strategy not in {"rules", "fts", "inferred", "oracle", "recorded"}:
+        if not isinstance(strategy, str) or strategy not in {"rules", "fts", "inferred", "oracle", "recorded"}:
             raise KernelError("Invalid plan strategy.")
         return cls(tuple(needs), strategy, tuple(warnings))
 

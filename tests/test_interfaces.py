@@ -2,13 +2,17 @@ import io
 import json
 from pathlib import Path
 import subprocess
+import sqlite3
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 from context_kernel.adapters import configuration, hook_response, propose_command
 from context_kernel.common import KernelError, canonical
 from context_kernel.compiler import Compiler
+from context_kernel.cli import main
 from context_kernel.mcp import Server, serve
 from context_kernel.protocol import parse_json, read_event
 from context_kernel.store import Store
@@ -136,6 +140,26 @@ class InterfaceTests(unittest.TestCase):
         self.assertTrue(response["result"]["isError"])
         self.assertFalse(self.call(server, "memory_status")["result"]["isError"])
 
+    def test_mcp_inspect_cannot_resurface_withdrawn_or_historical_values(self):
+        server = self.ready()
+        revoked = self.store.remember("user", "note", "Withdrawn Canary", "Withdrawn Canary")
+        self.store.revoke(revoked["id"])
+        expired = self.store.remember("user", "note", "Expired Canary", "Expired Canary", valid_from="2020-01-01", valid_until="2020-01-02")
+        hypothesis = self.store.remember("user", "note", "Guessed Canary", "Guessed Canary", assertion_kind="hypothesis")
+        for row in (revoked, expired, hypothesis):
+            response = self.call(server, "memory_inspect", {"id": row["id"]})
+            self.assertTrue(response["result"]["isError"])
+            self.assertNotIn(row["value"], canonical(response))
+            self.assertEqual(self.store.inspect(row["id"])["value"], row["value"])
+
+    def test_invalid_proposal_shapes_fail_without_partial_writes(self):
+        for operation, payload in [([], {}), ("transition", {"entity": "laptop", "event": [], "evidence": "Ordered"}),
+                                   ("transition", {"entity": "laptop", "event": {}, "evidence": "Ordered"}),
+                                   ("remember", {"entity": "user", "predicate": "note", "value": "x", "target_id": "ignored"})]:
+            with self.assertRaises(KernelError):
+                self.store.propose(operation, payload)
+        self.assertEqual(self.store.proposals(), [])
+
     def test_stdio_only_contains_jsonrpc_and_marks_emitted(self):
         self.store.remember("user", "salary", 42000, "Annual salary")
         requests = [
@@ -189,6 +213,23 @@ class InterfaceTests(unittest.TestCase):
         process = self.run_cli("hook", "--client", "codex", "--workspace", str(self.workspace), stdin="not json")
         self.assertEqual(process.returncode, 0)
         self.assertEqual(json.loads(process.stdout)["decision"], "block")
+
+    def test_post_output_log_failure_never_writes_second_json_envelope(self):
+        event = canonical({"prompt": "Explain SQLite", "cwd": str(self.workspace)})
+        stdout, stderr = io.StringIO(), io.StringIO()
+        with patch("context_kernel.cli.Store", return_value=self.store), patch.object(self.store, "mark_emitted", side_effect=sqlite3.OperationalError()), \
+                patch("sys.stdin", SimpleNamespace(buffer=io.BytesIO(event.encode()))), patch("sys.stdout", stdout), patch("sys.stderr", stderr):
+            code = main(["hook", "--client", "codex", "--workspace", str(self.workspace)])
+        self.assertEqual(code, 2)
+        self.assertEqual(len(stdout.getvalue().splitlines()), 1)
+        self.assertIn("hookSpecificOutput", json.loads(stdout.getvalue()))
+        self.assertIn("trace update failed", stderr.getvalue())
+
+    def test_proposal_and_retry_marker_roll_back_together(self):
+        self.store.db.execute("CREATE TEMP TRIGGER fail_marker BEFORE INSERT ON processed_events BEGIN SELECT RAISE(ABORT, 'fixture'); END")
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.store.propose("remember", {"entity": "user", "predicate": "note", "value": "x"}, event_id="test")
+        self.assertEqual(self.store.proposals(), [])
 
     def test_scope_isolation_via_separate_cli_process(self):
         self.store.remember("user", "constraint", "Private Canary", "Private Canary")

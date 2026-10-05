@@ -20,7 +20,7 @@ STRING = {"type": "string", "minLength": 1, "maxLength": 16384}
 TOOLS = [
     {"name": "memory_context", "description": "Get current scoped evidence for a question. Empty context is valid; warnings mean incomplete evidence.",
      "inputSchema": schema({"query": STRING}, ["query"])},
-    {"name": "memory_inspect", "description": "Inspect a scoped statement and its original evidence, including historical state.",
+    {"name": "memory_inspect", "description": "Inspect current scoped evidence. Withdrawn/history records are available only through the owner CLI.",
      "inputSchema": schema({"id": STRING}, ["id"])},
     {"name": "memory_status", "description": "Inspect counts in this server's fixed scope.", "inputSchema": schema()},
     {"name": "memory_why", "description": "Explain a previously prepared projection using its metadata-only trace.",
@@ -75,7 +75,10 @@ class Server:
             return {"projection_id": projection.id, "context": parse_json(projection.content) if projection.content else None,
                     "trace": projection.trace, "plan": projection.plan.to_dict()}
         if name == "memory_inspect":
-            return self.store.inspect(arguments["id"])
+            record = self.store.inspect(arguments["id"])
+            if record["effective_state"] != "active" or record["assertion_kind"] not in {"user_statement", "observed"}:
+                raise KernelError("Statement is not eligible for agent access. Use the owner CLI for history.")
+            return record
         if name == "memory_status":
             return self.store.status()
         if name == "memory_why":
