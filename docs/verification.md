@@ -92,7 +92,21 @@ The scenario replayed through the kernel with the real jev and the same drifting
 2. the session-1 recommendation was linked;
 3. session 3 returned `review_required` with the recommendation's id, and only the current "three weeks" was delivered.
 
-The native rerun is pending.
+**Second native run (same setup, after the fixes): 8 of 9 pre-registered checks.**
+
+| Session | What happened (read from the kernel database, not from the model) |
+| --- | --- |
+| 1 | Captured `checkout_project.delivery_timeline = three months`. The answer, "Probably not: with three months to deliver, a full rewrite… is high-risk", was judged a recommendation and linked to that fact. |
+| 2 | "We now have three weeks" became a second version of the same pair: one pair, two versions, current "three weeks". The recommendation became stale. |
+| 3 | A fresh session got `review_required` with the recommendation's id. Answer: "That plan needs a second look: I recommended against a full rewrite… but that advice assumed three months to deliver, and I've since recorded the timeline as three weeks (from an earlier message you haven't confirmed)…" |
+| 4 | "Please forget the checkout deadline." deleted both versions after validation against the typed message. |
+| 5 | The generic question carried no claims. All five sessions were bound. |
+
+The one failing check, "the answer names the change", is a keyword false negative. The answer above names both values and asks for a second look, but contains none of the words the check looked for (review, revis, reconsider, changed, no longer). The keyword list was broadened afterwards (second look, assumed, re-examine, re-evaluate). Read the result as 8 of 9 by the criteria fixed before the run.
+
+The model's answer also honoured the captured-claim rule: it called the three weeks "from an earlier message you haven't confirmed". Projections took 0.37 to 0.40 s per prompt.
+
+The run exposed a privacy gap, now fixed. After forgetting the timeline, the two inferred recommendations stayed in the database without links, and the first one's text quoted the forgotten "three months". `forget` now deletes inferred recommendations that rested on any version of the forgotten property. A test checks that the database dump no longer contains the value. The user's own linked statements stay, without their links.
 
 **Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 

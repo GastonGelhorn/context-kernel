@@ -121,7 +121,8 @@ def run(claude, workspace, model=None, strategy="jev", jev_command="jev"):
             "fresh_session_projection_requires_review": third["last_trace"].get("status") == "review_required"
                                                          or "review_recommended" in third["last_trace"].get("warnings", []),
             "fresh_session_answer_names_the_change": ("week" in answer or "semana" in answer)
-                                                     and any(w in answer for w in ("review", "revis", "reconsider", "changed", "no longer")),
+                                                     and any(w in answer for w in ("review", "revis", "reconsider", "changed", "no longer",
+                                                                                   "second look", "assumed", "re-examin", "re-evaluat")),
             "forget_removed_the_deadline": not fourth["deadline"],
             "generic_question_carried_no_claims": not fifth["last_trace"].get("selected"),
             "sessions_bound": fifth["sessions"] >= len(PHASES),

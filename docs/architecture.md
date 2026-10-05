@@ -76,7 +76,7 @@ Declared links (owner CLI, `memory_depend`) and inferred links behave the same w
 - Binding is by process ancestry, recorded by the hook and matched by the server. It establishes which session a call can belong to; the token picks the turn. Neither is a cryptographic proof against a process that already runs as the same user.
 - Origin tagging (`interactive`, `continuation`, `unknown`) is conservative and heuristic. Only `interactive` turns can authorize deletions, promotions, or policy changes, and only when jev reads the recorded text as asking for that action on that fact.
 - Values are data. Reader rules say so, and malicious values cannot change scope, tools, or policy. That does not guarantee a model ignores them.
-- `forget` removes every version of the property, orphan evidence, and same-scope plans, traces, proposals, operations, retry markers, turns, and cached judgments. It leaves a tombstone. It does not reach host transcripts, backups, or anything already delivered.
+- `forget` removes every version of the property, inferred recommendations that rested on it (their text can quote it), orphan evidence, and same-scope plans, traces, proposals, operations, retry markers, turns, and cached judgments. It leaves a tombstone. It does not reach host transcripts, backups, or anything already delivered.
 - The SQLite file is mode 0600 and not encrypted.
 
 ## Observability

@@ -347,6 +347,13 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(content["review"][0]["id"], recommendation["id"])
         self.assertNotIn("Recomiendo", projection.content)
 
+        # Forgetting the premise also removes the derived recommendation, whose text quotes it.
+        deadline = self.current("checkout", "deadline")[0]
+        self.assertEqual(self.store.forget(deadline["id"])["derived_removed"], 1)
+        dump = "\n".join(self.store.db.iterdump())
+        self.assertNotIn("tres meses", dump)
+        self.assertNotIn("three months", dump)
+
     def test_no_recommendation_means_no_inference(self):
         self.judge.ask_fn = answers(recommends=0.1)
         packet, event = self.prompt("Mi manager es Dani")

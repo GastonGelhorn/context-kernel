@@ -472,6 +472,16 @@ class Store:
             row = self._row(statement_id)
             ids = [r[0] for r in self.db.execute("SELECT id FROM statements WHERE scope=? AND entity_id=? AND predicate=?",
                                                 (self.scope, row["entity_id"], row["predicate"]))]
+            # Inferred recommendations that rested on any version are derived text that may quote the
+            # forgotten value ("with three months, don't rewrite"): they go too. The user's own
+            # statements that were linked to it stay; only their links are removed.
+            marks = ",".join("?" * len(ids))
+            derived = [r[0] for r in self.db.execute(f"""SELECT DISTINCT s.id FROM relations r JOIN statements s
+                ON s.id=r.from_statement WHERE r.scope=? AND r.kind='depends_on' AND s.assertion_kind='inference'
+                AND r.to_statement IN ({marks})""", (self.scope, *ids))]
+            if derived:
+                self.db.execute(f"DELETE FROM statements WHERE scope=? AND id IN ({','.join('?' * len(derived))})",
+                                (self.scope, *derived))
             # Remove every version of this property, including revoked versions.
             self.db.execute("UPDATE statements SET superseded_by=NULL WHERE scope=? AND entity_id=? AND predicate=?",
                             (self.scope, row["entity_id"], row["predicate"]))
@@ -486,8 +496,8 @@ class Store:
             # A tombstone stops any write already in flight (a slow capture or inference) whose
             # evidence predates this request from bringing the property back.
             self._tombstone(row["entity_key"], row["predicate"])
-            self._event("forget", {"removed_count": len(ids)})
-        return {"status": "forgotten", "removed_count": len(ids),
+            self._event("forget", {"removed_count": len(ids), "derived_removed": len(derived)})
+        return {"status": "forgotten", "removed_count": len(ids), "derived_removed": len(derived),
                 "limits": "Host history, external backups, and forensic disk erasure are not covered."}
 
     def propose(self, operation, payload, event_id=None):
