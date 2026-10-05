@@ -96,7 +96,7 @@ Fixture-level metrics reported by the demo: 2 of 2 facts delivered in a fresh se
 
 Hooks were switched to fail open. The subprocess contract was re-verified for both clients: an unreadable event yields an empty-context envelope with a `systemMessage`, `--fail-closed` yields `decision: block`, and a `Forget:` prompt blocks in both modes.
 
-Not run here: the native Claude Code headless check (`tests/native_claude_check.py`) and the owner-trusted Codex hook walkthrough both use the owner's sign-in and quota and were left for the owner to start.
+The owner ran the native Claude Code check (Claude Code 2.1.287, `claude -p`, rules strategy) in a fresh pilot directory. The hook fired in all six headless sessions: one emitted projection per prompt, with the expected statuses (`empty`, `ok`, `ok`, `review_required`, `review_required`, `empty`). This is the first native confirmation that a project-local `.claude/settings.local.json` hook delivers the kernel's context without any global setting or permission bypass. The model answers were not obtained: the CLI's OAuth session had expired and every call returned an authentication error, so evidence use by the model remains unverified in Claude Code. The runner now stops at the first authentication failure. The owner-trusted Codex hook walkthrough is still pending.
 
 ## Native Codex CLI
 

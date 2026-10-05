@@ -76,6 +76,9 @@ def run(claude, workspace, model=None, strategy="rules"):
             result["passed"] = bool(emitted) and result["exit_code"] == 0 and (
                 check(answer) if check else expected.casefold() in answer.casefold())
             report["phases"].append(result)
+            if result["exit_code"] != 0 and "authenticate" in answer.casefold():
+                report["aborted"] = "Claude Code sign-in expired; run `claude` and `/login`, then start a new pilot directory."
+                raise KernelError(report["aborted"])
             return result
 
         phase("empty_memory", QUESTION, "UNKNOWN")
@@ -94,12 +97,16 @@ def run(claude, workspace, model=None, strategy="rules"):
         phase("forgotten_approver_fresh_session", QUESTION, "UNKNOWN")
         phase("generic_question_no_personal_context", "Explain what a SQLite primary key is in one sentence. Do not use tools.",
               check=lambda a: "nyra" not in a.casefold() and "orin" not in a.casefold() and "three weeks" not in a.casefold())
-        report["passed"] = all(p["passed"] for p in report["phases"])
-        report["wall_seconds"] = round(sum(p["duration_seconds"] for p in report["phases"]), 3)
-        report["cost_usd_reported"] = [p.get("cost_usd") for p in report["phases"]]
-        return report
+    except KernelError:
+        if "aborted" not in report:
+            raise
     finally:
         store.close()
+    report["passed"] = "aborted" not in report and all(p["passed"] for p in report["phases"])
+    report["hook_emitted_in_every_session"] = bool(report["phases"]) and all(p["emitted_projections"] == 1 for p in report["phases"])
+    report["wall_seconds"] = round(sum(p["duration_seconds"] for p in report["phases"]), 3)
+    report["cost_usd_reported"] = [p.get("cost_usd") for p in report["phases"]]
+    return report
 
 
 def main():
