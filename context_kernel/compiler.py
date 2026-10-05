@@ -7,7 +7,7 @@ import sqlite3
 import time
 
 from .common import KernelError, canonical, digest, identifier, text, timestamp
-from .planner import NeedPlan, infer_plan, rules_plan
+from .planner import NeedPlan, infer_plan, jev_plan, rules_plan
 from .language import query_terms
 
 
@@ -56,10 +56,10 @@ class Projection:
 
 
 class Compiler:
-    def __init__(self, store, budget=2048, ollama=None):
+    def __init__(self, store, budget=2048, ollama=None, jev=None):
         if not 256 <= budget <= 16384:
             raise KernelError("Projection byte budget must be between 256 and 16384.")
-        self.store, self.budget, self.ollama = store, budget, ollama
+        self.store, self.budget, self.ollama, self.jev = store, budget, ollama, jev
 
     def project(self, query, strategy="rules", plan=None, as_of=None):
         started = time.perf_counter()
@@ -73,6 +73,10 @@ class Compiler:
                 if self.ollama is None:
                     raise KernelError("Inferred planning requires a local Ollama client.")
                 plan, usage = infer_plan(query, records, self.ollama, relations)
+            elif strategy == "jev":
+                if self.jev is None:
+                    raise KernelError("jev selection requires a configured jev client.")
+                plan, usage = jev_plan(query, records, self.jev, relations)
             elif strategy == "fts":
                 plan = NeedPlan(strategy="fts")
             elif strategy == "rules":

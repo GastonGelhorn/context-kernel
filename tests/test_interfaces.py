@@ -209,9 +209,18 @@ class InterfaceTests(unittest.TestCase):
             self.assertEqual(process.returncode, 0, process.stderr)
             self.assertEqual(json.loads(process.stdout)["hookSpecificOutput"]["additionalContext"], "")
 
-    def test_hook_subprocess_invalid_event_blocks_visibly(self):
+    def test_hook_subprocess_invalid_event_fails_open_unless_closed(self):
         process = self.run_cli("hook", "--client", "codex", "--workspace", str(self.workspace), stdin="not json")
         self.assertEqual(process.returncode, 0)
+        output = json.loads(process.stdout)
+        self.assertEqual(output["hookSpecificOutput"]["additionalContext"], "")
+        self.assertIn("unavailable", output["systemMessage"])
+        process = self.run_cli("hook", "--client", "claude", "--workspace", str(self.workspace), "--fail-closed", stdin="not json")
+        self.assertEqual(json.loads(process.stdout)["decision"], "block")
+
+    def test_privacy_command_blocks_even_when_failing_open(self):
+        event = canonical({"prompt": "Forget: user.salary", "cwd": str(self.workspace)})
+        process = self.run_cli("hook", "--client", "codex", "--workspace", str(self.workspace), stdin=event)
         self.assertEqual(json.loads(process.stdout)["decision"], "block")
 
     def test_post_output_log_failure_never_writes_second_json_envelope(self):

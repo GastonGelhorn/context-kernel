@@ -1,9 +1,11 @@
-"""Recorded evidence needs and bounded local inference."""
+"""Recorded evidence needs, bounded local inference, and calibrated jev relevance."""
 
 from dataclasses import asdict, dataclass
 import ipaddress
 import json
 import re
+import subprocess
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -11,6 +13,10 @@ import urllib.request
 from .common import KernelError, canonical, key, text
 from .protocol import parse_json
 from .language import ambiguous_entity_reference, fold, mentioned_entities, predicate_name, related_entities
+
+
+WARNING_CODES = {"clarification_required", "unknown_task", "planner_failed", "inventory_overflow", "jev_unavailable"}
+STRATEGIES = {"rules", "fts", "inferred", "jev", "oracle", "recorded"}
 
 
 @dataclass(frozen=True)
@@ -58,10 +64,10 @@ class NeedPlan:
             needs.append(Need(tuple(key(p, "predicate") for p in predicates),
                               tuple(key(e, "entity") for e in entities), critical, unavailable))
         warnings = value.get("warnings", [])
-        if not isinstance(warnings, list) or any(not isinstance(w, str) or w not in {"clarification_required", "unknown_task", "planner_failed", "inventory_overflow"} for w in warnings):
+        if not isinstance(warnings, list) or any(not isinstance(w, str) or w not in WARNING_CODES for w in warnings):
             raise KernelError("Invalid plan warning codes.")
         strategy = value.get("strategy", "recorded")
-        if not isinstance(strategy, str) or strategy not in {"rules", "fts", "inferred", "oracle", "recorded"}:
+        if not isinstance(strategy, str) or strategy not in STRATEGIES:
             raise KernelError("Invalid plan strategy.")
         return cls(tuple(needs), strategy, tuple(warnings))
 
@@ -263,3 +269,88 @@ def infer_plan(query, records, ollama, relations=()):
         return NeedPlan(strategy="inferred", warnings=("planner_failed",)), {"calls": 1, "failure": str(exc)}
     except (ValueError, TypeError):
         return NeedPlan(strategy="inferred", warnings=("planner_failed",)), {"calls": 1, "failure": "Invalid planner response."}
+
+
+class Jev:
+    """Calibrated relevance from the `jev` command line (jevmate), run as a subprocess.
+
+    Opt-in like Ollama. jev's own configuration decides where the authorized inventory goes:
+    a local backend keeps it on this machine; a hosted backend sends it to that vendor and
+    costs money. The kernel never configures, installs, or authenticates jev.
+    """
+
+    QUESTION = "Is `candidate` a fact that someone answering `query` must take into account?"
+
+    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None):
+        if not isinstance(command, str) or not command.strip() or "\0" in command:
+            raise KernelError("Invalid jev command.")
+        if not 0 < timeout <= 60:
+            raise KernelError("jev timeout must be 1-60 seconds.")
+        if not (0 < supporting <= critical <= 1):
+            raise KernelError("jev thresholds must satisfy 0 < supporting <= critical <= 1.")
+        self.command, self.timeout = command, timeout
+        self.critical, self.supporting = critical, supporting
+        self.question = text(question or self.QUESTION, 1024)
+
+    def rank(self, query, candidates):
+        """P(must take into account) per candidate line; the index is positional."""
+        if not isinstance(candidates, list) or not 1 <= len(candidates) <= 500:
+            raise KernelError("jev accepts 1-500 candidates per call.")
+        if any("\n" in c for c in candidates):
+            raise KernelError("jev candidates must be single lines.")
+        started = time.perf_counter()
+        try:
+            process = subprocess.run([self.command, "rank", "--json", "--query", query, "--instructions", self.question],
+                                     input="\n".join(candidates) + "\n", capture_output=True, text=True,
+                                     timeout=self.timeout)
+        except (OSError, subprocess.SubprocessError) as exc:
+            raise KernelError("jev is unavailable or timed out.") from exc
+        if process.returncode != 0:
+            # stderr may describe the configuration; never the inventory. Keep the code only.
+            raise KernelError(f"jev exited with status {process.returncode}.")
+        result = parse_json(process.stdout)
+        rows = result.get("results") if isinstance(result, dict) else None
+        if not isinstance(rows, list):
+            raise KernelError("Invalid jev response.")
+        scores = {}
+        for row in rows:
+            index, p = row.get("i") if isinstance(row, dict) else None, row.get("p") if isinstance(row, dict) else None
+            if type(index) is not int or not 0 <= index < len(candidates) or type(p) not in {int, float} or not 0 <= p <= 1:
+                raise KernelError("Invalid jev response.")
+            scores[index] = float(p)
+        usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
+        return scores, {"input_tokens": usage.get("input_tokens"), "requests": result.get("requests"),
+                        "jev_ms": result.get("ms"), "latency_ms": round((time.perf_counter() - started) * 1000, 3)}
+
+
+def jev_candidate(entity, predicate, values):
+    rendered = " | ".join(v if isinstance(v, str) else canonical(v) for v in values)
+    return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()
+
+
+def jev_plan(query, records, jev, relations=()):
+    """Every authorized entity/property pair is judged against the question; the plan keeps the
+    pairs above the supporting threshold, critical above the critical one. jev failures fall back
+    to the rules plan with a visible warning: a judgment service outage must not hide memory."""
+    if generic_question(query, records):
+        return NeedPlan(strategy="jev"), {"calls": 0}
+    if ambiguous_entity_reference(query, records):
+        return NeedPlan(strategy="jev", warnings=("clarification_required",)), {"calls": 0}
+    pairs = {}
+    for row in records:
+        pairs.setdefault((row["entity_key"], row["predicate"]), []).append(row["value"])
+    keys = sorted(pairs)
+    if not keys:
+        return NeedPlan(strategy="jev"), {"calls": 0}
+    try:
+        scores, usage = jev.rank(query, [jev_candidate(e, p, pairs[(e, p)]) for e, p in keys])
+    except KernelError as exc:
+        fallback = rules_plan(query, records, relations)
+        return NeedPlan(fallback.needs, "jev", fallback.warnings + ("jev_unavailable",)), {"calls": 1, "failure": str(exc)}
+    ranked = sorted(((scores.get(i, 0.0), e, p) for i, (e, p) in enumerate(keys)), key=lambda t: (-t[0], t[1], t[2]))
+    needs = tuple(Need((p,), (e,), critical=score >= jev.critical)
+                  for score, e, p in ranked if score >= jev.supporting)[:16]
+    # Scores are keyed by source pair, never by value: the trace stays metadata-only.
+    usage.update(calls=1, scores={f"{e}.{p}": round(score, 3) for score, e, p in ranked},
+                 thresholds={"critical": jev.critical, "supporting": jev.supporting})
+    return NeedPlan(needs, "jev"), usage

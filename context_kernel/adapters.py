@@ -11,6 +11,10 @@ from .protocol import parse_json
 from .language import fold
 
 
+class HookBlock(KernelError):
+    """The prompt must not proceed as if the kernel had acted on it."""
+
+
 COMMAND = re.compile(r'^(Remember|Correct|Recuerda|Recordar|Corrige|Corregir): ([a-zA-Z0-9_-]+)\.([a-zA-Z0-9_-]+) = (.+)$', re.IGNORECASE)
 
 
@@ -51,7 +55,7 @@ def propose_command(store, prompt, event_id=None):
     return store.propose("correct", payload, event_id)
 
 
-def hook_response(event, workspace, store, compiler, strategy="rules", proposals=False):
+def hook_response(event, workspace, store, compiler, strategy="rules", proposals=False, fail_closed=False):
     if event.get("hook_event_name", "UserPromptSubmit") != "UserPromptSubmit":
         raise KernelError("Unsupported hook event.")
     cwd = event.get("cwd")
@@ -63,30 +67,38 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
     prompt = text(event.get("prompt"), 16384)
     notice = None
     if re.fullmatch(r"(?:forget|revoke|olvida|olvidar|revoca|revocar): .+", fold(prompt), re.IGNORECASE):
-        raise KernelError("Privacy changes require the owner CLI: memory forget or memory revoke. This hook did not apply the request.")
+        raise HookBlock("Privacy changes require the owner CLI: memory forget or memory revoke. This hook did not apply the request.")
     if proposals:
         event_id = digest({"session": event.get("session_id"), "turn": event.get("turn_id"), "prompt": prompt})
         # No content-derived event hashes persist unless proposal capture is enabled.
         if not store.db.execute("SELECT 1 FROM processed_events WHERE scope=? AND event_id=?", (store.scope, event_id)).fetchone():
             notice = propose_command(store, prompt, event_id)
     projection = compiler.prepare(prompt, strategy=strategy)
-    if projection.trace["status"] in {"unavailable", "insufficient_context"}:
-        store.mark_failed(projection.id)
-        raise KernelError("Memory context is unavailable (" + projection.trace["status"] +
-                          "). This is not evidence that a fact does not exist; inspect the trace before retrying.")
-    result = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit",
-              "additionalContext": projection.content}}
     messages = []
     if notice:
         messages.append(f"Memory proposal {notice['id']} awaits owner approval; it is not a remembered fact.")
+    if projection.trace["status"] in {"unavailable", "insufficient_context"}:
+        store.mark_failed(projection.id)
+        message = ("Memory context is unavailable (" + projection.trace["status"] +
+                   "). This is not evidence that a fact does not exist; inspect the trace before retrying.")
+        if fail_closed:
+            raise KernelError(message)
+        # Fail open: the prompt proceeds without memory, and the host is told why.
+        return envelope("", messages + [message]), None
     if projection.trace["warnings"]:
         messages.append("Memory context warnings: " + ", ".join(projection.trace["warnings"]) + ".")
+    return envelope(projection.content, messages), projection.id
+
+
+def envelope(context, messages=()):
+    """The same hookSpecificOutput shape is accepted by Codex and Claude Code."""
+    result = {"hookSpecificOutput": {"hookEventName": "UserPromptSubmit", "additionalContext": context}}
     if messages:
         result["systemMessage"] = " ".join(messages)
-    return result, projection.id
+    return result
 
 
-def configuration(client, workspace, db, scope, python=None, mode="hook", proposals=False):
+def configuration(client, workspace, db, scope, python=None, mode="hook", proposals=False, strategy="rules", fail_closed=False):
     root = str(Path(workspace).resolve())
     checkout = str(Path(__file__).resolve().parent.parent)
     executable = python or sys.executable
@@ -99,8 +111,11 @@ def configuration(client, workspace, db, scope, python=None, mode="hook", propos
             return {"destination": ".codex/config.toml", "content": toml}
         return {"destination": ".mcp.json" if client == "claude" else ".agents/mcp_config.json",
                 "config": {"mcpServers": {"context-kernel": server}}}
+    options = (["--proposals"] if proposals else []) + (["--fail-closed"] if fail_closed else [])
+    if strategy != "rules":
+        options += ["--strategy", strategy]
     command = shlex.join(["env", "PYTHONPATH=" + checkout, executable] + args +
-                         ["hook", "--client", client, "--workspace", root] + (["--proposals"] if proposals else []))
+                         ["hook", "--client", client, "--workspace", root] + options)
     hook = {"type": "command", "command": command, "timeout": 15}
     if client == "codex":
         hook["additionalContextLimit"] = 2048

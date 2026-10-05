@@ -62,8 +62,10 @@ def validate(arguments, contract):
 
 
 class Server:
-    def __init__(self, store):
+    def __init__(self, store, compiler=None, strategy="rules"):
         self.store = store
+        self.compiler = compiler or Compiler(store)
+        self.strategy = strategy
         self.initialized = False
         self.ready = False
 
@@ -73,8 +75,7 @@ class Server:
             raise KernelError("Unknown memory tool.")
         validate(arguments, tool["inputSchema"])
         if name == "memory_context":
-            compiler = Compiler(self.store)
-            projection = compiler.prepare(arguments["query"])
+            projection = self.compiler.prepare(arguments["query"], self.strategy)
             return {"status": projection.trace["status"], "projection_id": projection.id,
                     "context": parse_json(projection.content) if projection.content else None,
                     "trace": projection.trace, "plan": projection.plan.to_dict()}
@@ -153,8 +154,8 @@ class Server:
         return {"jsonrpc": "2.0", "id": request_id, "result": result}
 
 
-def serve(store, source, destination):
-    server = Server(store)
+def serve(store, source, destination, compiler=None, strategy="rules"):
+    server = Server(store, compiler, strategy)
     while True:
         raw = source.readline(65537)
         if not raw:

@@ -194,9 +194,14 @@ class ContextV02Tests(unittest.TestCase):
         compiler = Compiler(self.store, ollama=Broken())
         projection = compiler.project("Mi oferta laboral", strategy="inferred")
         self.assertEqual(projection.trace["status"], "unavailable")
+        event = {"cwd": str(self.workspace), "prompt": "Mi oferta laboral"}
+        response, projection_id = hook_response(event, self.workspace, self.store, compiler, strategy="inferred")
+        self.assertIsNone(projection_id)
+        self.assertEqual(response["hookSpecificOutput"]["additionalContext"], "")
+        self.assertIn("not evidence", response["systemMessage"])
+        self.assertEqual(self.store.traces(1)[0]["delivery"], "failed")
         with self.assertRaisesRegex(KernelError, "not evidence"):
-            hook_response({"cwd": str(self.workspace), "prompt": "Mi oferta laboral"}, self.workspace,
-                          self.store, compiler, strategy="inferred")
+            hook_response(event, self.workspace, self.store, compiler, strategy="inferred", fail_closed=True)
 
     def test_mcp_argument_error_is_structured_and_not_empty_context(self):
         server = Server(self.store)

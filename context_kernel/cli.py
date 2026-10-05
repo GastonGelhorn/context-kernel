@@ -5,10 +5,10 @@ import json
 import sqlite3
 import sys
 
-from .adapters import configuration, hook_response
+from .adapters import HookBlock, configuration, envelope, hook_response
 from .common import KernelError, canonical, quantity
 from .compiler import Compiler
-from .planner import NeedPlan, Ollama
+from .planner import Jev, NeedPlan, Ollama
 from .protocol import parse_json, read_event
 from .store import Store
 
@@ -23,8 +23,9 @@ def parser():
     root.add_argument("--scope", default="personal", help="Owner-selected scope; not supplied by an agent tool")
     root.add_argument("--pretty", action="store_true", help="Print readable JSON for owner commands")
     commands = root.add_subparsers(dest="command", required=True)
-    for name in ("init", "status", "proposals", "serve"):
+    for name in ("init", "status", "proposals"):
         commands.add_parser(name)
+    serve = commands.add_parser("serve", help="Stdio MCP server with a fixed scope")
     traces = commands.add_parser("traces")
     traces.add_argument("--limit", type=int, default=20, help="Latest scoped projection metadata, 1-100")
     listing = commands.add_parser("list")
@@ -82,17 +83,25 @@ def parser():
     hook.add_argument("--client", choices=("codex", "claude"), required=True)
     hook.add_argument("--workspace", required=True)
     hook.add_argument("--proposals", action="store_true", help="Opt in to bounded command proposals, never automatic approval")
-    for item in (project, hook):
-        item.add_argument("--strategy", choices=("rules", "fts", "inferred"), default="rules")
+    hook.add_argument("--fail-closed", action="store_true", help="Block the prompt when memory is unavailable (default: proceed without memory)")
+    for item in (project, hook, serve):
+        item.add_argument("--strategy", choices=("rules", "fts", "inferred", "jev"), default="rules")
         item.add_argument("--ollama-url", default="http://127.0.0.1:11434")
         item.add_argument("--model", default="qwen3.5:9b")
         item.add_argument("--ollama-timeout", type=float, default=45 if item is project else 10,
                           help="Local model timeout in seconds (hooks capped at 10)")
+        item.add_argument("--jev-command", default="jev", help="jev executable; its own config decides local or hosted")
+        item.add_argument("--jev-timeout", type=float, default=10)
+        item.add_argument("--jev-critical", type=float, default=0.6, help="P at or above which a pair is critical")
+        item.add_argument("--jev-supporting", type=float, default=0.5, help="P at or above which a pair is supporting")
+        item.add_argument("--jev-question", help="Override the relevance question (name `candidate` and `query`)")
     adapter = commands.add_parser("adapter")
     adapter.add_argument("client", choices=("codex", "claude", "antigravity"))
     adapter.add_argument("--workspace", required=True)
     adapter.add_argument("--mode", choices=("hook", "mcp"), default="hook")
     adapter.add_argument("--proposals", action="store_true")
+    adapter.add_argument("--strategy", choices=("rules", "fts", "inferred", "jev"), default="rules")
+    adapter.add_argument("--fail-closed", action="store_true")
     adapter.add_argument("--python")
     adapter.add_argument("--raw", action="store_true", help="Print only the configuration content for manual merging")
     return root
@@ -142,21 +151,26 @@ def execute(args, store):
         return store.traces(args.limit)
     if command == "why":
         return store.trace(args.id)
-    if command == "serve":
-        from .mcp import serve
-        serve(store, sys.stdin.buffer, sys.stdout)
-        return None
     if args.strategy == "inferred" and (not 0 < args.ollama_timeout <= 60 or (command == "hook" and args.ollama_timeout > 10)):
         raise KernelError("Ollama timeout must be 1-60 seconds; prompt hooks allow at most 10.")
+    if args.strategy == "jev" and command == "hook" and args.jev_timeout > 10:
+        raise KernelError("Prompt hooks allow a jev timeout of at most 10 seconds.")
     ollama = Ollama(args.ollama_url, args.model, args.ollama_timeout) if args.strategy == "inferred" else None
-    compiler = Compiler(store, getattr(args, "budget", 2048), ollama)
+    jev = Jev(args.jev_command, args.jev_timeout, args.jev_critical, args.jev_supporting, args.jev_question) if args.strategy == "jev" else None
+    compiler = Compiler(store, getattr(args, "budget", 2048), ollama, jev)
+    if command == "serve":
+        from .mcp import serve
+        serve(store, sys.stdin.buffer, sys.stdout, compiler, args.strategy)
+        return None
     if command == "project":
         plan = NeedPlan.from_dict(store.load_plan(args.plan_id)) if args.plan_id else None
         return compiler.project(args.query, args.strategy, plan, args.as_of).to_dict()
     event = read_event(sys.stdin.buffer)
-    response, projection_id = hook_response(event, args.workspace, store, compiler, args.strategy, args.proposals)
+    response, projection_id = hook_response(event, args.workspace, store, compiler, args.strategy, args.proposals, args.fail_closed)
     # "Emitted" means this process wrote the envelope, never host acknowledgement.
     print(canonical(response), flush=True)
+    if projection_id is None:
+        return None
     try:
         store.mark_emitted(projection_id)
     except (KernelError, sqlite3.Error, OSError) as exc:
@@ -169,7 +183,8 @@ def main(argv=None):
     store = None
     try:
         if args.command == "adapter":
-            result = configuration(args.client, args.workspace, args.db, args.scope, args.python, args.mode, args.proposals)
+            result = configuration(args.client, args.workspace, args.db, args.scope, args.python, args.mode,
+                                   args.proposals, args.strategy, args.fail_closed)
             if args.raw:
                 print(result["content"] if "content" in result else canonical(result["config"]))
                 return 0
@@ -190,7 +205,11 @@ def main(argv=None):
             except (KernelError, sqlite3.Error, OSError):
                 pass  # The visible response below does not depend on a working log.
         if args.command == "hook":
-            print(canonical({"decision": "block", "reason": "Context Kernel: " + message}), flush=True)
+            if isinstance(exc, HookBlock) or args.fail_closed:
+                print(canonical({"decision": "block", "reason": "Context Kernel: " + message}), flush=True)
+            else:
+                # Fail open: a memory add-on must not stop the prompt; the host hears why there is no context.
+                print(canonical(envelope("", ["Context Kernel unavailable: " + message])), flush=True)
             return 0
         print(canonical({"error": message}), file=sys.stderr)
         return 1
