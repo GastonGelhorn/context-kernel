@@ -1,4 +1,4 @@
-# v0.1 implementation plan
+# v0.2 implementation plan
 
 This is the canonical English plan for this repository. Earlier conversation documents are historical background, not additional active instructions. The objective is a useful local kernel: register, correct, use current evidence in another session, inspect it, and withdraw it. It is not a paid API evaluation campaign or a universal memory platform.
 
@@ -10,6 +10,7 @@ This is the canonical English plan for this repository. Earlier conversation doc
 4. Metadata-only projection/operation logs, pre-delivery revalidation, visible failures, and truthful observability boundaries.
 5. Codex and Claude prompt-hook adapters, a local MCP tool interface, and an Antigravity MCP configuration generator.
 6. Deterministic regression, subprocess contracts, injected Ollama failures, official SDK interoperability, an optional local model demo, and native Codex CLI MCP checks with recorded failures.
+7. English/Spanish selection and bounded proposal grammar, entity/alias narrowing, scoped containment ancestors, explicit quantities, structured unavailable/error results, and bounded pre-delivery revalidation retry.
 
 Hooks do not authenticate human origin. Therefore the implementation narrows automatic ingestion to read-only operation by default, with opt-in proposal capture. Accepted changes require the owner CLI. Negation is supported in values and bounded delivery transitions; free-form extraction cannot certify semantics.
 
@@ -28,9 +29,9 @@ The local fixture families include career, housing, deployment, gifts, and gener
 - Dependency-free tests, CLI lifecycle, scope non-interference, proposal/alias ambiguity, temporal boundaries, and forgetting must pass.
 - The official MCP SDK must initialize, discover tools, retrieve, propose, observe an owner-approved correction, and handle a scoped error.
 - Real local Qwen results must be reported with misses, truncation, irrelevant selections, and missing evidence; no paid judge or API calls.
-- Native Codex CLI MCP was exercised in fresh fictional sessions with local Ollama and owner-authorized ChatGPT subscription access. A failed tool invocation and an unsupported currency in the answer prevent a clean acceptance claim. Automatic prompt-hook trust/activation and desktop history behavior remain pending. No global settings or unrelated workspaces are modified to simulate acceptance.
+- Native Codex CLI MCP was exercised in fresh fictional sessions with local Ollama and owner-authorized ChatGPT subscription access. The v0.2 subscription campaign passed its six functional checks and two controls. Local native Qwen still invented a currency and failed an abstention-format control. Earlier failed results remain historical evidence, and changed test protocols are not a controlled improvement benchmark. Automatic prompt-hook trust/activation and desktop history behavior remain pending. No global settings or unrelated workspaces are modified to simulate acceptance.
 
-## What stays outside v0.1
+## What stays outside v0.2
 
 Cloud synchronization, bulk transcript ingestion, paid embeddings, automatic free-form fact promotion, unrestricted personal reasoning, generic dependency graphs, cross-user authorization, autonomous policy learning, complete host-request replacement, and forensic/remote erasure. CCC stays a reference, not a runtime dependency.
 
@@ -38,4 +39,4 @@ Cloud synchronization, bulk transcript ingestion, paid embeddings, automatic fre
 
 Enable inference only where local relevance checks justify it. If inferred planning misses available evidence, keep a working bounded default and improve the single planner rather than stacking unchecked agents. Broader inventories need an explicit authorized inventory-selection design before raising context limits.
 
-Resolve the observed native Codex MCP failures and run the owner-trusted prompt-hook walkthrough before calling the full Codex integration verified. Claude Code still needs its native walkthrough. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.
+Recheck native Codex MCP after v0.2 delivery and selection changes, preserving the earlier failed results. The new test protocol includes recovery guidance, a Spanish correction query, and an unforced generic turn; scores are not directly comparable with the earlier forced-tool protocol. Run the owner-trusted prompt-hook walkthrough before calling the full Codex integration verified. Claude Code still needs its native walkthrough. Antigravity requires access to an installed native client. Publish or push only after the owner chooses a remote destination and visibility.

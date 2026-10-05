@@ -4,7 +4,7 @@ Local memory that can be corrected, inspected, and withdrawn. Python, SQLite, an
 
 The kernel keeps attributed state outside the model, selects bounded evidence for a question, and explains the selection. A correction creates a new version rather than another competing summary. New sessions and different agents can use the same owner-selected database and scope.
 
-This is a working v0.1, not a claim that arbitrary personal context or prompt injection is solved. The default selector uses rules and scoped lexical search. Local Qwen planning is optional and still needs relevance checks. The kernel does not replace an agent's existing conversation history.
+This is v0.2, not a claim that arbitrary personal context or prompt injection is solved. The default selector uses bilingual English/Spanish rules, scoped lexical search, explicit entities, and bounded containment ancestors. Local Qwen planning is optional and still needs relevance checks. The kernel does not replace an agent's existing conversation history.
 
 ## Try it
 
@@ -46,6 +46,15 @@ python3 -m context_kernel forget CURRENT_STATEMENT_ID
 
 Values are JSON, so strings need JSON quotes. Output is JSON by default; `--pretty` makes owner-command output readable. `--db` and `--scope` go before the subcommand. The default database is `.context-kernel/memory.sqlite` relative to the current directory. Use an absolute database path when sharing it across clients.
 
+Quantities can carry explicit units, currency, and periods:
+
+```sh
+python3 -m context_kernel remember user salary 42000 --currency USD --period year --evidence 'My salary is USD 42000 per year.'
+python3 -m context_kernel --pretty project '¿Debo aceptar una oferta de trabajo que paga más?'
+```
+
+Missing metadata stays null. Old plain numeric values remain compatible and project unknown unit/currency/period fields; language or location does not determine currency. Quantity flags also work with corrections. Currency labels are checked for shape, not certified against a financial standards registry.
+
 `forget` removes **every version of the selected entity/property**, associated orphan evidence, and same-scope derived logs and proposals. It is destructive within that explicitly selected property. It does not erase host transcripts, backups, or forensic disk copies. `revoke` instead retains evidence but makes that statement ineligible for subsequent retrieval.
 
 ## Delivery continuity
@@ -82,6 +91,8 @@ See [client setup](docs/adapters.md) before activation and [native results](docs
 
 Hooks are read-only by default. Optional `--proposals` recognizes whole-message commands such as `Remember: user.constraint = "No late meetings"`, plus a small delivery grammar. It never approves a fact. Review with `proposals`, then `approve PROPOSAL_ID` or `reject PROPOSAL_ID` in the owner CLI. General conversation extraction is not automatic.
 
+The bounded grammar also accepts `Recuerda: user.constraint = "No reuniones por la tarde"` and `Corrige: user.constraint = "No reuniones después de las 16"`. Spanish delivery commands include `Pedí laptop.`, `Todavía no llegó.`, `Al final llegó.`, and `Lo devolví.`. These remain proposals, not automatically accepted facts. See the [prepared hook pilot](docs/hook-pilot.md) for the separate owner-trust step.
+
 MCP exposes `memory_context`, `memory_inspect`, `memory_status`, `memory_why`, and `memory_propose`. It cannot approve, revoke, forget, choose another scope, execute a shell command, or change permissions. Those restrictions do not protect the database from an agent that separately has filesystem or shell access.
 
 ## Optional local planning
@@ -95,7 +106,7 @@ python3 -m context_kernel.demo --live --repetitions 3
 
 Only loopback HTTP is allowed; redirects and environment proxies are disabled. The request uses `think: false`, an 8,192-token context configuration, a conservative input byte ceiling, and bounded structured output. Failures produce explicit warnings rather than fabricated evidence. The live demo reports complete local message counts, bytes, hashes, and Ollama token counts, not only projection size. Repeated runs use a fixed seed and do not establish statistical independence.
 
-The current gift/allergy relevance probe still fails. The live demo returns nonzero on a missed model check; the dependency-free core suite and default demo pass. See the verification report before treating inferred planning as reliable.
+v0.2 supplements valid inferred plans with bounded deterministic family rules and records their contribution as `rule_supplements`. This can recover a known allergy omission; it does not demonstrate that the model discovered an unknown dependency. The live demo still returns nonzero on a missed model check. See the verification report before treating inferred planning as reliable.
 
 The planner proposes needs using authorized inventory values. Available needs must reference existing source pairs; missing needs remain explicitly unavailable. This prevents invented keys from looking like successful retrieval, but does not prove relevance or completeness. Keep the default rules selector unless local checks support enabling inference for your use case.
 
@@ -107,6 +118,8 @@ The planner proposes needs using authorized inventory values. Available needs mu
 - Traces record prepared/emitted/failed state. Host attachment remains `unknown` without an acknowledgement.
 - Conflicting active claims remain visible; newest timestamp does not win automatically.
 - A local kernel does not make a remote coding agent local. An enabled client may send projected memory to its existing model provider.
+- Invalid MCP arguments return structured unavailable/error data with a bounded retry hint. A failed call is never proof that a fact is missing. Successful empty retrieval means no evidence was selected for that query, not that all possible needs were discovered.
+- Reader rules and explicit quantity metadata reduce opportunities for guessing; they do not enforce general factual correctness. The native harness includes a narrow currency-review signal, not a general answer judge.
 - No embeddings, cloud sync, background ingestion, credential store, generic graph, or autonomous policy learning.
 
 Read [architecture and safety](docs/architecture.md), [the implementation plan](docs/plan.md), and [verification](docs/verification.md) for details.

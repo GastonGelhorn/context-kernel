@@ -1,0 +1,423 @@
+{
+  "checks": {
+    "correction_visible_in_new_projection": true,
+    "forget_removes_all_manager_versions": true,
+    "forgotten_history_not_in_database_dump": true,
+    "generic_question_avoids_personal_context_and_model_call": true,
+    "old_evidence_retained_until_forget": true,
+    "trace_explains_selection": true
+  },
+  "forget_limits": "Host history, external backups, and forensic disk erasure are not covered.",
+  "model": "qwen3.5:9b",
+  "paid_api_calls": 0,
+  "passed": true,
+  "planner_runs": [
+    {
+      "check": true,
+      "condition": "cross_domain",
+      "plan": {
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "availability"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "preference"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "salary"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "job_offer_details"
+            ],
+            "predicates": [
+              "caregiving_requirements"
+            ],
+            "unavailable": true
+          }
+        ],
+        "strategy": "inferred",
+        "version": 1,
+        "warnings": []
+      },
+      "repetition": 1,
+      "trace": {
+        "as_of": "2026-10-05T12:00:00.000000+00:00",
+        "bytes": 1251,
+        "delivery": "prepared",
+        "excluded": {},
+        "historical": false,
+        "host_attachment": "unknown",
+        "id": "dceee988b5614cc584ee567dc81d3887",
+        "latency_ms": 3905.415,
+        "missing_needs": [
+          3
+        ],
+        "observation": "projection_only",
+        "plan_id": "494be307f0c54667bca0c32f33ed2dd3",
+        "policy": "2",
+        "reasons": {
+          "619f77c113e24da6b7ee73e8037e1de0": "critical_need",
+          "63e8e21b7e714d02a557ce96d2c8d32b": "critical_need",
+          "f6bd246c9645461281a500966a6dc984": "critical_need"
+        },
+        "scope": "personal",
+        "selected": [
+          "619f77c113e24da6b7ee73e8037e1de0",
+          "63e8e21b7e714d02a557ce96d2c8d32b",
+          "f6bd246c9645461281a500966a6dc984"
+        ],
+        "snapshot": "13659a6e00abd4b0a22c425da6cb9e09f9cf2f1ea7bbdaad8a5fe0e0622cd811",
+        "status": "incomplete",
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 90,
+          "prompt_eval_count": 309,
+          "rule_supplements": 1,
+          "total_duration": 3900919333
+        },
+        "warnings": [
+          "missing_critical_evidence"
+        ]
+      }
+    },
+    {
+      "check": true,
+      "condition": "housing",
+      "plan": {
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "mobility_limit"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "apartment_option_1_has_elevator",
+              "apartment_option_2_has_elevator",
+              "apartment_option_1_stair_count",
+              "apartment_option_2_stair_count"
+            ],
+            "predicates": [
+              "has_elevator_accessibility_feature"
+            ],
+            "unavailable": true
+          }
+        ],
+        "strategy": "inferred",
+        "version": 1,
+        "warnings": []
+      },
+      "trace": {
+        "as_of": "2026-10-05T12:00:00.000000+00:00",
+        "bytes": 685,
+        "delivery": "prepared",
+        "excluded": {},
+        "historical": false,
+        "host_attachment": "unknown",
+        "id": "d3ec19e4a04d490d9cb3a2c440f7471c",
+        "latency_ms": 5604.095,
+        "missing_needs": [
+          1
+        ],
+        "observation": "projection_only",
+        "plan_id": "a9dbde3fa29c488cb39929f876a27646",
+        "policy": "2",
+        "reasons": {
+          "483ab7d6fbc04383ad7274f157cb0c9e": "critical_need"
+        },
+        "scope": "housing",
+        "selected": [
+          "483ab7d6fbc04383ad7274f157cb0c9e"
+        ],
+        "snapshot": "f83d285ba96edf17bcab8bcf4df7cb5d3b48d8b4191b9ee488b5e94410eddf06",
+        "status": "incomplete",
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 143,
+          "prompt_eval_count": 285,
+          "rule_supplements": 0,
+          "total_duration": 5600293916
+        },
+        "warnings": [
+          "missing_critical_evidence"
+        ]
+      }
+    },
+    {
+      "check": true,
+      "condition": "deployment",
+      "plan": {
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "data_region"
+            ],
+            "unavailable": false
+          }
+        ],
+        "strategy": "inferred",
+        "version": 1,
+        "warnings": []
+      },
+      "trace": {
+        "as_of": "2026-10-05T12:00:00.000000+00:00",
+        "bytes": 647,
+        "delivery": "prepared",
+        "excluded": {},
+        "historical": false,
+        "host_attachment": "unknown",
+        "id": "105aaea3dc3648a0950d0603924da482",
+        "latency_ms": 2617.229,
+        "missing_needs": [],
+        "observation": "projection_only",
+        "plan_id": "a6ce16c926c140aa85b0e3b610dea3be",
+        "policy": "2",
+        "reasons": {
+          "93042aa0940d43d59f648dbe044cecbd": "critical_need"
+        },
+        "scope": "deployment",
+        "selected": [
+          "93042aa0940d43d59f648dbe044cecbd"
+        ],
+        "snapshot": "4903b4d07b8ccd50fbd77bf9c73b8ba483b57cb92eb2038f628df2fd4a46e63b",
+        "status": "ok",
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 46,
+          "prompt_eval_count": 283,
+          "rule_supplements": 0,
+          "total_duration": 2608915250
+        },
+        "warnings": []
+      }
+    },
+    {
+      "check": true,
+      "condition": "gift",
+      "plan": {
+        "needs": [
+          {
+            "critical": true,
+            "entities": [
+              "user"
+            ],
+            "predicates": [
+              "allergy"
+            ],
+            "unavailable": false
+          },
+          {
+            "critical": true,
+            "entities": [
+              "snack_hammer_allergen_info"
+            ],
+            "predicates": [
+              "contains_nuts"
+            ],
+            "unavailable": true
+          }
+        ],
+        "strategy": "inferred",
+        "version": 1,
+        "warnings": []
+      },
+      "trace": {
+        "as_of": "2026-10-05T12:00:00.000000+00:00",
+        "bytes": 650,
+        "delivery": "prepared",
+        "excluded": {},
+        "historical": false,
+        "host_attachment": "unknown",
+        "id": "844f9a2fdc5d4f1a8d17a8f240ce7a68",
+        "latency_ms": 2976.251,
+        "missing_needs": [
+          1
+        ],
+        "observation": "projection_only",
+        "plan_id": "f52214a91e674f4fa87fa71e263f1367",
+        "policy": "2",
+        "reasons": {
+          "8695b84e9bc74ff39565a9a74b3cb958": "critical_need"
+        },
+        "scope": "gift",
+        "selected": [
+          "8695b84e9bc74ff39565a9a74b3cb958"
+        ],
+        "snapshot": "db009b1ebe4a2f91d896d4c1adef19c3fb103984e6d5bcf42bf07979c2fe3bf1",
+        "status": "incomplete",
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 63,
+          "prompt_eval_count": 283,
+          "rule_supplements": 1,
+          "total_duration": 2973548958
+        },
+        "warnings": [
+          "missing_critical_evidence"
+        ]
+      }
+    },
+    {
+      "check": true,
+      "condition": "unguarded_generic",
+      "plan": {
+        "needs": [],
+        "strategy": "inferred",
+        "version": 1,
+        "warnings": []
+      },
+      "trace": {
+        "as_of": "2026-10-05T12:00:00.000000+00:00",
+        "bytes": 0,
+        "delivery": "prepared",
+        "excluded": {},
+        "historical": false,
+        "host_attachment": "unknown",
+        "id": "2c03702327034be2bf5ecf0a0d664120",
+        "latency_ms": 1692.605,
+        "missing_needs": [],
+        "observation": "projection_only",
+        "plan_id": "d79b4adf6ca14b0bb5be580293c11f18",
+        "policy": "2",
+        "reasons": {},
+        "scope": "personal",
+        "selected": [],
+        "snapshot": "13659a6e00abd4b0a22c425da6cb9e09f9cf2f1ea7bbdaad8a5fe0e0622cd811",
+        "status": "empty",
+        "usage": {
+          "calls": 1,
+          "done_reason": "stop",
+          "eval_count": 14,
+          "prompt_eval_count": 306,
+          "rule_supplements": 0,
+          "total_duration": 1690039542
+        },
+        "warnings": []
+      }
+    }
+  ],
+  "reader_runs": [
+    {
+      "active_request_trace": {
+        "input_tokens_reported": 362,
+        "message_count": 6,
+        "observation": "full_local_payload",
+        "output_tokens_reported": 3,
+        "payload_bytes": 1356,
+        "payload_hash": "974bff63d182698f88288cda354407a4eef6c389289b2f32312de0960629a7dd",
+        "token_accounting": "Ollama counts; byte ceiling is not an exact tokenizer preflight."
+      },
+      "answer": "Blair",
+      "check": true,
+      "condition": "reconstructed",
+      "repetition": 1,
+      "usage": {
+        "done_reason": "stop",
+        "eval_count": 3,
+        "prompt_eval_count": 362,
+        "total_duration": 1437528375
+      }
+    },
+    {
+      "active_request_trace": {
+        "input_tokens_reported": 382,
+        "message_count": 8,
+        "observation": "full_local_payload",
+        "output_tokens_reported": 3,
+        "payload_bytes": 1459,
+        "payload_hash": "ee840db94c963b0c256c84b64438aab0222ec591cc517eac491e603fd8d85fd8",
+        "token_accounting": "Ollama counts; byte ceiling is not an exact tokenizer preflight."
+      },
+      "answer": "Blair",
+      "check": true,
+      "condition": "accumulated",
+      "repetition": 1,
+      "usage": {
+        "done_reason": "stop",
+        "eval_count": 3,
+        "prompt_eval_count": 382,
+        "total_duration": 1701412583
+      }
+    },
+    {
+      "active_request_trace": {
+        "input_tokens_reported": 364,
+        "message_count": 4,
+        "observation": "full_local_payload",
+        "output_tokens_reported": 3,
+        "payload_bytes": 1361,
+        "payload_hash": "469a6789c3328cc9d22225599784e4582ee9419374f4cb3ceb056c0f45a92c83",
+        "token_accounting": "Ollama counts; byte ceiling is not an exact tokenizer preflight."
+      },
+      "answer": "Blair",
+      "check": true,
+      "condition": "compact_structured",
+      "repetition": 1,
+      "usage": {
+        "done_reason": "stop",
+        "eval_count": 3,
+        "prompt_eval_count": 364,
+        "total_duration": 1511546709
+      }
+    },
+    {
+      "active_request_trace": {
+        "input_tokens_reported": 295,
+        "message_count": 2,
+        "observation": "full_local_payload",
+        "output_tokens_reported": 2,
+        "payload_bytes": 995,
+        "payload_hash": "bc1d4e98953dfba75cbdf9bc6347f7583efede39c39df0305861d13978ee42b9",
+        "token_accounting": "Ollama counts; byte ceiling is not an exact tokenizer preflight."
+      },
+      "answer": "4",
+      "check": true,
+      "condition": "answer_contamination_probe",
+      "usage": {
+        "done_reason": "stop",
+        "eval_count": 2,
+        "prompt_eval_count": 295,
+        "total_duration": 1232580625
+      }
+    }
+  ],
+  "checked_on": "2026-10-05",
+  "kernel_version": "0.2.0"
+}

@@ -9,7 +9,7 @@ python3 -W error::ResourceWarning -m unittest discover -v
 python3 -m context_kernel.demo
 ```
 
-89 unit/integration tests passed. One parameterized regression includes 120 deterministic state/retrieval scenarios (15 variations of eight checks). These are not 120 independent language tasks or a claim of universal exhaustiveness. Six additional checks validate the native evaluation's authentication/command boundaries and distinguish a failed tool call from successful retrieval without launching a model.
+125 unit/integration tests passed. One parameterized regression includes 120 deterministic state/retrieval scenarios (15 variations of eight checks). These are not 120 independent language tasks or a claim of universal exhaustiveness. Six checks validate native evaluation authentication/command boundaries. The 36 new v0.2 checks cover bilingual relevance and proposal grammar, contextual versus generic questions, explicit/ambiguous entities, bounded containment, relation snapshot non-interference, quantities, bounded currency review, explicit unavailable/conflicted/clarification states, trace listing, empty-context minimum budgets, unused-index avoidance, project-work/career disambiguation, and pre-delivery retries.
 
 Coverage includes attribution, temporal boundaries, future and immediate corrections, conflicting claims, excluded hypotheses, history, revocation, scoped non-interference, aliases and ambiguous references, managed forgetting, whole-claim byte budgets, deterministic plan replay, stale proposals, atomic delivery transitions, retry deduplication, pre-delivery changes, hook subprocess contracts, strict JSON, MCP transport recovery, and injected local model failures/limits.
 
@@ -37,7 +37,7 @@ python3 -m context_kernel.demo --live --repetitions 1
 
 Across five development runs, 65 local reader/planner calls were attempted. Initial probes passed; broader probes exposed invented entity keys, irrelevant preference selection, and ignored available evidence. Pair-constrained planning and explicit separation of unavailable needs improved some cases. They did not fix every relevance failure.
 
-The latest recorded run has four passing reader checks and four of five passing planner checks:
+The historical v0.1 run has four passing reader checks and four of five passing planner checks:
 
 | Probe | Latest result |
 | --- | --- |
@@ -59,9 +59,34 @@ Repetitions use temperature zero and a fixed seed; they are not independent tria
 
 Measured local calls varied from a few seconds to tens of seconds. Owner `project --strategy inferred` defaults to 45 seconds and permits an explicit timeout up to 60. Hooks remain capped at ten seconds, and use the fast rules selector by default. Byte ceilings and Ollama-reported counts are visible; no exact tokenizer preflight is claimed.
 
+## v0.2 results
+
+The direct local demo passed four reader checks and all five selection checks. [v0.2 local results](v02-local-results.json). Career availability and the gift/allergy source each needed one deterministic rule supplement. The model alone did not demonstrate improved recall on these omissions. Housing and gift plans still marked missing task evidence; successful relevance selection does not establish sufficient context for a final decision.
+
+The SDK interoperability check and dependency-free lifecycle demo also passed after the changes.
+
+Native Codex CLI was exercised in two fresh eight-session campaigns:
+
+| Client/model | Functional checks | Controls | Outcome |
+| --- | --- | --- | --- |
+| ChatGPT subscription, gpt-5.6-sol, high reasoning | 6/6 | 2/2 | Pass under the v0.2 protocol |
+| Local Ollama, qwen3.5:9b | 5/6 | 1/2 | Fail; retained |
+
+[Subscription client events and answers](v02-native-subscription-results.json), [local client events and answers](v02-native-local-results.json).
+
+The subscription run used the correct registered and corrected names, including a Spanish correction query, returned UNKNOWN after forgetting, and issued five successful memory-context queries without failed arguments. The job-offer answer conditioned the decision on confirmed flexible hours for caregiving and did not invent a currency. The generic Spanish SQLite turn used no memory tool and included no fixture personal information. No private-scope canary was exposed.
+
+The local run preserved the lifecycle and Spanish correction, but its job-offer answer invented a dollar amount for the offer from the current salary and recommended rejection despite unknown offer hours. The bounded currency-review signal flagged the unsupported reference. Its factual no-memory control returned UNAVAILABLE instead of the required UNKNOWN; that is an abstention-format failure, not a fabricated name. The overall command returned nonzero. These failures are not hidden by the passing direct local demo.
+
+The v0.2 protocol changes include explicit query/recovery instructions, a Spanish correction query, an unforced generic turn, and a currency-review signal. Therefore 6/6 versus the historical 4/6 is not a controlled estimate of improvement. Avoiding memory on a generic question is desirable, not a failed product behavior. The currency signal checks four currency families and is not a general factual/decision-quality judge. One campaign per model cannot establish reliability.
+
+Subscription session wall time totaled 126.774 seconds; usage events reported 188,728 input tokens (116,736 cached) and 1,032 output tokens (370 reasoning). Local native session wall time totaled 352.592 seconds; usage events reported 86,945 input tokens (35,161 cached) and 331 output tokens (zero reasoning). These are aggregate client session figures across model steps, not unique prompt sizes, kernel projection costs, or exact account quota percentages. No API-key model billing or paid judge was used.
+
+The separate prompt-hook pilot was prepared with fictional data and no proposal capture. Project-file and invocation-inline probes without user configuration emitted no kernel projection and answered UNKNOWN; they did not verify automatic attachment or establish a specific skip reason. The hook still requires the owner's normal project/definition review. Hooks are enabled by default in the installed CLI; no bypass or trust-state mutation was used. [Owner pilot instructions](hook-pilot.md), [official discovery/trust behavior](https://learn.chatgpt.com/docs/hooks#where-codex-looks-for-hooks).
+
 ## Native Codex CLI
 
-Codex CLI 0.160.0 ran with invocation-specific MCP configuration in disposable fictional workspaces. Global configuration was not edited. Shell tools, apps, web search, and subagents were disabled. No hook-trust bypass was used. Every condition started a fresh ephemeral session.
+The following paragraphs retain the historical v0.1 native results. Codex CLI 0.160.0 ran with invocation-specific MCP configuration in disposable fictional workspaces. Global configuration was not edited. Shell tools, apps, web search, and subagents were disabled. No hook-trust bypass was used. Every condition started a fresh ephemeral session.
 
 The local `qwen3.5:9b` run completed six mechanical evidence/lifecycle checks: empty memory, registered approver, corrected approver, forgotten approver, career constraint, and generic technical question. The private-scope canary was not exposed. [Native local results](native-local-results.json) retain the client tool events and answers. The career answer prematurely recommended rejecting an offer without knowing its hours; passing an evidence-use check did not imply a good answer. Codex reported fallback metadata warnings for this local model.
 

@@ -1,0 +1,95 @@
+{
+  "checked_on": "2026-10-05",
+  "kernel_version": "0.2.0",
+  "owner_trust_established": false,
+  "hook_trust_bypassed": false,
+  "global_configuration_edited": false,
+  "activation_verified": false,
+  "probes": {
+    "project_file": {
+      "after": 0,
+      "answer": "UNKNOWN",
+      "before": 0,
+      "events": [
+        {
+          "thread_id": "01a10c4c-d75c-7f73-b030-ba716ff87b3e",
+          "type": "thread.started"
+        },
+        {
+          "item": {
+            "id": "item_0",
+            "message": "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+            "type": "error"
+          },
+          "type": "item.completed"
+        },
+        {
+          "type": "turn.started"
+        },
+        {
+          "item": {
+            "id": "item_1",
+            "text": "UNKNOWN",
+            "type": "agent_message"
+          },
+          "type": "item.completed"
+        },
+        {
+          "type": "turn.completed",
+          "usage": {
+            "cache_write_input_tokens": 0,
+            "cached_input_tokens": 0,
+            "input_tokens": 5199,
+            "output_tokens": 2,
+            "reasoning_output_tokens": 0
+          }
+        }
+      ],
+      "exit_code": 0,
+      "hook_warnings": []
+    },
+    "invocation_inline": {
+      "after": 0,
+      "answer": "UNKNOWN",
+      "before": 0,
+      "events": [
+        {
+          "thread_id": "01a10c50-a489-77a1-9f6e-6a2feefde843",
+          "type": "thread.started"
+        },
+        {
+          "item": {
+            "id": "item_0",
+            "message": "Model metadata for `qwen3.5:9b` not found. Defaulting to fallback metadata; this can degrade performance and cause issues.",
+            "type": "error"
+          },
+          "type": "item.completed"
+        },
+        {
+          "type": "turn.started"
+        },
+        {
+          "item": {
+            "id": "item_1",
+            "text": "UNKNOWN",
+            "type": "agent_message"
+          },
+          "type": "item.completed"
+        },
+        {
+          "type": "turn.completed",
+          "usage": {
+            "cache_write_input_tokens": 0,
+            "cached_input_tokens": 0,
+            "input_tokens": 5199,
+            "output_tokens": 2,
+            "reasoning_output_tokens": 0
+          }
+        }
+      ],
+      "exit_code": 0,
+      "hook_warnings": []
+    }
+  },
+  "interpretation": "Both probes produced no kernel projection. Neither establishes the exact skip reason or automatic delivery. Owner project/hook review and a native observation are still required."
+}

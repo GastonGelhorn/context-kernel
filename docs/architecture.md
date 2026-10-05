@@ -42,19 +42,27 @@ Delivery transitions update three properties together: delivery status, ownershi
 
 ## NeedPlan and selection
 
-The manual rules cover career, delivery, and project-state questions. Other questions fall back to scoped current-state FTS; a conservative generic-question guard returns no personal context. This is a bounded default, not universal need discovery.
+The manual rules cover career, delivery, project state, housing, and food/gift constraints in English and Spanish. Predicate aliases are read-time vocabulary, not automatic source rewrites. Explicit entity keys, labels, and aliases narrow selection; ambiguous aliases and unnamed multiple projects ask for clarification. Personal constraints remain eligible across named career/housing choices. Other questions fall back to scoped current-state FTS with stopword removal and a small bilingual vocabulary. A conservative generic-question guard returns no personal context, while contextual explanations such as "our deployment" remain eligible. These are bounded rules, not universal need discovery.
+
+Explicit scoped `part_of` ancestors can add context for a named component up to two levels. Siblings are not traversed. Only relations whose endpoints have eligible current evidence enter the view, and the authorized relation view participates in the snapshot hash. Hidden-scope relations cannot change rankings or snapshots. Parent claims retain their original entity and attribution; the kernel does not manufacture an inferred child claim.
 
 Optional Qwen inference sees a bounded authorized inventory, not evaluator relevance labels. Its structured output selects existing source pairs and separately lists missing needs. Pair validation prevents invented subjects from being treated as available evidence. Missing needs have `unavailable: true` and cannot accidentally match existing claims. The resulting recorded NeedPlan uses the same compiler as the rules and oracle controls. Replay is reproducible from the plan and snapshot, not from independently rerunning a model.
 
 Every critical matched claim must fit as a whole. If the required packet exceeds the byte budget, no partial critical values are injected and the trace reports `insufficient_context`. Optional claims can be excluded with recorded reasons. Missing critical needs produce `incomplete` and warnings; oracle needs do not imply perfect evidence.
 
-Projections carry IDs, values, attribution, evidence IDs, and validity. Original evidence can be inspected on demand. Projections never update the source database. Immediately before delivery, the selected IDs and authorized snapshot are revalidated; a changed snapshot fails visibly.
+Projections carry IDs, values, attribution, evidence IDs, and validity. Original evidence can be inspected on demand. Projections never update the source database. Immediately before delivery, the selected IDs and authorized snapshot are revalidated. Rules/FTS delivery retries one changed snapshot with a fresh projection; repeated changes fail visibly. Inferred delivery does not automatically repeat an expensive local model call.
+
+Schema version 1 remains compatible. A reserved JSON quantity value stores numeric amount plus optional unit, currency, and period. Plain historical numbers retain their values and receive null quantity metadata in projections. Unknown fields are not completed from locale, evidence-adjacent guesses, or model preference. Reader guidance is derived policy, not another source of facts. The narrow currency-review helper flags references absent from projected numeric metadata; it does not certify sentences, bind every claim to evidence, or disambiguate dollar/yen symbols.
+
+Valid inferred plans are supplemented with the same bounded family rules, with `rule_supplements` counted in local usage. This recovers some catalogued omissions without pretending the model discovered a novel need. Malformed plans, inventory overflow, and model failures remain unavailable; the supplement is not a silent success fallback.
 
 ## Trust and deletion
 
 Scope and database are fixed by owner startup arguments, not prompt content or MCP tool arguments. Agents can read and propose through MCP but cannot approve or withdraw facts there. The stdio server implements the tools subset of MCP's supported handshake-era revisions and explicitly negotiates 2025-06-18 with newer compatible clients. It does not claim to implement every newer protocol feature. [MCP lifecycle](https://modelcontextprotocol.io/specification/2025-06-18/basic/lifecycle).
 
 Agent inspection is restricted to eligible current evidence; it cannot resurface revoked, superseded, expired, future, or hypothetical values by supplying an old ID. The owner CLI can explicitly inspect history. Already-delivered host copies remain outside the kernel's withdrawal boundary.
+
+Invalid tool arguments return `isError: true` and structured `status: unavailable` data with required fields and bounded retry guidance. A successful `empty` projection is distinct from a failed query. The model can still misuse an error; the contract and native checks reduce this risk without guaranteeing compliance. Hooks block visibly on unavailable or insufficient critical context rather than claiming no memory exists.
 
 These controls do not sandbox a process already able to read the database or run the owner CLI. Use separate OS users/permissions if that threat matters. The SQLite file is mode 0600 on POSIX; newly created leaf directories use 0700. The database is not encrypted. Credential-pattern rejection is only a guardrail, not secret detection certification.
 

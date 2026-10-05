@@ -12,6 +12,8 @@ python3 -m context_kernel --db /absolute/path/memory.sqlite --scope work adapter
 
 Merge the JSON into `.codex/hooks.json`. Review and trust the hook in Codex's `/hooks` flow. `UserPromptSubmit` receives a prompt and adds `additionalContext`; this does not rewrite accumulated history. The adapter validates the reported working directory against its startup boundary and never reads private transcript files. [Codex hooks](https://learn.chatgpt.com/docs/hooks#userpromptsubmit).
 
+Project-local hooks load only through a trusted project layer; reviewing the exact hook definition is an additional step. An exec run with `--ignore-user-config` does not prove that an owner's project trust settings were loaded. The interactive owner-review command must not use that exec-only flag. See the [prepared pilot](hook-pilot.md) for the current host-local walkthrough. [Hook discovery](https://learn.chatgpt.com/docs/hooks#where-codex-looks-for-hooks).
+
 The 2 KiB projection limit is the kernel's UTF-8 byte limit, not the host's token estimate. A small projection does not imply a small total model request. [Host output limits](https://learn.chatgpt.com/docs/hooks#large-hook-output).
 
 For on-demand MCP tools instead:
