@@ -148,8 +148,23 @@ class JevTests(unittest.TestCase):
         os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.2})
         self.assertEqual(self.compiler.project("quien es mi manager?", strategy="jev").trace["selected"], [])
 
+    def test_inventory_beyond_the_cap_judges_mentioned_then_recent_pairs(self):
+        os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.9, "old note": 0.9})
+        self.store.remember("old", "note", "earliest", "earliest")
+        for n in range(5):
+            self.add(f"p{n}", n)
+        manager = self.add("manager", "Dani")
+        jev = Jev(str(self.fake), max_pairs=3)
+        result = Compiler(self.store, jev=jev).project("quien es mi manager?", strategy="jev")
+        self.assertIn("jev_inventory_capped", result.trace["warnings"])
+        self.assertEqual(result.trace["usage"]["judged_pairs"], 3)
+        self.assertEqual(result.trace["usage"]["unjudged_pairs"], 4)
+        self.assertIn(manager["id"], result.trace["selected"])
+        self.assertNotIn("old.note", result.trace["usage"]["scores"])
+        self.assertEqual(len(self.calls()[0]["candidates"]), 3)
+
     def test_thresholds_and_command_are_validated(self):
-        for kwargs in ({"critical": 0.3, "supporting": 0.5}, {"supporting": 0}, {"timeout": 0}, {"command": ""}, {"band": 0.55}):
+        for kwargs in ({"critical": 0.3, "supporting": 0.5}, {"supporting": 0}, {"timeout": 0}, {"command": ""}, {"band": 0.55}, {"max_pairs": 0}):
             with self.assertRaises(KernelError):
                 Jev(**({"command": str(self.fake)} | kwargs))
 

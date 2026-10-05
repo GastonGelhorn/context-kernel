@@ -9,3 +9,4 @@ dist/
 work/
 .DS_Store
 .claude/settings.local.json
+.codex/hooks.json

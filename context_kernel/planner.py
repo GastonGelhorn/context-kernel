@@ -15,7 +15,7 @@ from .protocol import parse_json
 from .language import ambiguous_entity_reference, fold, mentioned_entities, predicate_name, related_entities
 
 
-WARNING_CODES = {"clarification_required", "unknown_task", "planner_failed", "inventory_overflow", "jev_unavailable"}
+WARNING_CODES = {"clarification_required", "unknown_task", "planner_failed", "inventory_overflow", "jev_unavailable", "jev_inventory_capped"}
 STRATEGIES = {"rules", "fts", "inferred", "jev", "oracle", "recorded"}
 
 
@@ -281,14 +281,16 @@ class Jev:
 
     QUESTION = "Is `candidate` a fact that someone answering `query` must take into account?"
 
-    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None, band=0.35):
+    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None, band=0.35, max_pairs=48):
         if not isinstance(command, str) or not command.strip() or "\0" in command:
             raise KernelError("Invalid jev command.")
         if not 0 < timeout <= 60:
             raise KernelError("jev timeout must be 1-60 seconds.")
         if not (0 < band <= supporting <= critical <= 1):
             raise KernelError("jev thresholds must satisfy 0 < band <= supporting <= critical <= 1.")
-        self.command, self.timeout = command, timeout
+        if type(max_pairs) is not int or not 1 <= max_pairs <= 500:
+            raise KernelError("jev max pairs must be between 1 and 500.")
+        self.command, self.timeout, self.max_pairs = command, timeout, max_pairs
         self.critical, self.supporting, self.band = critical, supporting, band
         self.question = text(question or self.QUESTION, 1024)
 
@@ -342,10 +344,20 @@ def jev_plan(query, records, jev, relations=(), lexical=()):
         return NeedPlan(strategy="jev"), {"calls": 0}
     if ambiguous_entity_reference(query, records):
         return NeedPlan(strategy="jev", warnings=("clarification_required",)), {"calls": 0}
-    pairs = {}
+    pairs, latest = {}, {}
     for row in records:
-        pairs.setdefault((row["entity_key"], row["predicate"]), []).append(row["value"])
+        pair = (row["entity_key"], row["predicate"])
+        pairs.setdefault(pair, []).append(row["value"])
+        latest[pair] = max(latest.get(pair, ""), row["recorded_at"])
+    lexical = set(lexical)
     keys = sorted(pairs)
+    warnings = ()
+    if len(keys) > jev.max_pairs:
+        # A local model answers about 50 ms per pair once warm and several seconds cold; the hook has
+        # ten seconds. Judge the pairs the question mentions first, then the most recently recorded.
+        keys = sorted(keys, key=lambda k: (k not in lexical, latest[k]), reverse=False)
+        keys = sorted(sorted(keys, key=lambda k: latest[k], reverse=True), key=lambda k: k not in lexical)[:jev.max_pairs]
+        warnings = ("jev_inventory_capped",)
     if not keys:
         return NeedPlan(strategy="jev"), {"calls": 0}
     try:
@@ -354,12 +366,11 @@ def jev_plan(query, records, jev, relations=(), lexical=()):
         fallback = rules_plan(query, records, relations)
         return NeedPlan(fallback.needs, "jev", fallback.warnings + ("jev_unavailable",)), {"calls": 1, "failure": str(exc)}
     ranked = sorted(((scores.get(i, 0.0), e, p) for i, (e, p) in enumerate(keys)), key=lambda t: (-t[0], t[1], t[2]))
-    lexical = set(lexical)
     rescued = [f"{e}.{p}" for score, e, p in ranked if jev.band <= score < jev.supporting and (e, p) in lexical]
     needs = tuple(Need((p,), (e,), critical=score >= jev.critical) for score, e, p in ranked
                   if score >= jev.supporting or (jev.band <= score and (e, p) in lexical))[:16]
     # Scores are keyed by source pair, never by value: the trace stays metadata-only.
     usage.update(calls=1, scores={f"{e}.{p}": round(score, 3) for score, e, p in ranked},
                  thresholds={"critical": jev.critical, "supporting": jev.supporting, "band": jev.band},
-                 lexical_rescues=rescued)
-    return NeedPlan(needs, "jev"), usage
+                 lexical_rescues=rescued, judged_pairs=len(keys), unjudged_pairs=len(pairs) - len(keys))
+    return NeedPlan(needs, "jev", warnings), usage

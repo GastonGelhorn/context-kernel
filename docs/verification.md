@@ -113,7 +113,11 @@ The owner then ran the same check with `--strategy jev` three times. The first t
 
 The third run, with those two variables unset so jev used its configured local backend (tev1-32k through Ollama), passed 6/6 with `strategy_fallbacks: 0`: jev judged the inventory on all four non-generic prompts. [Native Claude Code jev results](v03-native-claude-jev-results.json). The rewrite answer again named the superseded deadline and asked for review "rather than treated as a settled yes". One difference from the rules run is informative: the question about the forgotten approver produced an `empty` projection with jev (scores 0.28 and 0.34 for the two remaining checkout pairs, both under the 0.5 supporting bar), where the rules family had dragged the unrelated stale rewrite decision into a `review_required` projection. Judged selection avoided the irrelevant claim; the family rule could not. Total wall time 51.9 seconds; jev's own call took about 0.7 seconds per prompt.
 
-Still pending: the owner-trusted Codex hook walkthrough, and `jev tune` of the thresholds on a real inventory.
+First real use outside the pilot: the owner's `work` scope, two facts, hook in this checkout's `.claude/settings.local.json`, jev strategy. Every prompt in the desktop session produced an emitted projection. jev scored `context_kernel.release_approver` 0.95-0.97 and `user.manager` 0.47 on an approver question, the reverse (0.11-0.15 against 0.87-0.92) on manager statements. One miss: a second session asked "quien es mi manager?" and jev scored the manager pair 0.467, under the 0.5 supporting bar, so the projection was empty and that session answered from the owner CLI instead. The kernel now settles the uncertain band (0.35-0.5) by lexical match: the same question replayed selects the pair as supporting with `lexical_rescues: ["user.manager"]`.
+
+jev local latency, measured with synthetic pairs and `--no-cache`, warm Ollama: 2 pairs 0.21 s, 4 pairs 0.30 s, 32 pairs 1.7 s, 48 pairs 2.6 s, 64 pairs 3.5-4.8 s, 96 pairs 13 s. The first call after the model loads took 6.1 s for 32 pairs. jev's `--concurrency` made no difference between 1 and 8 on this Ollama. The kernel caps each call at `--jev-max-pairs` (48) and records the unjudged count.
+
+Still pending: the owner-trusted Codex hook walkthrough (`.codex/hooks.json` is generated in this checkout, untracked), and `jev tune` of the thresholds once the real inventory has enough labelled rows.
 
 ## Native Codex CLI
 

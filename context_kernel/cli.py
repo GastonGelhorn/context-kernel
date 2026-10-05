@@ -95,6 +95,7 @@ def parser():
         item.add_argument("--jev-critical", type=float, default=0.6, help="P at or above which a pair is critical")
         item.add_argument("--jev-supporting", type=float, default=0.5, help="P at or above which a pair is supporting")
         item.add_argument("--jev-band", type=float, default=0.35, help="Uncertain band floor: a pair between band and supporting is kept only when the question mentions it")
+        item.add_argument("--jev-max-pairs", type=int, default=48, help="Pairs judged per call; beyond it, mentioned and most recent pairs first")
         item.add_argument("--jev-question", help="Override the relevance question (name `candidate` and `query`)")
     adapter = commands.add_parser("adapter")
     adapter.add_argument("client", choices=("codex", "claude", "antigravity"))
@@ -158,7 +159,7 @@ def execute(args, store):
     if args.strategy == "jev" and command == "hook" and args.jev_timeout > 10:
         raise KernelError("Prompt hooks allow a jev timeout of at most 10 seconds.")
     ollama = Ollama(args.ollama_url, args.model, args.ollama_timeout) if args.strategy == "inferred" else None
-    jev = Jev(args.jev_command, args.jev_timeout, args.jev_critical, args.jev_supporting, args.jev_question, args.jev_band) if args.strategy == "jev" else None
+    jev = Jev(args.jev_command, args.jev_timeout, args.jev_critical, args.jev_supporting, args.jev_question, args.jev_band, args.jev_max_pairs) if args.strategy == "jev" else None
     compiler = Compiler(store, getattr(args, "budget", 2048), ollama, jev)
     if command == "serve":
         from .mcp import serve
