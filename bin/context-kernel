@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""context-kernel launcher: puts the package beside it on sys.path and hands over.
+
+The plugin's own copy first (a checkout, or Claude Code's plugin cache), so its hooks never run an
+older install; then the one install.sh puts under ~/.local/share/context-kernel.
+"""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+for candidate in (os.path.dirname(HERE), os.path.join(os.path.expanduser("~"), ".local", "share", "context-kernel")):
+    if os.path.isfile(os.path.join(candidate, "context_kernel", "__init__.py")):
+        sys.path.insert(0, candidate)
+        break
+
+from context_kernel.plugin import main  # noqa: E402
+
+sys.exit(main())

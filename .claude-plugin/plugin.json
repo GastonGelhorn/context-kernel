@@ -1,0 +1,69 @@
+{
+  "name": "context-kernel",
+  "displayName": "Context Kernel",
+  "version": "0.5.0",
+  "description": "Memory for coding agents that you maintain by talking. It remembers what you state, notices when you change it, and tells the agent which earlier recommendations rested on something that has since changed. Local SQLite; judgments by jev (install jevmate first). A line above the prompt says what each turn saved, held or did not save, with undo.",
+  "author": {
+    "name": "Gaston Gelhorn",
+    "email": "gastongelhorn@gmail.com"
+  },
+  "homepage": "https://github.com/GastonGelhorn/context-kernel",
+  "repository": "https://github.com/GastonGelhorn/context-kernel",
+  "keywords": [
+    "memory",
+    "context",
+    "hooks",
+    "mcp",
+    "jev"
+  ],
+  "types": "./types/index.d.ts",
+  "mcpServers": {
+    "context-kernel": {
+      "command": "python3",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/bin/context-kernel",
+        "serve"
+      ]
+    }
+  },
+  "userConfig": {
+    "scope": {
+      "type": "string",
+      "title": "Scope",
+      "description": "Which memory this install reads and writes: work, personal, a client. Each scope is separate and has its own capture policy.",
+      "default": "work"
+    },
+    "db": {
+      "type": "string",
+      "title": "Database",
+      "description": "SQLite file for the memory. Empty: ~/.context-kernel/memory.sqlite, shared with the terminal install and Codex.",
+      "default": ""
+    },
+    "strategy": {
+      "type": "string",
+      "title": "Selection",
+      "description": "jev: jev scores every stored fact for relevance to each prompt (needs jevmate). rules: keyword rules only, no judge; nothing new is saved from the conversation without jev.",
+      "default": "jev",
+      "options": [
+        "jev",
+        "rules"
+      ]
+    },
+    "jev_command": {
+      "type": "string",
+      "title": "jev executable",
+      "description": "Absolute path to jev. Empty: ~/.local/bin/jev, then the jevmate plugin's own copy, then PATH. Whether jev runs locally (Ollama) or hosted is jev's own setting: run /context-kernel:setup.",
+      "default": ""
+    },
+    "band": {
+      "type": "string",
+      "title": "Line above the prompt",
+      "description": "on: after each turn, one line says what memory saved, held for review or did not save, with undo. off: nothing (the terminal still shows the hook's message).",
+      "default": "on",
+      "options": [
+        "on",
+        "off"
+      ]
+    }
+  }
+}

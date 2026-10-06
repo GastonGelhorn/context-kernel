@@ -1,0 +1,40 @@
+{
+  "modules": [
+    "./context-kernel.tsx"
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook session-start 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook session-start",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook prompt 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook prompt",
+            "timeout": 15
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook stop 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook stop",
+            "timeout": 20
+          }
+        ]
+      }
+    ]
+  }
+}

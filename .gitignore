@@ -12,3 +12,6 @@ work/
 .codex/hooks.json
 .mcp.json
 .codex/config.toml
+# Editor types Claude Code writes for the mod
+.claude-plugin/types/
+tsconfig.json

@@ -46,7 +46,28 @@ Nothing in that exchange was typed as a memory command. The kernel:
 
 ## Install
 
-Python 3.11+, SQLite with FTS5, and `jev` from [jevmate](https://github.com/GastonGelhorn/jevmate) pointing at a local backend (`jev doctor` should say `backend: ollama` or another local server).
+Python 3.9+ with SQLite FTS5 (the `python3` macOS ships is enough) and `jev` from [jevmate](https://github.com/GastonGelhorn/jevmate).
+
+**Claude Code.** Install jevmate and the kernel from the same marketplace:
+
+```text
+/plugin marketplace add GastonGelhorn/jevmate
+/plugin install jevmate@gastongelhorn
+/plugin install context-kernel@gastongelhorn
+/context-kernel:setup
+```
+
+The plugin brings its own hooks and MCP server; nothing is copied into a project. Its options (scope, database, selection) are asked at install and changed in the plugin's settings. `/context-kernel:setup` checks the install and lets you choose the judge: jev on a local Ollama model (free, private) or jev's paid hosted service (faster; your memory text leaves the machine, so the scope must allow it). After each turn a line above the prompt says what memory saved, held for review or did not save, with an undo button; it also shows in the desktop app, where hook messages do not.
+
+**Terminal and Codex.** From a checkout:
+
+```sh
+./install.sh
+```
+
+It finds a usable Python (or uses one managed by `uv`), installs `~/.local/bin/context-kernel` and runs `context-kernel setup`: the judge, the scope and database (saved in `~/.context-kernel/config.json`), the Claude Code plugin, and Codex hooks for a project (shown before they are written; Codex then asks you to review them). `context-kernel doctor` checks everything again, including hooks that would run twice when a project still wires the kernel by hand.
+
+**By hand.** The generator below prints configuration for one project instead:
 
 ```sh
 python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work init
