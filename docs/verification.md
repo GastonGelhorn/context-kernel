@@ -328,10 +328,29 @@ The previous turn of this session, "haz 1 y 2", reached the gate and was read as
 
 In this session, one prompt hook was cancelled at its 15 s timeout before it opened a turn. Replayed by hand with the same command, it took under a second. At that moment, 14 of the kernel's modules in this iCloud-synced checkout were evicted, and Python waits for a download when it reads one. `context-kernel doctor` now reports that: "10 file(s) under …/context_kernel are evicted to iCloud", with the two remedies.
 
+### Native runs: 9 of 9 in Claude Code and 9 of 9 in Codex
+
+`tests/native_v06_check.py` runs five fresh sessions in a git repository holding one accepted decision record ("Use SQLite for the job queue"), with memory holding one standing fact (`user.package_manager = pnpm`). Nobody types a memory command, and the checks read the kernel database, not the model's claims.
+
+1. "Say ok." The SessionStart hook starts the background pass, and the prompt carries the standing fact.
+2. A question about which queue a new worker should use.
+3. "Give the one-line shell command that adds the lodash package to this project."
+4. A commit supersedes the record with "Use Redis for the job queue", then another "Say ok." session.
+5. A question about whether the earlier recommendation still holds.
+
+Claude Code 2.1.287 with its default model passed all nine checks:
+
+- the record was learned in the background and delivered to the question;
+- the answer used it, and the recommendation was linked to it;
+- the standing fact was delivered on the first prompt (reason `standing`), and the answer was `pnpm add lodash`;
+- the supersession was learned in the background;
+- the fresh session flagged the review, and its answer named Redis and the record that changed.
+
+Codex CLI 0.160.0 with its configured model and the ChatGPT subscription passed the same nine checks in the pilot whose folder and hooks the owner had trusted. Its last answer flagged the review and named Redis, but said the worker should "still use Redis", although the earlier recommendation had been SQLite. In both clients the five sessions took 45 to 48 s in total.
+
 ### Not verified yet
 
-- Standing delivery and the background pass inside a native Claude Code or Codex session.
-- The band showing the pass's note.
+- The band showing the pass's note in the desktop app.
 
 ## v0.5: the plugin, the band, and requests to remember
 
