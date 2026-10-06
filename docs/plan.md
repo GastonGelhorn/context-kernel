@@ -1,6 +1,6 @@
 # Plan and status
 
-The project started from a public hypothesis about continuity across conversations and agents. The kernel should connect each recommendation to the assumptions behind it and flag what needs review when one of those assumptions changes, without asking the user to maintain another layer of documentation. v0.3 proved the mechanism with owner commands, and v0.4 removed the commands. v0.5 packages the kernel as a Claude Code plugin, with an installer and a setup wizard for the terminal and Codex. It runs on Python 3.9 or later.
+The project started from a public hypothesis about continuity across conversations and agents. The kernel should connect each recommendation to the assumptions behind it and flag what needs review when one of those assumptions changes, without asking the user to maintain another layer of documentation. v0.3 proved the mechanism with owner commands, and v0.4 removed the commands. v0.5 packages the kernel as a Claude Code plugin, with an installer and a setup wizard for the terminal and Codex. v0.6 reads the decisions a repository already records, and hands the facts a user keeps repeating to every session. It runs on Python 3.9 or later.
 
 ## Principles
 
@@ -21,6 +21,7 @@ The project started from a public hypothesis about continuity across conversatio
 | 3 Inferred dependencies | `depend` | Done; premises delivered or captured in the same turn; review notices without text |
 | 4 Calibration and decay | Periodic cleanup, guessing thresholds | Done; `calibrate --score`, confirmation by use, 180-day eligibility, 90-day digest |
 | 5 One experience, two components | Installing two things | In progress: v0.5 lists the kernel as its own plugin in jevmate's marketplace; merging the two plugins waits for a three-way comparison |
+| 6 What is already written down | Restating decision records and commit decisions; repeating the same rule in every session | Done in v0.6; decision records parsed, commits filtered and judged one by one, standing facts after three sessions or a rule |
 
 ## Acceptance
 
@@ -56,4 +57,4 @@ Whether to merge the two into one plugin is decided later. One option is for jev
 
 ## Out of scope
 
-Cloud sync, bulk transcript ingestion, embeddings, a second generative extractor, inferred facts about third parties, cross-user authorization, autonomous policy learning, forensic or remote erasure.
+Cloud sync, bulk transcript ingestion (the repository pass reads decision records and commit subjects, nothing else), embeddings, a second generative extractor, inferred facts about third parties, cross-user authorization, autonomous policy learning, forensic or remote erasure.

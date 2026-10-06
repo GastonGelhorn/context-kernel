@@ -36,7 +36,19 @@ DEFAULT_POLICY = {
     # 0.76 or more, the highest false one (a question) 0.757. The band below holds, not delivers.
     "thresholds": {"affirmed": 0.75, "uncertain": 0.6, "none_bar": NONE_BAR},
     "caps": {"turn": 2, "session": 10, "day": 30},
+    # Decision records and decision commits of the repository a session runs in (repository.py).
+    "repository": True,
 }
+# A property the user has stated in this many separate sessions is delivered at the start of every
+# session from then on, whether or not a question touches it: they should not have to say it again.
+STANDING_SESSIONS = 3
+STANDING_LIMIT = 8
+# Words with which a person states a rule rather than a fact of the moment ("never add X", "from now
+# on use pnpm"). Only for kinds of facts that can be rules; "we never had an outage" is project state.
+_STANDING_CUES = re.compile(r"\b(siempre|nunca|jamas|always|never|from now on|going forward|de ahora en adelante|"
+                            r"a partir de ahora|en todos los|en todas las|en ningun|en ninguna|in every|in all|in any|"
+                            r"every time|cada vez que)\b")
+STANDING_KINDS = {"preferences", "constraints", "project_decisions"}
 AFFIRMED = ("Does the writer of `text` assert `fact` as true, in their own words, rather than quoting someone, "
             "asking about it, denying it, or describing a hypothetical?")
 CATEGORY = "Which kind of information is `fact`?"
@@ -270,7 +282,9 @@ def _resolve(store, judge, entity, predicate, replaces, deadline):
     ("checkout_project.delivery_timeline" then "checkout.deadline"); without this, a change becomes a
     second parallel fact and nothing downstream notices. Returns (entity, predicate, resolved_from)."""
     rows = [r for r in store.records(quarantined=True) if r["assertion_kind"] != "inference"]
-    pairs = sorted({(r["entity_key"], r["predicate"]) for r in rows})
+    # What the repository records is changed in the repository, or by naming it (`replaces`); a
+    # similar-sounding key in chat is not enough to rewrite a decision record.
+    pairs = sorted({(r["entity_key"], r["predicate"]) for r in rows if r["source_kind"] != "repository"})
     timeout = deadline.timeout(judge.timeout) if deadline else None
     if replaces:
         target = next((r for r in rows if r["id"] == replaces), None)
@@ -373,9 +387,10 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
             return done("duplicate", "already_known", same["id"])
         if status == "captured" and same["trust"] != "confirmed":
             store.confirm(same["id"])
-            return done("confirmed", "restated_by_user", same["id"])
+            return _standing(store, turn, done("confirmed", "restated_by_user", same["id"]), value, same["category"])
         if status == "captured":
             store.confirm(same["id"])  # refreshes last_confirmed_at
+            return _standing(store, turn, done("duplicate", "restated_by_user", same["id"]), value, same["category"])
         return done("duplicate", "already_known", same["id"])
     try:
         status, reason, category, source = _decide(store, judge, turn, proposed, rules, deadline)
@@ -403,8 +418,44 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
             new_id = store._insert(entity, predicate, value, evidence, kind=_kind(category), **origin)
         store._event("capture", {"statement_id": new_id, "trust": status})
     if current and current[0]["trust"] == "confirmed" and status == "captured":
-        return done(status, reason, new_id, category=category, previous=current[0]["value"])
-    return done(status, reason, new_id, category=category)
+        result = done(status, reason, new_id, category=category, previous=current[0]["value"])
+    else:
+        result = done(status, reason, new_id, category=category)
+    return _standing(store, turn, result, value, category) if status == "captured" else result
+
+
+def standing_cue(authored, value):
+    """The clause stating the value says it is a rule ("never", "from now on", "in every repo")."""
+    rendered = value if isinstance(value, str) else canonical(value)
+    wanted = [t for t in re.findall(r"[^\W_]+", fold(rendered)) if len(t) >= 4]
+    if not wanted:
+        return False
+    for clause in re.split(r"(?<=[.!?\n])\s+", authored):
+        folded = fold(clause)
+        if "?" in folded or not _STANDING_CUES.search(folded):
+            continue
+        words = re.findall(r"[^\W_]+", folded)
+        if sum(1 for t in wanted if any(_near(t, w) for w in words)) >= max(1, (len(wanted) + 1) // 2):
+            return True
+    return False
+
+
+def _standing(store, turn, result, value, category):
+    """After a typed statement was stored or restated: keep the property in mind in every session
+    when the user framed it as a rule, or has now stated it in STANDING_SESSIONS sessions. A property
+    the user took out of that list is not put back by counting."""
+    entity, predicate = result["entity"], result["predicate"]
+    if turn["origin"] != "interactive" or store.standing_state(entity, predicate):
+        return result
+    authored, _ = segments(turn["prompt_excerpt"] or "")
+    if category in STANDING_KINDS and standing_cue(authored, value):
+        source = "stated_as_rule"
+    elif store.stated_sessions(entity, predicate) >= STANDING_SESSIONS:
+        source = "restated"
+    else:
+        return result
+    store.set_standing(entity, predicate, "on", source)
+    return result | {"standing": source}
 
 
 def _kind(category):
@@ -427,9 +478,12 @@ def describe_results(results):
     # memory that does not work. Reasons the user chose (do not remember) are not repeated back.
     dropped = [f"{r['entity']}.{r['predicate']}" + (f" ({WHY[r.get('reason')]})" if r.get("reason") in WHY else "")
                for r in results if r["status"] == "rejected" and r.get("entity") and r.get("reason") != "do_not_remember"]
+    standing = [f"{r['entity']}.{r['predicate']}" for r in results if r.get("standing")]
     parts = []
     if saved:
         parts.append("saved " + ", ".join(saved))
+    if standing:
+        parts.append("will keep in mind in every session " + ", ".join(standing))
     if held:
         parts.append("held for review " + ", ".join(held))
     if asks:

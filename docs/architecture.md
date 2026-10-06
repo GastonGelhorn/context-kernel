@@ -4,7 +4,7 @@ Context Kernel has three parts, each with its own job.
 
 | Component | Responsibility |
 | --- | --- |
-| Kernel (`store`, `compiler`, `capture`, `inference`, `turns`, `binding`) | State, evidence, validity, corrections, trust, consent policy, dependencies, and what may be delivered |
+| Kernel (`store`, `compiler`, `capture`, `inference`, `turns`, `binding`, `repository`) | State, evidence, validity, corrections, trust, consent policy, dependencies, the decisions a repository records, and what may be delivered |
 | Judgment client (`judge.py`) | Asks the configured jev backend for probabilities within a time budget, and does nothing else |
 | Host integration (`adapters.py`, `mcp.py`, `plugin.py`, `setup.py`, `hooks/context-kernel.tsx`) | Hooks for Claude Code and Codex, the stdio MCP server, the plugin launcher with its doctor and setup wizard, generated configuration, and the band above the prompt |
 
@@ -21,11 +21,14 @@ Stop hook                                          memory_forget / revoke / conf
   close turn, truthful receipt, coverage              token + interactive origin + jev: does the
   infer premises of a recommendation (jev rank)       user's text ask for this on this fact?
   drop the excerpt once nothing is pending
+SessionStart hook                                  Background pass (memory learn), nobody waits
+  bind the session; standing facts due again          decision records: parser; commits: filters + jev
+  repository changed? start the pass  ───────────▶    observed facts attributed to the repository
 ```
 
 ## Data model
 
-The schema lives in `store.SCHEMA` (version 5). Migrations from versions 1 to 4 copy tables or add tables and columns, and none of them drops a row. The kernel refuses a database whose version it does not know.
+The schema lives in `store.SCHEMA` (version 6). Migrations from versions 1 to 5 copy tables or add tables and columns, and none of them drops a row. The kernel refuses a database whose version it does not know.
 
 | Table | Responsibility |
 | --- | --- |
@@ -34,13 +37,15 @@ The schema lives in `store.SCHEMA` (version 5). Migrations from versions 1 to 4 
 | relations | `corrects`, acyclic `part_of`, acyclic `depends_on` with `provenance` (declared or inferred) |
 | proposals | Changes waiting for a yes, such as a capture that differs from a confirmed value |
 | plans, projections, operations | Recorded needs, metadata-only traces, and the operation log |
-| sessions | Session id with the hook's process ancestry (pid and start time) |
+| sessions | Session id with the hook's process ancestry (pid and start time), which standing facts it has received, and a one-line notice waiting for its next Stop |
 | turns | Token, origin, masked excerpt (expires), delivered and captured ids, gate count, flags, and `notes` (the Stop hook's memory line) |
 | judgments | Cached probabilities keyed by question, model, and digests of state and candidate. Text is never stored here |
 | captures_log | Outcome per proposed fact (captured, quarantined, confirmed, duplicate, needs_confirmation, rejected, omitted, missed) and the key it was proposed under (`label`) |
 | tombstones | The last forget or revoke per property. A write whose evidence predates it is refused |
 | servers | Host processes under which a memory MCP server initialized, which tells the kernel whether anyone can act on a capture request |
-| scopes | Policy: categories, thresholds, auto capture, remote judge allowance |
+| scopes | Policy: categories, thresholds, auto capture, remote judge allowance, repository learning |
+| standing | Properties handed to every session. A property is on when it was restated in three sessions, stated as a rule, or asked for, and off when the user took it off |
+| repositories, repo_sources | Each repository's entity, signature (HEAD plus the blobs of its decision records) and scan lock; and each record or commit read, at which version, and the statement it became |
 
 ## Capture
 
@@ -66,6 +71,27 @@ The host agent does the extraction. The kernel never asks a second generative mo
    - When a typed message restates the same value, the existing statement is promoted to confirmed.
 
 As evidence, the kernel keeps the one sentence that best supports the fact. Excerpts are masked for secrets and capped at 4 KiB. The Stop hook drops them unless a stated fact is still uncaptured, and after ten minutes they go anyway, with the shortfall logged as `missed`. When the user says "Don't remember this", the kernel keeps neither an excerpt nor a capture.
+
+## Decisions from the repository
+
+When the session's folder is inside a git work tree (a `.git` above it), the SessionStart hook starts a detached background pass (`memory learn --if-changed`) and returns. The hook itself never runs git, because git can be slow (see verification), and nothing waits for the pass. The pass compares the repository's signature (HEAD plus the blobs of its decision records) with the one from the last pass, and returns at once when nothing changed. It holds a lock on the repository's row for two minutes, so two sessions starting together do not scan twice.
+
+1. Decision records are tracked files under `adr/`, `adrs/`, `decisions/`, `decision-records/` or `architecture-decisions/`. Templates, READMEs and vendored folders are left out, and only records whose blob changed are parsed.
+   - The parser reads the title, number, status, decision paragraph and "superseded by" target of Nygard/adr-tools and MADR records, in English or Spanish.
+   - An accepted record becomes `observed` evidence on the repository's entity, as `adr_NNNN`, with `source_kind: repository` and the path as its source.
+   - A changed record becomes a new version.
+   - A superseded record ends and points at its successor, so `reaffirm` can move links there.
+   - A deprecated, rejected or deleted record is revoked. Proposed records are not facts.
+2. Commits are read from the last 60 non-merge commits of the last 180 days. Some are recorded as seen and never judged: bots, reverts, routine subjects, subjects without the language of a decision, and commits that write a decision record. A revert revokes the decision it reverts. jev judges each remaining subject in its own request, newest first and at most 12 per pass, on whether it is a choice for the whole project or a change to one place in the code. A subject that scores 0.5 or above becomes `decision_<slug>`, with the commit and its date as the source. The same subject under another hash (after a rebase) is not added twice. Commits left unjudged leave the signature unset, so the next session runs another pass.
+3. A forget writes a tombstone as usual. The kernel still knows the record's version, so an unchanged record is not read back. A record changed by a commit made after the forget is read again.
+
+Automatic key resolution never targets a repository fact; only an explicit `replaces` does. The pass's note ("learned 2 decision(s) from the repository…") waits on the session until its next Stop says it.
+
+## Standing facts
+
+Each statement or restatement the user typed, once validated, is logged under its property. When the property has been stated in three different sessions since it was last forgotten, it becomes standing. A preference, constraint or decision becomes standing at once when its sentence contains a rule word (always, never, from now on, in every…). `memory_standing` turns one on or off when the user's own words ask for it, and counting never overrides an off.
+
+The prompt hook pins standing facts into the packet, at most 8, whenever the session has not yet received the current set. That happens on the session's first prompt, after SessionStart (start, resume, clear or compact), and after a value changes. Pinned claims carry `standing: true`. Standing facts are exempt from the 180-day cutoff and from the 90-day digest.
 
 ## Handing the turn back once
 
@@ -94,6 +120,7 @@ Declared links (from the owner CLI or `memory_depend`) and inferred links behave
 - Origin tagging (`interactive`, `continuation`, `unknown`) is a conservative heuristic. Only `interactive` turns can authorize deletions, promotions or policy changes, and only when jev reads the recorded text as asking for that action on that fact.
 - Values are data. The reader rules say so, and a malicious value cannot change scope, tools or policy. That still does not guarantee a model will ignore one.
 - `forget` removes every version of the property, the inferred recommendations that rested on it (their text can quote it), orphaned evidence, and the scope's plans, traces, proposals, operations, retry markers, turns and cached judgments. It leaves a tombstone. It cannot reach host transcripts, backups, or anything already delivered.
+- What the repository says is data attributed to the repository. It is bounded like any other value and refused when it is shaped like an instruction. A teammate's commit can still put a false decision into memory. The commit filters and jev's bar make that rare, not impossible, and the agent sees which file or commit each such claim came from.
 - The SQLite file has mode 0600 and is not encrypted.
 
 ## Observability

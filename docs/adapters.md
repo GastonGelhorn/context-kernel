@@ -15,7 +15,7 @@ python3 -m context_kernel --db /abs/memory.sqlite --scope work adapter claude --
 python3 -m context_kernel --db /abs/memory.sqlite --scope work adapter claude --workspace /abs/project --strategy jev --mode mcp --raw
 ```
 
-Merge the first output into `.claude/settings.local.json` under `hooks`, and the second into `.mcp.json`. Approve the server when Claude Code asks; the generator includes no way around that approval. The prompt hook returns its context in `hookSpecificOutput.additionalContext`. The SessionStart hook talks to you only through `systemMessage`. So does the Stop hook, with one exception: if your message stated facts worth keeping and nothing was saved, it hands the turn back to the agent once (`decision: block`) so it can call `memory_capture`. See the [Claude hook reference](https://code.claude.com/docs/en/hooks) and [Claude MCP setup](https://code.claude.com/docs/en/mcp).
+Merge the first output into `.claude/settings.local.json` under `hooks`, and the second into `.mcp.json`. Approve the server when Claude Code asks; the generator includes no way around that approval. The prompt hook returns its context in `hookSpecificOutput.additionalContext`. The SessionStart hook talks to you only through `systemMessage`. In a git repository it also starts a detached background pass that reads the repository's decisions, passes jev's path to it, and returns at once. The pass does nothing when the repository has not changed. So does the Stop hook, with one exception: if your message stated facts worth keeping and nothing was saved, it hands the turn back to the agent once (`decision: block`) so it can call `memory_capture`. See the [Claude hook reference](https://code.claude.com/docs/en/hooks) and [Claude MCP setup](https://code.claude.com/docs/en/mcp).
 
 ## Codex
 
@@ -43,9 +43,10 @@ Merge the JSON into `.codex/hooks.json` and the TOML into `.codex/config.toml`. 
 memory --db /abs/memory.sqlite --scope work policy
 memory --db /abs/memory.sqlite --scope work policy --enable personal_attributes
 memory --db /abs/memory.sqlite --scope work policy --threshold affirmed=0.75 --allow-remote-judge no
+memory --db /abs/memory.sqlite --scope work policy --repository off
 ```
 
-You can also ask in chat ("you can remember personal things too"). The agent then calls `memory_policy`, which takes effect only if the message you typed asks for that change.
+`--repository off` stops the background pass that reads decision records and decision commits. You can also ask in chat ("you can remember personal things too", "don't read the repository's decisions"). The agent then calls `memory_policy`, which takes effect only if the message you typed asks for that change.
 
 ## Removing
 

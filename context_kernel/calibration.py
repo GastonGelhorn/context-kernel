@@ -25,6 +25,15 @@ QUESTIONS = {
     "forget_asked": [
         "Does the writer of the message in `candidate` ask to forget, delete, or stop remembering the fact in `candidate`?",
     ],
+    "standing_on": [
+        "Does the writer of the message in `candidate` ask to always keep the fact in `candidate` in mind, in every conversation?",
+    ],
+    "standing_off": [
+        "Does the writer of the message in `candidate` ask to stop always keeping the fact in `candidate` in mind?",
+    ],
+    "decision_commit": [
+        "Does the commit message in `candidate` state a project-wide choice (a technology, tool, platform, policy, or convention that all later work must follow), rather than a change to one place in the code?",
+    ],
 }
 
 
@@ -57,22 +66,35 @@ def score(kind, fixtures, judge):
     if not rows:
         raise KernelError(f"No fixtures of kind {kind}.")
     scored = []
-    for row in rows:
+    if kind == "decision_commit":
+        # As the repository pass does: routine subjects and subjects without the language of a decision
+        # never reach the judge (p 0); the rest are judged one per request.
+        from .repository import DECISION_COMMIT, decision_language, routine
+        for row in rows:
+            filtered = routine(row["message"]) or not decision_language(row["message"])
+            p = 0.0
+            if not filtered:
+                answers, _ = judge.ask({"commit": row["message"]}, {"decision": ("noul", DECISION_COMMIT)}, timeout=60)
+                p = answers["decision"]
+            scored.append({"p": round(p, 3), "label": bool(row["label"]), "message": row["message"][:80], "filtered": filtered})
+    for row in rows if kind != "decision_commit" else ():
         if kind == "facts_present":
             answers, _ = judge.ask({"text": row["message"]}, {"count": ("choice", FACT_COUNT, COUNTS),
                                                                "instruction": ("noul", INSTRUCTION)}, timeout=60)
             p = 1.0 - answers["count"].get("none", 0.0)
         else:
-            question = AFFIRMED if kind == "affirmed" else ASKS["memory_forget"]
+            question = {"affirmed": AFFIRMED, "forget_asked": ASKS["memory_forget"], "standing_on": ASKS["memory_standing_on"],
+                        "standing_off": ASKS["memory_standing_off"]}[kind]
             answers, _ = judge.ask({"text": row["message"], "fact": row["fact"]}, {"q": ("noul", question)}, timeout=60)
             p = answers["q"]
         scored.append({"p": round(p, 3), "label": bool(row["label"]), "message": row["message"][:80]})
     sweep = []
+    judged = [r for r in scored if not r.get("filtered")]
     for step in range(5, 96, 5):
         t = step / 100
-        tp = sum(1 for r in scored if r["p"] >= t and r["label"])
-        fp = sum(1 for r in scored if r["p"] >= t and not r["label"])
-        fn = sum(1 for r in scored if r["p"] < t and r["label"])
+        tp = sum(1 for r in judged if r["p"] >= t and r["label"])
+        fp = sum(1 for r in judged if r["p"] >= t and not r["label"])
+        fn = sum(1 for r in scored if (r["p"] < t or r.get("filtered")) and r["label"])
         tn = len(scored) - tp - fp - fn
         sweep.append({"threshold": t, "accuracy": round((tp + tn) / len(scored), 3),
                       "precision": round(tp / (tp + fp), 3) if tp + fp else None,

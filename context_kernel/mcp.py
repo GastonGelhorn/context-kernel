@@ -69,9 +69,12 @@ TOOLS = [
      "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
     {"name": "memory_depend", "description": "Record that a decision rests on another statement, when the user says so explicitly.",
      "inputSchema": schema({"token": TOKEN, "id": STRING, "assumption_id": STRING}, ["token", "id", "assumption_id"])},
-    {"name": "memory_policy", "description": "Show which kinds of facts are captured automatically in this scope; with enable/disable, change it when the user's current message asks to.",
+    {"name": "memory_policy", "description": "Show which kinds of facts are captured automatically in this scope, and whether decisions are read from the repository; with enable/disable or repository, change it when the user's current message asks to.",
      "inputSchema": schema({"token": TOKEN, "enable": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": sorted(CATEGORIES)}},
-                            "disable": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": sorted(CATEGORIES)}}})},
+                            "disable": {"type": "array", "maxItems": 7, "items": {"type": "string", "enum": sorted(CATEGORIES)}},
+                            "repository": {"type": "boolean", "description": "Read decision records and decision commits of the repository a session runs in."}})},
+    {"name": "memory_standing", "description": "Keep a fact in mind in every session (standing: true) or stop doing so (false), when the user's current message asks for it. Facts the user keeps repeating, or states as a rule, become standing on their own.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING, "standing": {"type": "boolean"}}, ["token", "id", "standing"])},
 ]
 READ_ONLY = {"memory_context", "memory_inspect", "memory_status", "memory_why", "memory_inventory", "memory_history", "memory_dependents"}
 DESTRUCTIVE = {"memory_forget", "memory_revoke", "memory_undo"}
@@ -87,6 +90,8 @@ ASKS = {
     "memory_reaffirm": "Does the writer of `text` say that `fact` still stands or should go ahead despite the change?",
     "memory_depend": "Does the writer of `text` say that `fact` depends on or rests on another fact?",
     "memory_policy": "Does the writer of `text` ask to start or stop remembering `fact` automatically?",
+    "memory_standing_on": "Does the writer of `text` ask to always keep `fact` in mind, in every conversation?",
+    "memory_standing_off": "Does the writer of `text` ask to stop always keeping `fact` in mind?",
 }
 ASK_THRESHOLD = 0.7
 
@@ -101,7 +106,9 @@ INSTRUCTIONS = (
     "of earlier messages; the user's current words take precedence. To forget a fact the user names, call "
     "memory_forget with its id; memory_undo only takes back the last thing saved. Say a change is done only when a "
     "tool confirms it. Items under review are earlier recommendations whose premises changed: they need review, not "
-    "reversal; memory_dependents explains them. A failed or unavailable call is not evidence that a fact is missing.")
+    "reversal; memory_dependents explains them. Claims marked standing apply to every task of the session. When the "
+    "user asks to always keep something in mind, or to stop, call memory_standing with the fact's id. A failed or "
+    "unavailable call is not evidence that a fact is missing.")
 
 
 class ArgumentError(KernelError):
@@ -123,6 +130,8 @@ def validate(arguments, contract):
                 raise ArgumentError("Invalid tool string argument.")
             if "enum" in spec and value not in spec["enum"]:
                 raise ArgumentError("Unsupported tool operation.")
+        if spec.get("type") == "boolean" and not isinstance(value, bool):
+            raise ArgumentError("Invalid tool boolean argument.")
         if spec.get("type") == "object":
             validate(value, spec)
         if spec.get("type") == "array":
@@ -170,7 +179,8 @@ class Server:
         return self.judge
 
     def _asked(self, name, turn, statement):
-        """The user's recorded words for this turn must ask for this action on this statement."""
+        """The user's recorded words for this turn must ask for this action on this statement (`name`
+        is the ASKS entry)."""
         authored, _ = segments(turn["prompt_excerpt"] or "")
         if not authored:
             raise KernelError("The user's message for this turn is not available; ask them to repeat the request.")
@@ -182,17 +192,30 @@ class Server:
     def _owner_action(self, name, arguments):
         turn = self._turn(arguments["token"], interactive=True)
         if name == "memory_policy":
-            rules = capture_policy(self.store)
             change = {c: True for c in arguments.get("enable", [])} | {c: False for c in arguments.get("disable", [])}
-            if not change:
-                return rules
-            self._asked(name, turn, ", ".join(CATEGORIES[c] for c in change))
-            rules["categories"].update(change)
+            repository = arguments.get("repository")
+            if not change and repository is None:
+                return capture_policy(self.store)
+            described = [CATEGORIES[c] for c in change]
+            if repository is not None:
+                described.append("decisions recorded in this repository (decision records and commits)")
+            self._asked(name, turn, ", ".join(described))
             stored = self.store.policy() or {}
-            stored["categories"] = dict(stored.get("categories", {}), **change)
+            if change:
+                stored["categories"] = dict(stored.get("categories", {}), **change)
+            if repository is not None:
+                stored["repository"] = repository
             self.store.set_policy(stored)
             return capture_policy(self.store)
         statement = self.store.inspect(arguments["id"])
+        if name == "memory_standing":
+            if statement["effective_state"] != "active" or statement["trust"] == "quarantined" \
+                    or statement["assertion_kind"] not in {"user_statement", "observed"}:
+                raise KernelError("Only a current, unquarantined fact can be kept in mind in every session.")
+            self._asked("memory_standing_on" if arguments["standing"] else "memory_standing_off", turn, statement)
+            self.store.set_standing(statement["entity_key"], statement["predicate"],
+                                    "on" if arguments["standing"] else "off", "asked")
+            return {"id": statement["id"], "standing": arguments["standing"]}
         if name == "memory_depend":
             self._asked(name, turn, statement)
             return self.store.depend(arguments["id"], arguments["assumption_id"])
@@ -231,11 +254,13 @@ class Server:
         return self.store.undo_capture(last)
 
     def inventory(self):
-        grouped = {}
+        grouped, standing = {}, self.store.standing()
         for row in self.store.records(quarantined=True):
             grouped.setdefault(row["entity_key"], []).append({
                 "id": row["id"], "predicate": row["predicate"], "value": row["value"], "trust": row["trust"],
-                "category": row["category"], "recorded_at": row["recorded_at"], "review_needed": row["stale"]})
+                "category": row["category"], "recorded_at": row["recorded_at"], "review_needed": row["stale"]}
+                | ({"standing": True} if (row["entity_key"], row["predicate"]) in standing else {})
+                | ({"source": row["source_ref"]} if row["source_kind"] == "repository" else {}))
         return {"scope": self.store.scope, "entities": grouped,
                 "note": "quarantined items are held for review and are not evidence"}
 

@@ -1,7 +1,7 @@
 {
   "name": "context-kernel",
   "displayName": "Context Kernel",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Memory for coding agents that you keep up to date just by talking. It remembers what you tell it, notices when you change your mind, and warns the agent when an earlier recommendation relied on something that changed. Stored locally in SQLite; needs jev, from jevmate. After each turn a line above the prompt says what was saved, with undo.",
   "author": {
     "name": "Gaston Gelhorn",

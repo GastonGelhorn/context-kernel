@@ -238,6 +238,83 @@ Both clients have now passed the same pre-registered scenario once each, with no
 
 We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
+## v0.6: decisions from the repository, and standing facts
+
+Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama), with no paid API.
+
+### Unit and subprocess suite
+
+248 tests pass, 31 of them new.
+
+`tests/test_repository.py` builds real git repositories in a temporary folder. It covers:
+
+- the parser on Nygard, MADR (front matter and bullets) and Spanish records, and which files count as records;
+- accepted records learned and proposed ones skipped;
+- a superseded record pointing at its successor, flagging an inferred recommendation, and letting `reaffirm` move the link there;
+- deprecated and deleted records, and a changed record stored as a new version;
+- a forget that holds until the record changes;
+- routine commits, commits without decision wording, and commits that write a record, none of which reach the judge;
+- one commit per request, and reverts, including one in the same window and a rewritten hash;
+- a hosted judge and a failing judge, and the policy switch;
+- key resolution never landing on a repository fact;
+- the session-start trigger, the note at the next Stop, and the claim's source.
+
+`tests/test_standing.py` covers:
+
+- three sessions, and one session repeating itself;
+- rule wording, and a fact of the moment that uses "never";
+- delivery once per session and again after SessionStart, and again after a value changes;
+- the decay exemption;
+- taking a fact off the list, after which counting does not put it back;
+- the tool's checks, forget and the inventory;
+- the migration from version 5 to 6.
+
+### Which commits are decisions
+
+Five rounds with the real jev, on subjects labelled for this purpose. There are 112 rows now in `fixtures/calibration.jsonl`.
+
+1. A ranked question ("a decision, rule or constraint … rather than routine work") scored decisions 0.32 to 0.56 and routine work 0.21 to 0.40, all in one narrow band.
+2. Over this repository's 42 commits, that question with only the bar took 10 as decisions. By hand, about half of them were finished work ("Harden retrieval and hook delivery").
+3. A reworded ranked question did better on this repository and worse on the written set. Ranked scores also moved with the project name in the query: the same subject scored 0.429 for "demo-app" and 0.486 for "acme". They moved with the batch too.
+4. A filter on the language of a decision (use, require, keep, stop, instead of…) removed every routine subject of the written set and of this repository. 16 routine changes worded like decisions were then added to test what gets past it. The ranked question scored them as high as 0.53, above many decisions.
+5. The final rule asks about each commit on its own: does it state a choice for the whole project, or a change to one place in the code? At 0.5 it kept 25 of 28 written decisions, 2 of 13 of this repository's, and none of the 16 look-alikes (the highest scored 0.482). This repository's decisions mostly change how one tool behaves, which the question reads as local. That is why only 2 of its 13 pass.
+
+A real pass over this repository with the final rule sent 8 of its 42 commits to jev. It judged them in 1.4 s and kept 2: the MIT license and the Codex runner's trust requirement. Later passes with nothing new took 0.15 s.
+
+### End to end with the real hooks
+
+These runs used a throwaway repository and a throwaway database.
+
+- With one decision record and four commits, the SessionStart hook returned in 0.18 s, and the background pass finished about 0.7 s later.
+  - It learned ADR 1 and "Adopt pnpm as the package manager".
+  - It judged "Use a context manager for the file handle" and turned it down.
+  - "Fix typo in README" and "Harden retrieval and hook delivery" never reached jev.
+  - The session's notice read "Memory: learned 2 decision(s) from the repository (ADR 1, commit 6818af9)."
+- With the final hook, which no longer runs git itself, SessionStart returned in 0.12 s. A second session start's pass found nothing changed and added nothing, and a session in a folder outside any repository started no pass.
+- An earlier run tested the flow from recommendation to review. It used the same code except for how commits were judged, which that flow does not involve.
+  - A question about the queue delivered ADR 1 with `attribution: repository` and its path as `source`.
+  - The reply "Keep the job queue in SQLite for now rather than moving it to Redis…" was linked to ADR 1.
+  - A commit then superseded ADR 1 with ADR 2. The next SessionStart started a pass, and the next prompt delivered ADR 2 with `review_recommended` and the recommendation's id.
+- A reply phrased "No: ADR 1 keeps jobs in one SQLite file, so moving the queue to Redis would reverse an accepted decision…" scored 0.61 on the recommendation question, below the 0.70 bar, and was not linked. That bar misses some advice phrased as a refusal.
+
+### Git in a folder synced by iCloud
+
+This checkout lives in `~/Documents`, which iCloud syncs. 30 loose objects and the pack's reverse index were dataless, meaning evicted to the cloud. One `git log --name-only` waited 44 s at 0% CPU while they downloaded, and took 0.01 s afterwards. So no hook runs git. The SessionStart hook only looks for a `.git` folder and starts the pass, and the pass gives git 60 s. A full test run once took 44 s instead of 14 s for the same reason (evicted `__pycache__` files).
+
+### Standing facts
+
+The `memory_standing` questions were scored on 13 rows (`standing_on` and `standing_off` in the fixtures).
+
+- Requests to always keep a fact in mind scored 0.905 to 0.959; every other row scored 0.613 or less.
+- Requests to stop scored 0.712 to 0.950; every other row scored 0.421 or less.
+
+Both use the shared 0.70 bar. The margin for stopping is thin, 0.012.
+
+### Not verified yet
+
+- Standing delivery and the background pass inside a native Claude Code or Codex session.
+- The band showing the pass's note.
+
 ## v0.5: the plugin, the band, and requests to remember
 
 Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama).

@@ -8,7 +8,7 @@ import sqlite3
 from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp, timestamp_offset
 
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS entities(
@@ -59,7 +59,7 @@ CREATE TABLE IF NOT EXISTS processed_events(
  scope TEXT NOT NULL, event_id TEXT NOT NULL, PRIMARY KEY(scope,event_id));
 CREATE TABLE IF NOT EXISTS sessions(
  scope TEXT NOT NULL, session_id TEXT NOT NULL, host TEXT NOT NULL, chain TEXT NOT NULL,
- seen_at TEXT NOT NULL, PRIMARY KEY(scope,session_id));
+ seen_at TEXT NOT NULL, standing_sent TEXT, notice TEXT, PRIMARY KEY(scope,session_id));
 CREATE TABLE IF NOT EXISTS turns(
  scope TEXT NOT NULL, session_id TEXT NOT NULL, turn_key TEXT NOT NULL, token TEXT NOT NULL UNIQUE,
  origin TEXT NOT NULL CHECK(origin IN ('interactive','continuation','unknown')),
@@ -82,6 +82,16 @@ CREATE TABLE IF NOT EXISTS scopes(scope TEXT PRIMARY KEY, policy TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS servers(
  scope TEXT NOT NULL, pid INTEGER NOT NULL, started TEXT NOT NULL, seen_at TEXT NOT NULL,
  PRIMARY KEY(scope,pid,started));
+CREATE TABLE IF NOT EXISTS standing(
+ scope TEXT NOT NULL, entity_key TEXT NOT NULL, predicate TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('on','off')), source TEXT NOT NULL, since TEXT NOT NULL,
+ PRIMARY KEY(scope,entity_key,predicate));
+CREATE TABLE IF NOT EXISTS repositories(
+ scope TEXT NOT NULL, root TEXT NOT NULL, entity_key TEXT NOT NULL, signature TEXT, scanned_at TEXT,
+ scanning_until TEXT, PRIMARY KEY(scope,root));
+CREATE TABLE IF NOT EXISTS repo_sources(
+ scope TEXT NOT NULL, root TEXT NOT NULL, source TEXT NOT NULL, version TEXT NOT NULL,
+ statement_id TEXT, seen_at TEXT NOT NULL, PRIMARY KEY(scope,root,source));
 """
 
 # Columns added after the tables first shipped; a migration adds whichever are missing.
@@ -94,6 +104,8 @@ ADDED_COLUMNS = (
     ("turns", "reply_excerpt", "TEXT"),
     ("turns", "notes", "TEXT"),
     ("captures_log", "label", "TEXT"),
+    ("sessions", "standing_sent", "TEXT"),
+    ("sessions", "notice", "TEXT"),
 )
 RELATION_COLUMNS = "id,scope,kind,from_statement,to_statement,from_entity,to_entity"
 
@@ -126,7 +138,7 @@ class Store:
             if os.name == "posix":
                 self.path.chmod(0o600)
         version = self.db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
-        if version and version[0] in {"1", "2", "3", "4"}:
+        if version and version[0] in {"1", "2", "3", "4", "5"}:
             self._migrate(version[0])
             version = (SCHEMA_VERSION,)
         if not version or version[0] != SCHEMA_VERSION:
@@ -489,9 +501,10 @@ class Store:
             if derived:
                 self.db.execute(f"DELETE FROM statements WHERE scope=? AND id IN ({','.join('?' * len(derived))})",
                                 (self.scope, *derived))
-            # Remove every version of this property, including revoked versions.
-            self.db.execute("UPDATE statements SET superseded_by=NULL WHERE scope=? AND entity_id=? AND predicate=?",
-                            (self.scope, row["entity_id"], row["predicate"]))
+            # Remove every version of this property, including revoked versions. A decision record
+            # superseded by this one points at it from another property; that link goes too.
+            self.db.execute(f"UPDATE statements SET superseded_by=NULL WHERE scope=? AND superseded_by IN ({marks})",
+                            (self.scope, *ids))
             self.db.execute("DELETE FROM statements WHERE scope=? AND entity_id=? AND predicate=?",
                             (self.scope, row["entity_id"], row["predicate"]))
             self.db.execute("DELETE FROM evidence WHERE scope=? AND id NOT IN (SELECT evidence_id FROM statements)", (self.scope,))
@@ -500,6 +513,12 @@ class Store:
             # including turn excerpts and cached judgments that embed values.
             for table in ("plans", "projections", "proposals", "operations", "processed_events", "turns", "judgments"):
                 self.db.execute(f"DELETE FROM {table} WHERE scope=?", (self.scope,))
+            self.db.execute("DELETE FROM standing WHERE scope=? AND entity_key=? AND predicate=?",
+                            (self.scope, row["entity_key"], row["predicate"]))
+            # A repository source keeps its version, so an unchanged record is not read back in; only a
+            # later change to it in the repository can return (the tombstone below decides).
+            self.db.execute(f"UPDATE repo_sources SET statement_id=NULL WHERE scope=? AND statement_id IN ({marks})",
+                            (self.scope, *ids))
             # A tombstone stops any write already in flight (a slow capture or inference) whose
             # evidence predates this request from bringing the property back.
             self._tombstone(row["entity_key"], row["predicate"])
@@ -642,9 +661,29 @@ class Store:
         return policy
 
     def register_session(self, session_id, host, chain):
+        # An upsert: what was delivered to the session (standing facts, a notice) survives each prompt.
         with self.db:
-            self.db.execute("INSERT OR REPLACE INTO sessions VALUES(?,?,?,?,?)",
-                            (self.scope, text(session_id, 256), host, canonical(chain), self.clock()))
+            self.db.execute("""INSERT INTO sessions(scope,session_id,host,chain,seen_at) VALUES(?,?,?,?,?)
+                               ON CONFLICT(scope,session_id) DO UPDATE SET host=excluded.host, chain=excluded.chain,
+                               seen_at=excluded.seen_at""", (self.scope, text(session_id, 256), host, canonical(chain), self.clock()))
+
+    def session_field(self, session_id, name):
+        if name not in {"standing_sent", "notice"}:
+            raise KernelError("Unsupported session field.")
+        row = self.db.execute(f"SELECT {name} FROM sessions WHERE scope=? AND session_id=?", (self.scope, session_id)).fetchone()
+        return row[0] if row else None
+
+    def set_session_field(self, session_id, name, value):
+        if name not in {"standing_sent", "notice"}:
+            raise KernelError("Unsupported session field.")
+        with self.db:
+            self.db.execute(f"UPDATE sessions SET {name}=? WHERE scope=? AND session_id=?", (value, self.scope, session_id))
+
+    def pop_session_notice(self, session_id):
+        notice = self.session_field(session_id, "notice")
+        if notice:
+            self.set_session_field(session_id, "notice", None)
+        return notice
 
     def register_server(self, parent):
         """An MCP server of this scope is running under this host process (pid and start time)."""
@@ -808,6 +847,89 @@ class Store:
                 restored = old["id"]
             self._event("undo", {"statement_id": statement_id})
         return {"status": "undone", "id": statement_id, "restored": restored}
+
+    # Standing facts: properties the user keeps stating, delivered once per session.
+
+    def standing(self, state="on"):
+        return {(r["entity_key"], r["predicate"]): dict(r) for r in self.db.execute(
+            "SELECT * FROM standing WHERE scope=? AND state=? ORDER BY since DESC", (self.scope, state))}
+
+    def standing_state(self, entity_key, predicate):
+        row = self.db.execute("SELECT * FROM standing WHERE scope=? AND entity_key=? AND predicate=?",
+                              (self.scope, entity_key, predicate)).fetchone()
+        return dict(row) if row else None
+
+    def set_standing(self, entity_key, predicate, state, source):
+        if state not in {"on", "off"}:
+            raise KernelError("Invalid standing state.")
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO standing VALUES(?,?,?,?,?,?)",
+                            (self.scope, key(entity_key, "entity"), key(predicate, "predicate"), state, source, self.clock()))
+            self._event("standing", {"state": state, "source": source})
+
+    def stated_sessions(self, entity_key, predicate):
+        """Distinct sessions in which a message the user typed stated this property (a capture, or a
+        restatement the judge validated), since it was last forgotten."""
+        since = self.db.execute("SELECT at FROM tombstones WHERE scope=? AND entity_key=? AND predicate=?",
+                                (self.scope, entity_key, predicate)).fetchone()
+        return self.db.execute("""SELECT count(DISTINCT session_id) FROM captures_log WHERE scope=? AND label=?
+                                  AND recorded_at>? AND (outcome IN ('captured','confirmed')
+                                  OR (outcome='duplicate' AND reason='restated_by_user'))""",
+                               (self.scope, f"{entity_key}.{predicate}", since[0] if since else "")).fetchone()[0]
+
+    # Repositories the kernel reads decisions from.
+
+    def repository(self, root):
+        row = self.db.execute("SELECT * FROM repositories WHERE scope=? AND root=?", (self.scope, root)).fetchone()
+        return dict(row) if row else None
+
+    def repositories(self):
+        return [dict(r) for r in self.db.execute("SELECT * FROM repositories WHERE scope=?", (self.scope,))]
+
+    def claim_scan(self, root, entity_key, until):
+        """Take the scan of this repository unless another process holds it; returns whether taken."""
+        with self.db:
+            row = self.repository(root)
+            if row and row["scanning_until"] and row["scanning_until"] > self.clock():
+                return False
+            if row:
+                self.db.execute("UPDATE repositories SET scanning_until=? WHERE scope=? AND root=?", (until, self.scope, root))
+            else:
+                self.db.execute("INSERT INTO repositories VALUES(?,?,?,?,?,?)", (self.scope, root, entity_key, None, None, until))
+        return True
+
+    def release_scan(self, root, signature=None):
+        """End a pass. A pass that left work undone stores no signature, so the next session runs one."""
+        with self.db:
+            self.db.execute("UPDATE repositories SET signature=?, scanned_at=?, scanning_until=NULL WHERE scope=? AND root=?",
+                            (signature, self.clock(), self.scope, root))
+
+    def repo_sources(self, root):
+        return {r["source"]: dict(r) for r in self.db.execute(
+            "SELECT * FROM repo_sources WHERE scope=? AND root=?", (self.scope, root))}
+
+    def save_repo_source(self, root, source, version, statement_id=None):
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO repo_sources VALUES(?,?,?,?,?,?)",
+                            (self.scope, root, source, version, statement_id, self.clock()))
+
+    def drop_repo_source(self, root, source):
+        with self.db:
+            self.db.execute("DELETE FROM repo_sources WHERE scope=? AND root=? AND source=?", (self.scope, root, source))
+
+    def _supersede(self, old_id, new_id):
+        """A decision replaced by a different one (a decision record superseded by another record):
+        the old one ends and points at its successor, so what rested on it is flagged for review and
+        `reaffirm` can move those links to the successor."""
+        old = self._row(old_id)
+        if old["lifecycle"] != "active":
+            return False
+        end = max(self.clock(), old["valid_from"])
+        self.db.execute("UPDATE statements SET lifecycle='superseded', valid_until=?, superseded_by=? WHERE id=?",
+                        (end, new_id, old_id))
+        self._relation("corrects", new_id, old_id)
+        self._event("supersede", {"statement_id": new_id})
+        return True
 
     def status(self):
         return {"scope": self.scope, "current_statements": len(self.records()),

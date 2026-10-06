@@ -30,6 +30,22 @@ When the agent recommends something, the Stop hook asks jev which facts the reco
 
 On each prompt jev also scores every stored fact for relevance, and only the relevant ones are delivered. Scores are cached, so asking the same thing again takes about 0.3 s.
 
+## What the repository already says
+
+Teams write decisions down before anyone tells an agent about them: in decision records (`docs/adr/0007-use-postgres.md`) and in commit messages ("Adopt pnpm as the package manager"). When a session starts in a git repository that changed since the last look, the kernel reads them in a background pass, so you never wait for it.
+
+- Decision records are read with a parser, not a model. The Nygard/adr-tools and MADR formats are both understood, in English or Spanish. An accepted record becomes a fact about the project, with the file as its source. A record that is still proposed is skipped. When a record is superseded, it points at the record that replaced it. When it is deprecated or deleted, it stops counting. Either way, every recommendation that rested on it is flagged for review, exactly as if you had changed the fact yourself.
+- Commits go through two word filters and then jev. Fixes, tests, docs, bumps and merges are skipped, and so is any subject that doesn't use the language of a decision (use, require, keep, stop, instead of…). jev then judges each remaining subject on its own: is it a choice for the whole project, or a change in one place? A revert takes back the decision it reverts. A commit that writes a decision record adds nothing, because the record is read instead.
+- What it learned is announced once, in that session's next memory line ("Memory: learned 2 decision(s) from the repository (ADR 1, commit 6818af9)."). The agent sees these facts attributed to `repository`, with the file or commit they came from.
+
+Forgetting one of them works like any other forget, and it sticks until that record changes again in the repository. `memory policy --repository off` turns the whole thing off for a scope, and you can also ask for that in chat.
+
+## Things you keep repeating
+
+When you've stated the same thing in three separate sessions ("use pnpm"), you shouldn't have to say it a fourth time. That fact becomes standing: from then on it's handed to the agent at the start of every session, whether or not the question touches it. It's sent again after a session is resumed, cleared or compacted, and whenever its value changes. A preference, constraint or decision that you state as a rule ("never add Co-Authored-By to commits", "from now on…", "in every repo") becomes standing right away. Standing facts never age out, since they stop being repeated once they work.
+
+Ask "you don't need to keep that in mind every time" to take one off the list, and counting won't put it back. "Always keep this in mind" adds one directly.
+
 ## Trust and privacy
 
 Facts have three trust levels. `confirmed` ones come from you, either through the owner CLI or by restating something that was captured. `captured` ones were validated from the conversation and are delivered labelled as such. `quarantined` ones are stored but never delivered: pasted or quoted text, private details about other people, things that sounded unsure, and turns a person didn't type.
@@ -98,6 +114,8 @@ memory --pretty metrics            # captured / held / refused / omitted / misse
 memory policy --enable personal_attributes
 memory undo STATEMENT_ID
 memory forget STATEMENT_ID
+memory learn --workspace .         # read the repository's decisions now instead of at the next session start
+memory standing STATEMENT_ID off   # stop handing a fact to every session
 ```
 
 `remember`, `correct`, `depend`, `reaffirm`, `revoke` and `confirm` are still around for scripting and for confirmed facts. `forget` removes every version of a property in that scope, along with its orphaned evidence, derived plans, traces, turn excerpts and cached judgments. It can't erase host transcripts, backups, or anything a model has already seen.
@@ -110,6 +128,7 @@ The thresholds were measured on the local model (`tev1-32k` through Ollama). You
 memory calibrate affirmed --score        # the kernel's exact question over bilingual fixtures, with a threshold sweep
 memory calibrate facts_present --score
 memory calibrate forget_asked --score
+memory calibrate decision_commit --score
 memory policy --threshold affirmed=0.75
 ```
 
@@ -120,6 +139,8 @@ memory policy --threshold affirmed=0.75
 | The message asks to forget this fact | 0.70 | true rows 0.94 to 0.98; false rows ≤ 0.60 |
 | The reply recommends something | 0.70 | advice 0.80 to 0.95; reports, questions and refusals ≤ 0.61 |
 | The recommendation rests on this premise | 0.85, or 0.50 when the reply names the premise's value | 7 true and 0 false links on 15 labelled pairs |
+| A commit states a project-wide choice | 0.50, after the word filters | 25 of 28 written decisions; 0 of 16 routine changes worded like decisions (highest 0.48) |
+| The message asks to keep a fact in mind always, or to stop | 0.70 | requests 0.71 to 0.96; everything else ≤ 0.61 |
 
 The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes.
 
@@ -132,5 +153,7 @@ With ten stored facts, the prompt hook took 0.33 s for a cached question and abo
 - `UserPromptSubmit` doesn't prove a person typed the prompt. The kernel is cautious about where a prompt came from and never lets an uncertain origin authorize a deletion, but that's a heuristic, not authentication.
 - jev's scores feed a policy; they aren't proof. A fact can pass validation and still be wrong, which is why captures are labelled, reversible, and announced when they change a confirmed value.
 - Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
+- Commits are a narrow channel. The filters and jev keep only clear choices for the whole project, so most commits add nothing. In this repository, where commits change how one tool behaves, 2 of its 13 decision-like commits were kept. Decision records are the dependable source.
+- Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute.
 
 More detail in [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md) and [verification](docs/verification.md).

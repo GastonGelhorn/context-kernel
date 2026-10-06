@@ -54,3 +54,128 @@
 {"kind": "forget_asked", "message": "¿Cuánto gano?", "fact": "user salary: 50000", "label": false}
 {"kind": "forget_asked", "message": "Forget the old approach, let's use Redis.", "fact": "user salary: 50000", "label": false}
 {"kind": "forget_asked", "message": "No te olvides de mi salario cuando negocies.", "fact": "user salary: 50000", "label": false}
+{"kind": "decision_commit", "message": "Use PostgreSQL instead of MySQL for the analytics store", "label": true}
+{"kind": "decision_commit", "message": "Drop support for Python 3.8", "label": true}
+{"kind": "decision_commit", "message": "Switch CI from Travis to GitHub Actions", "label": true}
+{"kind": "decision_commit", "message": "Deprecate the v1 API; new clients must use v2", "label": true}
+{"kind": "decision_commit", "message": "Store sessions in Redis rather than in process memory", "label": true}
+{"kind": "decision_commit", "message": "Require two approvals before merging to main", "label": true}
+{"kind": "decision_commit", "message": "Adopt pnpm as the package manager", "label": true}
+{"kind": "decision_commit", "message": "Remove the Ollama planner; jev is the only judge", "label": true}
+{"kind": "decision_commit", "message": "Pin Node to 20 LTS for all services", "label": true}
+{"kind": "decision_commit", "message": "Move authentication to the API gateway", "label": true}
+{"kind": "decision_commit", "message": "Stop supporting Internet Explorer 11", "label": true}
+{"kind": "decision_commit", "message": "Use UTC timestamps everywhere in the database", "label": true}
+{"kind": "decision_commit", "message": "Release under the MIT license", "label": true}
+{"kind": "decision_commit", "message": "Keep memory text on this machine unless the scope allows a hosted judge", "label": true}
+{"kind": "decision_commit", "message": "Usar SQLite como cola de trabajos en lugar de Redis", "label": true}
+{"kind": "decision_commit", "message": "Dejar de soportar la API v1", "label": true}
+{"kind": "decision_commit", "message": "Replace Webpack with Vite for the frontend build", "label": true}
+{"kind": "decision_commit", "message": "Switch the default branch to main", "label": true}
+{"kind": "decision_commit", "message": "Require Python 3.10 or newer", "label": true}
+{"kind": "decision_commit", "message": "Use feature flags for all new checkout code", "label": true}
+{"kind": "decision_commit", "message": "Move secrets from .env files to 1Password", "label": true}
+{"kind": "decision_commit", "message": "Store money as integer cents, never floats", "label": true}
+{"kind": "decision_commit", "message": "Adopt trunk-based development; delete long-lived branches", "label": true}
+{"kind": "decision_commit", "message": "Serve images from the CDN instead of the app server", "label": true}
+{"kind": "decision_commit", "message": "Standardize on structlog for application logging", "label": true}
+{"kind": "decision_commit", "message": "Migrar autenticación a OAuth con Google", "label": true}
+{"kind": "decision_commit", "message": "Usar pnpm en todos los paquetes del monorepo", "label": true}
+{"kind": "decision_commit", "message": "Only the release manager may tag production releases", "label": true}
+{"kind": "decision_commit", "message": "Fix typo in README", "label": false}
+{"kind": "decision_commit", "message": "Bump lodash from 4.17.20 to 4.17.21", "label": false}
+{"kind": "decision_commit", "message": "Add tests for the date parser", "label": false}
+{"kind": "decision_commit", "message": "Refactor the auth middleware", "label": false}
+{"kind": "decision_commit", "message": "Format code with black", "label": false}
+{"kind": "decision_commit", "message": "WIP", "label": false}
+{"kind": "decision_commit", "message": "Update dependencies", "label": false}
+{"kind": "decision_commit", "message": "Release v1.2.0", "label": false}
+{"kind": "decision_commit", "message": "Fix flaky test in CI", "label": false}
+{"kind": "decision_commit", "message": "Rename variable for clarity", "label": false}
+{"kind": "decision_commit", "message": "Record the 10/10 native Codex run", "label": false}
+{"kind": "decision_commit", "message": "Rewrite the docs and descriptions in plainer language", "label": false}
+{"kind": "decision_commit", "message": "Fix null pointer when the config file is missing", "label": false}
+{"kind": "decision_commit", "message": "Add logging to the payment worker", "label": false}
+{"kind": "decision_commit", "message": "Corregir error tipográfico en el README", "label": false}
+{"kind": "decision_commit", "message": "Actualizar dependencias", "label": false}
+{"kind": "decision_commit", "message": "Fix race condition in session cleanup", "label": false}
+{"kind": "decision_commit", "message": "Add unit tests for CSV export", "label": false}
+{"kind": "decision_commit", "message": "Update README badges", "label": false}
+{"kind": "decision_commit", "message": "Bump actions/checkout from 3 to 4", "label": false}
+{"kind": "decision_commit", "message": "Refactor user service into smaller functions", "label": false}
+{"kind": "decision_commit", "message": "Lint fixes", "label": false}
+{"kind": "decision_commit", "message": "Add missing type hints", "label": false}
+{"kind": "decision_commit", "message": "Improve error message for invalid tokens", "label": false}
+{"kind": "decision_commit", "message": "Release 2.3.1", "label": false}
+{"kind": "decision_commit", "message": "Remove unused imports", "label": false}
+{"kind": "decision_commit", "message": "Handle empty responses from the billing API", "label": false}
+{"kind": "decision_commit", "message": "Arreglar test intermitente del login", "label": false}
+{"kind": "decision_commit", "message": "Añadir logs al worker de pagos", "label": false}
+{"kind": "decision_commit", "message": "Add dark mode toggle to settings page", "label": false}
+{"kind": "decision_commit", "message": "Speed up the search query with an index", "label": false}
+{"kind": "standing_on", "message": "Recuérdalo siempre: usamos pnpm.", "fact": "user package manager: pnpm", "label": true}
+{"kind": "standing_on", "message": "Always keep in mind that we use pnpm, in every conversation.", "fact": "user package manager: pnpm", "label": true}
+{"kind": "standing_on", "message": "Esto tenlo presente en todas las sesiones: pnpm.", "fact": "user package manager: pnpm", "label": true}
+{"kind": "standing_on", "message": "Usamos pnpm.", "fact": "user package manager: pnpm", "label": false}
+{"kind": "standing_on", "message": "¿Usamos pnpm?", "fact": "user package manager: pnpm", "label": false}
+{"kind": "standing_on", "message": "Ya no hace falta que recuerdes siempre lo de pnpm.", "fact": "user package manager: pnpm", "label": false}
+{"kind": "standing_on", "message": "Olvida lo de pnpm.", "fact": "user package manager: pnpm", "label": false}
+{"kind": "standing_off", "message": "Ya no hace falta que recuerdes siempre lo de pnpm.", "fact": "user package manager: pnpm", "label": true}
+{"kind": "standing_off", "message": "You don't need to remind yourself about pnpm every session anymore.", "fact": "user package manager: pnpm", "label": true}
+{"kind": "standing_off", "message": "Deja de tener presente lo de pnpm en cada sesión.", "fact": "user package manager: pnpm", "label": true}
+{"kind": "standing_off", "message": "Recuérdalo siempre: usamos pnpm.", "fact": "user package manager: pnpm", "label": false}
+{"kind": "standing_off", "message": "Usamos pnpm.", "fact": "user package manager: pnpm", "label": false}
+{"kind": "standing_off", "message": "¿Usamos pnpm?", "fact": "user package manager: pnpm", "label": false}
+{"kind": "decision_commit", "message": "Add the MIT license, keep test runs out of real memory, drop local paths from the docs", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Install as a Claude Code plugin, show memory above the prompt, add a terminal installer", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Say what was not saved, and keep each turn's memory line for a band", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Take an explicit request to remember as evidence when jev reads no assertion", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Point the verification records at the rewritten commit hashes", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Record the 10/10 native Claude Code run", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Hand the turn back once when a clearly stated fact was not saved", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Link loosely phrased premises the reply names; quieter, typed-only requests", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Codex runner: require recorded folder and hook trust, keep stderr on failure", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Forget removes inferred recommendations derived from the forgotten fact", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Resolve drifting keys, judge recommendations, bound the judge's query", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Ignore generated local MCP configuration", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Document v0.4: chat-first memory, trust, calibration, and measured results", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Skip relevance on acknowledgements and the gate on question-only messages", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Calibrate the capture gate on the local model; v0.4 native runner", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "reaffirm follows the whole correction chain of a changed assumption", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Record the owner-trusted Codex hook walkthrough", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Bound jev calls to a pair cap and record measured local latency", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Settle jev's uncertain band with a lexical match instead of a lower bar", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Ignore the repo's own local Claude settings", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Record the passing native Claude Code check with jev selection", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Keep jev's own error line in the trace when selection falls back", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Pin the absolute jev path into generated hook and server configuration", "label": true, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Record the passing native Claude Code hook check", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Record native Claude Code hook activation; abort the check on sign-in failure", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Measure the three outcomes, add a Claude Code headless check, document v0.3", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Add jev relevance selection and fail-open prompt hooks", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Link decisions to their assumptions and flag stale dependents", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Record v0.2 verification and hook setup", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Improve bilingual context selection and delivery", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Add native Codex memory checks", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Document setup and verification", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Harden retrieval and hook delivery", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Add delivery workflows and failure checks", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Add owner CLI and local agent adapters", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Add evidence planning and bounded context projections", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Add scoped memory storage and lifecycle operations", "label": false, "source": "context-kernel history"}
+{"kind": "decision_commit", "message": "Use the correct path in the upload test", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Stop the worker cleanly on shutdown", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Replace a deprecated call in the logger", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Use a context manager for the file handle", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Drop a stale comment", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Require the session in the test fixture", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Only retry once in the flaky upload check", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Migrate the test fixtures to the new format", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Pin the version in the docs example", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Keep the button aligned on mobile", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Switch the order of two checks", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Use the new logo on the landing page", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Remove the debug print, keep the warning", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Usar el nombre correcto en el mensaje de error", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Dejar de imprimir trazas en la consola de pruebas", "label": false, "source": "hard negative"}
+{"kind": "decision_commit", "message": "Keep scrolling smooth on long lists", "label": false, "source": "hard negative"}

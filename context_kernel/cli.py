@@ -38,14 +38,24 @@ def parser():
     policy.add_argument("--disable", nargs="*", default=[])
     policy.add_argument("--allow-remote-judge", choices=("yes", "no"))
     policy.add_argument("--auto-capture", choices=("on", "off"))
+    policy.add_argument("--repository", choices=("on", "off"), help="Read decision records and decision commits of the session's repository")
     policy.add_argument("--threshold", action="append", default=[], help="name=value, e.g. affirmed=0.72 after jev tune")
     calibrate = commands.add_parser("calibrate", help="Export labelled fixtures for `jev tune`")
-    calibrate.add_argument("kind", choices=("affirmed", "facts_present", "forget_asked"))
+    calibrate.add_argument("kind", choices=("affirmed", "facts_present", "forget_asked", "standing_on", "standing_off",
+                                            "decision_commit"))
     calibrate.add_argument("--fixtures", default=str(Path(__file__).resolve().parent.parent / "fixtures" / "calibration.jsonl"))
     calibrate.add_argument("--questions", action="store_true", help="Print the candidate questions instead of the rows")
     calibrate.add_argument("--score", action="store_true", help="Run the kernel's own question over the fixtures with jev and sweep thresholds")
     calibrate.add_argument("--jev-command", default="jev")
+    calibrate.add_argument("--jev-timeout", type=float, default=60, help="A ranked fixture set is one long request")
     serve = commands.add_parser("serve", help="Stdio MCP server with a fixed scope")
+    learn = commands.add_parser("learn", help="Read decision records and decision commits of a repository now")
+    learn.add_argument("--workspace", required=True, help="A directory inside the git repository")
+    learn.add_argument("--session", help="Session that receives the one-line note of what was learned")
+    learn.add_argument("--if-changed", action="store_true", help="Return at once when the repository did not change")
+    standing = commands.add_parser("standing", help="Keep a fact in mind in every session, or stop")
+    standing.add_argument("id")
+    standing.add_argument("state", choices=("on", "off"))
     traces = commands.add_parser("traces")
     traces.add_argument("--limit", type=int, default=20, help="Latest scoped projection metadata, 1-100")
     listing = commands.add_parser("list")
@@ -105,10 +115,11 @@ def parser():
     hook.add_argument("--event", choices=("prompt", "stop", "session-start"), default="prompt")
     hook.add_argument("--proposals", action="store_true", help="Opt in to bounded command proposals, never automatic approval")
     hook.add_argument("--fail-closed", action="store_true", help="Block the prompt when memory is unavailable (default: proceed without memory)")
-    for item in (project, hook, serve):
+    for item in (project, hook, serve, learn):
         item.add_argument("--strategy", choices=("rules", "fts", "jev"), default="rules")
         item.add_argument("--jev-command", default="jev", help="jev executable; its own config decides local or hosted")
-        item.add_argument("--jev-timeout", type=float, default=10)
+        # The background pass has no user waiting on it and may meet a cold model.
+        item.add_argument("--jev-timeout", type=float, default=30 if item is learn else 10)
         item.add_argument("--jev-critical", type=float, default=0.6, help="P at or above which a pair is critical")
         item.add_argument("--jev-supporting", type=float, default=0.5, help="P at or above which a pair is supporting")
         item.add_argument("--jev-band", type=float, default=0.35, help="Uncertain band floor: a pair between band and supporting is kept only when the question mentions it")
@@ -173,14 +184,26 @@ def execute(args, store):
             stored["allow_remote_judge"] = args.allow_remote_judge == "yes"
         if args.auto_capture:
             stored["auto_capture"] = args.auto_capture == "on"
+        if args.repository:
+            stored["repository"] = args.repository == "on"
         for item in args.threshold:
             name, _, value = item.partition("=")
             if name not in {"affirmed", "uncertain", "none_bar"} or not 0 < float(value) < 1:
                 raise KernelError("Thresholds: affirmed, uncertain, or none_bar, between 0 and 1.")
             stored["thresholds"] = dict(stored.get("thresholds", {}), **{name: float(value)})
-        if args.enable or args.disable or args.allow_remote_judge or args.auto_capture or args.threshold:
+        if args.enable or args.disable or args.allow_remote_judge or args.auto_capture or args.threshold or args.repository:
             store.set_policy(stored)
         return capture_policy(store)
+    if command == "standing":
+        row = store.inspect(args.id)
+        store.set_standing(row["entity_key"], row["predicate"], args.state, "owner")
+        return {"id": row["id"], "standing": args.state == "on"}
+    if command == "learn":
+        from .repository import learn, root_of
+        root = root_of(args.workspace)
+        if not root:
+            raise KernelError("No git repository at that workspace.")
+        return learn(store, make_judge(args), root, Budget(90), args.session, args.if_changed)
     if command == "dependents":
         return store.dependents(args.id, args.as_of)
     if command == "stale":
@@ -223,7 +246,12 @@ def execute(args, store):
         print(canonical(stop_response(event, args.workspace, store, judge, Budget(15))), flush=True)
         return None
     if args.event == "session-start":
-        print(canonical(session_start_response(event, args.workspace, store, args.client)), flush=True)
+        from .repository import learn_command, start_background
+
+        def learn_in_background(cwd, session):
+            start_background(*learn_command(store.path, store.scope, cwd, session, judge.command if judge else None))
+
+        print(canonical(session_start_response(event, args.workspace, store, args.client, learn_in_background)), flush=True)
         return None
     response, projection_id = hook_response(event, args.workspace, store, compiler, args.strategy, args.proposals,
                                             args.fail_closed, args.client, judge, budget)

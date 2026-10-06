@@ -8,13 +8,15 @@ import shutil
 import sys
 
 from .binding import ancestors
-from .capture import CONFIDENT_NONE, describe_results, gate, only_questions, policy as capture_policy, related_facts, segments
+from .capture import (CONFIDENT_NONE, STANDING_LIMIT, describe_results, gate, only_questions, policy as capture_policy,
+                      related_facts, segments)
 from .turns import mask_secrets
 from .common import KernelError, canonical, digest, text, timestamp_offset
 from .inference import infer
 from .language import fold
 from .planner import NeedPlan, generic_question
 from .protocol import parse_json
+from . import repository
 from .turns import close_turn, do_not_remember, forget_request, open_turn, trivial_continuation, undo_request
 
 
@@ -85,6 +87,18 @@ def _pending_captures(store, turn):
     return pending
 
 
+def standing_due(store, session):
+    """Standing facts this session has not received yet: all of them on its first prompt, and again
+    after the session restarts, is cleared or compacted (SessionStart resets the mark) or one changes."""
+    pairs = store.standing()
+    rows = sorted((r for r in store.records() if (r["entity_key"], r["predicate"]) in pairs),
+                  key=lambda r: pairs[(r["entity_key"], r["predicate"])]["since"], reverse=True)[:STANDING_LIMIT]
+    if not rows:
+        return [], None
+    mark = digest(sorted(r["id"] for r in rows))
+    return ([], mark) if store.session_field(session, "standing_sent") == mark else ([r["id"] for r in rows], mark)
+
+
 def hook_response(event, workspace, store, compiler, strategy="rules", proposals=False, fail_closed=False,
                   client="claude", judge=None, deadline=None):
     """UserPromptSubmit: open the turn, judge whether the message states facts, deliver context.
@@ -139,12 +153,15 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
             flags.append("gate_unavailable")
     # Pending captures ride along in the marker; they do not justify judging an "ok" for relevance.
     quiet = trivial_continuation(prompt) and not flags and not store.pending_proposal_count()
+    pinned, mark = standing_due(store, turn["session_id"])
     if quiet:
-        projection = compiler.project(prompt, plan=NeedPlan(strategy=strategy), extra={"turn": marker})
+        projection = compiler.project(prompt, plan=NeedPlan(strategy=strategy), extra={"turn": marker}, pinned=pinned)
     else:
-        projection = compiler.prepare(prompt, strategy=strategy, extra={"turn": marker})
+        projection = compiler.prepare(prompt, strategy=strategy, extra={"turn": marker}, pinned=pinned)
     store.update_turn(turn["session_id"], turn["turn_key"], projection_id=projection.id,
                       delivered_ids=projection.trace["selected"], gate_count=gate_count, flags=flags)
+    if pinned and set(pinned) <= set(projection.trace["selected"]):
+        store.set_session_field(turn["session_id"], "standing_sent", mark)
     if notice:
         messages.append(f"Memory proposal {notice['id']} awaits owner approval; it is not a remembered fact.")
     if projection.trace["status"] in {"unavailable", "insufficient_context"}:
@@ -249,7 +266,9 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
 
 
 def _report(store, judge, deadline, turn, reply, nudged=False):
-    notes = []
+    # What a background pass over the repository learned when this session started, said once.
+    notice = store.pop_session_notice(turn["session_id"])
+    notes = [notice] if notice else []
     results = store.captures_for_turn(turn["session_id"], turn["turn_key"])
     rows = {r["id"]: r for r in store.records(history=True)}
     described = [dict(status=r["outcome"], entity=rows[r["statement_id"]]["entity_key"], predicate=rows[r["statement_id"]]["predicate"])
@@ -300,13 +319,22 @@ def activity(store, session_id):
             "held": sum(1 for r in store.records(quarantined=True) if r["trust"] == "quarantined")}
 
 
-def session_start_response(event, workspace, store, client="claude"):
-    """SessionStart: bind this session to its host process; surface captures nobody confirmed."""
+def session_start_response(event, workspace, store, client="claude", learn=None):
+    """SessionStart: bind this session to its host process, make the next prompt carry the standing
+    facts, surface captures nobody confirmed, and in a git repository start the background pass that
+    reads its decisions (`learn(cwd, session)`). The pass runs git and returns at once when nothing
+    changed; this hook neither runs git nor waits."""
     _check_event(event, workspace, "SessionStart")
     session = str(event.get("session_id") or "unknown-session")
     store.register_session(session, client, ancestors(depth=2))
-    old = [r for r in store.records(quarantined=True) if r["trust"] != "confirmed"
+    # Started, resumed, cleared or compacted: whatever the session was told before may be gone.
+    store.set_session_field(session, "standing_sent", None)
+    standing = store.standing()
+    old = [r for r in store.records(quarantined=True) if r["trust"] != "confirmed" and r["source_kind"] != "repository"
+           and (r["entity_key"], r["predicate"]) not in standing
            and (r.get("last_confirmed_at") or r["recorded_at"]) <= timestamp_offset(store.clock(), -90 * 86400)]
+    if learn is not None and capture_policy(store).get("repository", True) and repository.inside_repository(event["cwd"]):
+        learn(event["cwd"], session)
     if old:
         return {"systemMessage": f"Memory: {len(old)} remembered fact(s) were captured over 90 days ago and never confirmed. "
                                  "Ask \"what do you remember about me?\" to review them."}
@@ -364,7 +392,7 @@ def configuration(client, workspace, db, scope, python=None, mode="hook", propos
     prompt_options = (["--proposals"] if proposals else []) + (["--fail-closed"] if fail_closed else []) + strategy_options
     prompt = {"type": "command", "command": command("prompt", prompt_options), "timeout": 15}
     stop = {"type": "command", "command": command("stop", judge_options), "timeout": 20}
-    start = {"type": "command", "command": command("session-start"), "timeout": 10}
+    start = {"type": "command", "command": command("session-start", judge_options), "timeout": 10}
     if client == "codex":
         # The packet stays within the kernel's 2 KiB budget; the plain-text requests before it add up to ~700 bytes.
         prompt["additionalContextLimit"] = 3072
