@@ -54,6 +54,20 @@ def prepare(workspace, jev_command):
                                                 "context-kernel hooks in its prompt or /hooks, then quit and run --workspace."}
 
 
+def trust_state(workspace, home=None):
+    """Whether Codex recorded trust for this folder and its three hooks (read-only; nothing is changed).
+
+    Without folder trust Codex does not load the project's .codex/config.toml, so the memory server is
+    missing and per-invocation tool approvals describe a server with no command ("invalid transport")."""
+    config = Path(home or Path.home()) / ".codex" / "config.toml"
+    text = config.read_text(encoding="utf-8") if config.is_file() else ""
+    hooks = str(Path(workspace) / ".codex" / "hooks.json")
+    folder = f'[projects."{workspace}"]'
+    folder_trusted = folder in text and 'trust_level = "trusted"' in text.split(folder, 1)[1].split("[", 1)[0]
+    events = {event: f'[hooks.state."{hooks}:{event}:' in text for event in ("user_prompt_submit", "stop", "session_start")}
+    return {"folder_trusted": folder_trusted, "hooks_reviewed": events}
+
+
 def invoke(codex, workspace, prompt, model=None, disable=()):
     command = [codex, "exec", "--json", "--skip-git-repo-check", "--ephemeral", "--sandbox", "read-only",
                "--disable", "apps", "--disable", "multi_agent", "--disable", "shell_tool", "-c", 'web_search="disabled"',
@@ -82,6 +96,7 @@ def invoke(codex, workspace, prompt, model=None, disable=()):
     answers = [i.get("text") for i in items if i.get("type") == "agent_message"]
     calls = [{"tool": i.get("tool"), "status": i.get("status")} for i in items if i.get("type") == "mcp_tool_call"]
     return {"exit_code": result.returncode, "answer": answers[-1] if answers else None, "tool_calls": calls,
+            "stderr": result.stderr.strip()[-800:] if result.returncode else "",
             "errors": [i.get("message") for i in items if i.get("type") == "error"][:3],
             "duration_seconds": round(time.perf_counter() - started, 3),
             "usage": [e.get("usage") for e in events if e.get("type") == "turn.completed"]}
@@ -91,6 +106,11 @@ def run(codex, workspace, model=None, disable=()):
     workspace = Path(workspace).resolve()
     if not (workspace / ".codex" / "hooks.json").is_file():
         raise KernelError("Prepare the pilot first with --prepare, then trust its hooks in Codex once.")
+    trust = trust_state(workspace)
+    if not trust["folder_trusted"] or not all(trust["hooks_reviewed"].values()):
+        raise KernelError(f"Codex has not recorded trust for this pilot yet ({canonical(trust)}). Open Codex once in "
+                          f"{workspace}, choose to trust the folder, review and trust the three context-kernel hooks, "
+                          "quit, and run again.")
     status = subprocess.run([codex, "login", "status"], capture_output=True, text=True, timeout=15, env=environment())
     if status.returncode or "ChatGPT" not in status.stdout + status.stderr:
         raise KernelError("ChatGPT sign-in is required; this runner never falls back to an API key.")
