@@ -162,6 +162,19 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(self.capture(packet, ("user", "manager", "Dani"))[0]["reason"], "not_affirmed")
         self.assertEqual(self.store.records(quarantined=True), [])
 
+    def test_asking_to_remember_is_evidence_when_the_judge_reads_no_assertion(self):
+        # Measured on the local model: 0.39-0.54 for these, against a 0.75 bar.
+        self.judge.ask_fn = answers(affirmed=0.4, category="preferences")
+        packet, _ = self.prompt("haz 1, 2 y 3, reucerda los comits sin coauthored")
+        result = self.capture(packet, ("user", "commit_preference", "commits sin Co-Authored-By"))[0]
+        self.assertEqual(result["status"], "captured")
+        packet, _ = self.prompt("Recuerda que el deploy es los viernes")
+        self.assertEqual(self.capture(packet, ("project", "deploy_day", "martes"))[0]["reason"], "not_affirmed")
+        packet, _ = self.prompt("¿Recuerdas si usábamos pnpm?")
+        self.assertEqual(self.capture(packet, ("project", "package_manager", "pnpm"))[0]["reason"], "not_affirmed")
+        packet, _ = self.prompt("I remember Ana said the budget is 20k")
+        self.assertEqual(self.capture(packet, ("project", "budget", "20k"))[0]["reason"], "not_affirmed")
+
     def test_do_not_remember_stores_nothing_not_even_in_quarantine(self):
         packet, event = self.prompt("No lo guardes: mi salario es 50k")
         self.assertIn("off", packet["turn"]["capture"])

@@ -135,6 +135,67 @@ def only_questions(prompt):
     return bool(sentences) and all(s.endswith("?") or _ANSWER_STYLE.match(fold(s)) for s in sentences)
 
 
+# Words with which a person asks the assistant to keep something. jev reads a terse "recuerda los
+# commits sin coauthored" as no assertion (0.39-0.54 against a 0.75 bar, 2026-10-06); no rewording of
+# the question separated it from the false rows, so the request itself is the evidence.
+_REMEMBER_CUES = ("recuerda", "acuerdate", "remember", "apunta", "anota")
+_NOT_IMPERATIVE = {"i", "yo", "we", "you", "they", "do", "does", "did", "te", "se", "me", "lo", "nos", "si"}
+_REMEMBER_PHRASES = re.compile(r"\b(no olvides|ten en cuenta|tenlo en cuenta|de ahora en adelante|a partir de ahora|"
+                               r"don'?t forget|keep in mind|from now on|going forward)\b")
+
+
+def _near(a, b):
+    """Equal, one edit or one swap of neighbours apart (a typo), or one containing the other, for
+    words of four letters or more."""
+    if a == b or (len(a) >= 4 and len(b) >= 4 and (a in b or b in a)):
+        return True
+    if abs(len(a) - len(b)) > 1 or min(len(a), len(b)) < 4:
+        return False
+    rows = [list(range(len(b) + 1))]
+    for i, ca in enumerate(a, 1):
+        row = [i]
+        for j, cb in enumerate(b, 1):
+            best = min(rows[-1][j] + 1, row[j - 1] + 1, rows[-1][j - 1] + (ca != cb))
+            if i > 1 and j > 1 and ca == b[j - 2] and a[i - 2] == cb:
+                best = min(best, rows[-2][j - 2] + 1)
+            row.append(best)
+        rows.append(row)
+    return rows[-1][-1] <= 1
+
+
+def _is_cue(word, before):
+    """An imperative "remember": a cue word, typos allowed but ending as the cue does ("recuerdo" is
+    a report, not a request), and not after a subject or an auxiliary ("I remember", "do you remember")."""
+    if before in _NOT_IMPERATIVE:
+        return False
+    return any(word == c or (word[-1] == c[-1] and _near(word, c)) for c in _REMEMBER_CUES)
+
+
+def asked_to_remember(authored, value):
+    """The clause in which the user asks the assistant to remember something, when the value is
+    written there in the user's own words (typos allowed). Questions never count."""
+    rendered = value if isinstance(value, str) else canonical(value)
+    wanted = [t for t in re.findall(r"[^\W_]+", fold(rendered)) if len(t) >= 4]
+    if not wanted:
+        return None
+    for clause in re.split(r"(?<=[.!?\n])\s+", authored):
+        folded = fold(clause)
+        if "?" in folded:
+            continue
+        words = re.findall(r"[^\W_]+", folded)
+        cue = next((i for i, w in enumerate(words) if _is_cue(w, words[i - 1] if i else "")), None)
+        if cue is None:
+            match = _REMEMBER_PHRASES.search(folded)
+            if not match:
+                continue
+            cue = len(re.findall(r"[^\W_]+", folded[:match.start()]))
+        after = words[cue + 1:] or words
+        hits = sum(1 for t in wanted if any(_near(t, w) for w in after))
+        if hits >= max(1, (len(wanted) + 1) // 2):
+            return clause.strip()
+    return None
+
+
 def fact_line(entity, predicate, value):
     rendered = value if isinstance(value, str) else canonical(value)
     return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()
@@ -179,7 +240,7 @@ def _decide(store, judge, turn, triple, rules, deadline):
                            {"affirmed": ("noul", AFFIRMED), "category": ("choice", CATEGORY, CATEGORIES)}, timeout=timeout)
     category = max(answers["category"], key=answers["category"].get)
     bar = rules["thresholds"]["affirmed"]
-    if answers["affirmed"] >= bar:
+    if answers["affirmed"] >= bar or asked_to_remember(authored, value):
         if turn["origin"] != "interactive":
             return "quarantined", "origin_unverified", category, authored
         if not rules["categories"].get(category, False):
