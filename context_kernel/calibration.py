@@ -31,6 +31,9 @@ QUESTIONS = {
     "standing_off": [
         "Does the writer of the message in `candidate` ask to stop always keeping the fact in `candidate` in mind?",
     ],
+    "decision_replaces": [
+        "Does the later decision in `candidate` replace or reverse the earlier decision in `candidate`, so that the earlier one no longer holds?",
+    ],
     "decision_commit": [
         "Does the commit message in `candidate` state a project-wide choice (a technology, tool, platform, policy, or convention that all later work must follow), rather than a change to one place in the code?",
     ],
@@ -77,7 +80,13 @@ def score(kind, fixtures, judge):
                 answers, _ = judge.ask({"commit": row["message"]}, {"decision": ("noul", DECISION_COMMIT)}, timeout=60)
                 p = answers["decision"]
             scored.append({"p": round(p, 3), "label": bool(row["label"]), "message": row["message"][:80], "filtered": filtered})
-    for row in rows if kind != "decision_commit" else ():
+    if kind == "decision_replaces":
+        # One pair per request, as the repository pass asks it: the later decision is the query.
+        from .repository import REPLACES
+        for row in rows:
+            result, _ = judge.rank(row["message"], [row["fact"]], no_cache=True, timeout=60, question=REPLACES)
+            scored.append({"p": round(result.get(0, 0.0), 3), "label": bool(row["label"]), "message": row["message"][:80]})
+    for row in rows if kind not in {"decision_commit", "decision_replaces"} else ():
         if kind == "facts_present":
             answers, _ = judge.ask({"text": row["message"]}, {"count": ("choice", FACT_COUNT, COUNTS),
                                                                "instruction": ("noul", INSTRUCTION)}, timeout=60)

@@ -18,7 +18,7 @@ import sys
 from .capture import _INSTRUCTION_VALUE, policy as capture_policy
 from .common import KernelError, digest, timestamp, timestamp_offset
 from .judge import JudgeError
-from .language import fold
+from .language import fold, query_terms
 from .turns import mask_secrets
 
 
@@ -58,6 +58,18 @@ DECISION_COMMIT = ("Does `commit` state a project-wide choice (a technology, too
 # decisions and look-alikes in one band and moved with the project name in the query and with the
 # batch, so it was dropped. Decision records stay the dependable source; commits add clear choices.
 COMMIT_BAR = 0.5
+REPLACES = "Does the decision in `query` replace or reverse the decision in `candidate`, so that `candidate` no longer holds?"
+# Measured with the local model on 22 labelled pairs of decisions, one pair per request (`memory calibrate
+# decision_replaces --score`): replacements scored 0.53-0.90 and other pairs 0.29-0.654, the highest
+# being "Require Python 3.10 or newer" after "Drop support for Python 3.7", which both hold. At 0.70,
+# 7 of 10 replacements and no other pair. Only decisions that share a topic word are compared.
+REPLACES_BAR = 0.7
+_TOPIC_NOISE = {"use", "uses", "using", "used", "usar", "usa", "usamos", "adopt", "adopts", "adoptar", "adopta", "switch",
+                "switches", "move", "moves", "mover", "migrate", "migrar", "replace", "replaces", "reemplazar", "require",
+                "requires", "requerir", "exigir", "keep", "keeps", "mantener", "stop", "stops", "dejar", "deja", "drop",
+                "drops", "run", "runs", "allow", "allows", "permitir", "prefer", "standardize", "standardise", "pin",
+                "pins", "instead", "rather", "favor", "favour", "again", "volver", "new", "nuevo", "nueva", "only", "solo",
+                "always", "siempre", "never", "nunca", "all", "todo", "todos", "every", "cada", "decision", "decide"}
 COMMIT_WINDOW = 60
 COMMIT_DAYS = 180
 JUDGED_PER_PASS = 12
@@ -401,29 +413,61 @@ def _revert(store, entity, known, sha, subject, summary):
         summary["retired"].append(f"reverted {(sha or '')[:7]}".strip())
 
 
+def topic_words(value):
+    return {t for t in query_terms(value) if t not in _TOPIC_NOISE}
+
+
+def _settle(store, judge, entity, statement, deadline, summary):
+    """A decision ends the earlier commit decision it replaces. One learned late (an older commit judged
+    in a later pass) ends at once if a later decision already replaced it. Only decisions that share a
+    topic word are compared, one pair per request, so a score never depends on its neighbours."""
+    rows = _repository_rows(store, entity)
+    new = next((r for r in rows if r["id"] == statement), None)
+    if not new:
+        return
+    words = topic_words(new["value"])
+    others = [r for r in rows if r["id"] != statement and r["predicate"].startswith("decision_")
+              and words & topic_words(r["value"])][:8]
+    for other in sorted(others, key=lambda r: r["valid_from"]):
+        later, earlier = (new, other) if other["valid_from"] <= new["valid_from"] else (other, new)
+        try:
+            timeout = deadline.timeout(judge.timeout) if deadline else None
+            scores, _ = judge.rank(later["value"], [earlier["value"]], no_cache=True, timeout=timeout, question=REPLACES)
+        except JudgeError:
+            return
+        if scores.get(0, 0.0) >= REPLACES_BAR and _active(store, earlier["id"]) and _active(store, later["id"]):
+            with store.db:
+                store._supersede(earlier["id"], later["id"])
+            summary["superseded"].append(" ".join((earlier["source_ref"] or "commit").split()[:2]))
+            if earlier is new:
+                return
+
+
 def _put_commit(store, entity, label, commit, summary):
+    """The commit's decision as a statement, valid from the commit's date. Returns (id, created)."""
     value = commit_value(commit["subject"])
     if not value or _INSTRUCTION_VALUE.search(value):
-        return None
+        return None, False
     same = next((r for r in _repository_rows(store, entity) if r["value"] == value), None)
     if same:
-        return same["id"]  # the same decision under another hash: a rebase, a cherry-pick, a rewrite
+        return same["id"], False  # the same decision under another hash: a rebase, a cherry-pick, a rewrite
     predicate = "decision_" + (slug(value, 48) or commit["sha"][:7])
     if any(r["entity_key"] == entity and r["predicate"] == predicate for r in store.records(history=True)):
         predicate = f"{predicate}_{commit['sha'][:7]}"
     if store.tombstoned_since(entity, predicate, commit["date"]):
-        return None
+        return None, False
     body = _first_paragraph(commit["body"].splitlines())
     evidence = mask_secrets(commit["subject"] + (". " + body if body else ""))[:300]
     try:
         with store.db:
             sid = store._insert(entity, predicate, value, evidence, label=label, kind="project",
+                                valid_from=min(commit["date"], store.clock()),
                                 source_ref=f"commit {commit['sha'][:7]} {commit['date'][:10]}", **ORIGIN)
             store._event("learn", {"statement_id": sid, "source": "commit"})
     except KernelError:
-        return None
+        return None, False
     summary["learned"].append(f"commit {commit['sha'][:7]}")
-    return sid
+    return sid, True
 
 
 def _learn_commits(store, judge, root, entity, label, deadline, allow_remote, summary):
@@ -463,7 +507,8 @@ def _learn_commits(store, judge, root, entity, label, deadline, allow_remote, su
     batch = pending[-JUDGED_PER_PASS:]
     if len(pending) > len(batch):
         summary["more"] = len(pending) - len(batch)
-    # One commit per request: a score must not depend on which other commits arrived with it.
+    # One commit per request, newest first: a score must not depend on which other commits came along.
+    verdicts = []
     for commit in reversed(batch):
         try:
             timeout = deadline.timeout(judge.timeout) if deadline else None
@@ -471,9 +516,14 @@ def _learn_commits(store, judge, root, entity, label, deadline, allow_remote, su
                                    {"decision": ("noul", DECISION_COMMIT)}, timeout=timeout)
         except JudgeError:
             summary["skipped"].append("judge_unavailable")
-            return
+            break
         summary["judged"] += 1
-        statement = _put_commit(store, entity, label, commit, summary) if answers["decision"] >= COMMIT_BAR else None
+        verdicts.append((commit, answers["decision"] >= COMMIT_BAR))
+    # Stored oldest first, so a later decision can end the earlier one it replaces.
+    for commit, accepted in sorted(verdicts, key=lambda v: v[0]["date"]):
+        statement, created = _put_commit(store, entity, label, commit, summary) if accepted else (None, False)
+        if created:
+            _settle(store, judge, entity, statement, deadline, summary)
         store.save_repo_source(root, "commit:" + commit["sha"], commit["sha"], statement)
 
 

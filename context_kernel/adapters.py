@@ -17,7 +17,7 @@ from .language import fold
 from .planner import NeedPlan, generic_question
 from .protocol import parse_json
 from . import repository
-from .turns import close_turn, do_not_remember, forget_request, open_turn, trivial_continuation, undo_request
+from .turns import choice_reply, close_turn, do_not_remember, forget_request, open_turn, trivial_continuation, undo_request
 
 
 class HookBlock(KernelError):
@@ -132,7 +132,7 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         if not store.db.execute("SELECT 1 FROM processed_events WHERE scope=? AND event_id=?", (store.scope, event_id)).fetchone():
             notice = propose_command(store, prompt, event_id)
     gate_count = 0
-    if judge and turn["origin"] == "interactive" and not flags and not trivial_continuation(prompt) \
+    if judge and turn["origin"] == "interactive" and not flags and not trivial_continuation(prompt) and not choice_reply(prompt) \
             and not generic_question(prompt, store.records()) and not only_questions(prompt) \
             and capture_policy(store)["auto_capture"] \
             and (deadline is None or deadline.allows(4)):
@@ -152,7 +152,7 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         except KernelError:
             flags.append("gate_unavailable")
     # Pending captures ride along in the marker; they do not justify judging an "ok" for relevance.
-    quiet = trivial_continuation(prompt) and not flags and not store.pending_proposal_count()
+    quiet = (trivial_continuation(prompt) or choice_reply(prompt)) and not flags and not store.pending_proposal_count()
     pinned, mark = standing_due(store, turn["session_id"])
     if quiet:
         projection = compiler.project(prompt, plan=NeedPlan(strategy=strategy), extra={"turn": marker}, pinned=pinned)

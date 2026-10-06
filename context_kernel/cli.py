@@ -42,7 +42,7 @@ def parser():
     policy.add_argument("--threshold", action="append", default=[], help="name=value, e.g. affirmed=0.72 after jev tune")
     calibrate = commands.add_parser("calibrate", help="Export labelled fixtures for `jev tune`")
     calibrate.add_argument("kind", choices=("affirmed", "facts_present", "forget_asked", "standing_on", "standing_off",
-                                            "decision_commit"))
+                                            "decision_commit", "decision_replaces"))
     calibrate.add_argument("--fixtures", default=str(Path(__file__).resolve().parent.parent / "fixtures" / "calibration.jsonl"))
     calibrate.add_argument("--questions", action="store_true", help="Print the candidate questions instead of the rows")
     calibrate.add_argument("--score", action="store_true", help="Run the kernel's own question over the fixtures with jev and sweep thresholds")

@@ -10,8 +10,8 @@ from context_kernel.adapters import session_start_response, stop_response
 from context_kernel.common import timestamp, timestamp_offset
 from context_kernel.compiler import Compiler
 from context_kernel.inference import stale_recommendations
-from context_kernel.repository import (COMMIT_BAR, DECISION_COMMIT, decision_language, inside_repository, learn,
-                                       parse_record, record_files, root_of, routine, signature)
+from context_kernel.repository import (COMMIT_BAR, DECISION_COMMIT, REPLACES, decision_language, inside_repository,
+                                       learn, parse_record, record_files, root_of, routine, signature)
 from context_kernel.store import Store
 from tests.fakes import FakeJudge
 
@@ -232,6 +232,47 @@ class RepositoryTests(unittest.TestCase):
         summary = self.learn()
         self.assertEqual(self.facts(), {})
         self.assertTrue(summary["retired"])
+
+    def replacing_judge(self):
+        """Every queue subject is a decision; Redis replaces SQLite and nothing else replaces anything."""
+        return FakeJudge(ask=lambda qid, state, spec: 0.9 if any(w in state.get("commit", "") for w in ("queue", "pnpm")) else 0.2,
+                         rank=lambda query, line, question: 0.9 if question == REPLACES and "Redis" in query and "SQLite" in line
+                         else 0.1)
+
+    def test_a_later_decision_commit_ends_the_earlier_one_it_replaces(self):
+        old = self.commit("Use SQLite for the job queue")
+        self.learn(self.replacing_judge())
+        sqlite = self.facts()
+        with self.store.db:
+            advice = self.store._insert("acme_api", "recommendation", "Keep jobs in one file.", "reply",
+                                        assertion_kind="inference", source_kind="agent_reply", trust="captured")
+        self.store.depend(advice, next(iter(sqlite.values()))["id"], provenance="inferred")
+        self.commit("Use Redis for the job queue", date="2026-10-02T10:00:00+00:00")
+        summary = self.learn(self.replacing_judge())
+        self.assertEqual(summary["superseded"], [f"commit {old[:7]}"])
+        self.assertEqual([f["value"] for f in self.facts().values()], ["Use Redis for the job queue"])
+        history = {r["id"]: r for r in self.store.records(history=True)}
+        self.assertTrue(history[advice]["stale"])
+
+    def test_an_older_decision_learned_late_is_ended_by_the_later_one(self):
+        from context_kernel import repository
+        self.commit("Use SQLite for the job queue")
+        self.commit("Use Redis for the job queue", date="2026-10-02T10:00:00+00:00")
+        limit, repository.JUDGED_PER_PASS = repository.JUDGED_PER_PASS, 1
+        try:
+            self.assertEqual(self.learn(self.replacing_judge())["more"], 1)  # the newest first
+            self.learn(self.replacing_judge())
+        finally:
+            repository.JUDGED_PER_PASS = limit
+        self.assertEqual([f["value"] for f in self.facts().values()], ["Use Redis for the job queue"])
+
+    def test_decisions_on_different_topics_are_never_compared(self):
+        judge = self.replacing_judge()
+        self.commit("Use SQLite for the job queue")
+        self.commit("Adopt pnpm as the package manager", date="2026-10-02T10:00:00+00:00")
+        self.learn(judge)
+        self.assertEqual(len(self.facts()), 2)
+        self.assertEqual([c for c in judge.calls if c[0] == "rank"], [])
 
     def test_a_decision_reverted_within_the_same_window_is_never_judged(self):
         sha = self.commit("Use Postgres for the analytics store")

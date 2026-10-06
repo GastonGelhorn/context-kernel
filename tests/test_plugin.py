@@ -76,5 +76,29 @@ class PluginTests(unittest.TestCase):
         self.assertIn('args = ["/home/me/.local/bin/context-kernel", "serve"]', toml)
 
 
+class ICloudTests(unittest.TestCase):
+    def test_doctor_names_evicted_files_and_folders_icloud_syncs(self):
+        from types import SimpleNamespace
+        from context_kernel.setup import SF_DATALESS, icloud
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            (home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Documents").mkdir(parents=True)
+            kernel = home / "Documents" / "code" / "context_kernel"
+            kernel.mkdir(parents=True)
+            (kernel / "common.py").write_text("x")
+            (kernel / "store.py").write_text("x")
+            local = home / ".context-kernel"
+            local.mkdir()
+
+            def stat(path, follow_symlinks=False):
+                return SimpleNamespace(st_flags=SF_DATALESS if path.name == "common.py" else 0)
+
+            self.assertEqual(icloud([kernel, local], home=home, stat=stat),
+                             [{"path": str(kernel), "synced": True, "evicted": 1}])
+            # Without Desktop & Documents in iCloud, ~/Documents is a plain folder.
+            (home / "Library" / "Mobile Documents" / "com~apple~CloudDocs" / "Documents").rmdir()
+            self.assertEqual(icloud([kernel], home=home, stat=lambda p, follow_symlinks=False: SimpleNamespace(st_flags=0)), [])
+
+
 if __name__ == "__main__":
     unittest.main()

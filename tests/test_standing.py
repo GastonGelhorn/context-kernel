@@ -163,6 +163,18 @@ class StandingTests(unittest.TestCase):
         inventory, _ = self.tool("memory_inventory", {})
         self.assertTrue(inventory["entities"]["user"][0]["standing"])
 
+    def test_picking_among_listed_options_is_not_judged_as_a_statement(self):
+        from context_kernel.turns import choice_reply
+        for message in ("haz 1 y 2", "la 3", "ambas", "sí, el 2", "go with option 2", "do both", "1, 2 y 3", "las dos"):
+            self.assertTrue(choice_reply(message), message)
+        for message in ("si", "dos semanas para el checkout", "usa la opción 2: Redis", "haz 1 y luego push", "Mi manager es Dani"):
+            self.assertFalse(choice_reply(message), message)
+        self.store.remember("user", "package_manager", "pnpm", "Usa pnpm.")
+        self.judge.calls.clear()
+        packet = self.prompt("haz 1 y 2", "s1")
+        self.assertNotIn("capture", packet["turn"])
+        self.assertEqual(self.judge.calls, [])  # neither the gate nor relevance was asked
+
     def test_v5_database_gains_the_new_tables_and_keeps_its_sessions(self):
         path = self.workspace / "v5.sqlite"
         legacy = Store(path, create=True)

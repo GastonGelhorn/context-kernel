@@ -35,7 +35,7 @@ On each prompt jev also scores every stored fact for relevance, and only the rel
 Teams write decisions down before anyone tells an agent about them: in decision records (`docs/adr/0007-use-postgres.md`) and in commit messages ("Adopt pnpm as the package manager"). When a session starts in a git repository that changed since the last look, the kernel reads them in a background pass, so you never wait for it.
 
 - Decision records are read with a parser, not a model. The Nygard/adr-tools and MADR formats are both understood, in English or Spanish. An accepted record becomes a fact about the project, with the file as its source. A record that is still proposed is skipped. When a record is superseded, it points at the record that replaced it. When it is deprecated or deleted, it stops counting. Either way, every recommendation that rested on it is flagged for review, exactly as if you had changed the fact yourself.
-- Commits go through two word filters and then jev. Fixes, tests, docs, bumps and merges are skipped, and so is any subject that doesn't use the language of a decision (use, require, keep, stop, instead of…). jev then judges each remaining subject on its own: is it a choice for the whole project, or a change in one place? A revert takes back the decision it reverts. A commit that writes a decision record adds nothing, because the record is read instead.
+- Commits go through two word filters and then jev. Fixes, tests, docs, bumps and merges are skipped, and so is any subject that doesn't use the language of a decision (use, require, keep, stop, instead of…). jev then judges each remaining subject on its own: is it a choice for the whole project, or a change in one place? A later decision ends the earlier one it replaces ("Use Redis for the job queue" after "Use SQLite for the job queue"), and a revert takes back the decision it reverts. A commit that writes a decision record adds nothing, because the record is read instead.
 - What it learned is announced once, in that session's next memory line ("Memory: learned 2 decision(s) from the repository (ADR 1, commit 6818af9)."). The agent sees these facts attributed to `repository`, with the file or commit they came from.
 
 Forgetting one of them works like any other forget, and it sticks until that record changes again in the repository. `memory policy --repository off` turns the whole thing off for a scope, and you can also ask for that in chat.
@@ -140,11 +140,12 @@ memory policy --threshold affirmed=0.75
 | The reply recommends something | 0.70 | advice 0.80 to 0.95; reports, questions and refusals ≤ 0.61 |
 | The recommendation rests on this premise | 0.85, or 0.50 when the reply names the premise's value | 7 true and 0 false links on 15 labelled pairs |
 | A commit states a project-wide choice | 0.50, after the word filters | 25 of 28 written decisions; 0 of 16 routine changes worded like decisions (highest 0.48) |
+| A later decision replaces an earlier one | 0.70, for decisions sharing a topic word | 7 of 10 replacements; 0 of 12 other pairs (highest 0.654) |
 | The message asks to keep a fact in mind always, or to stop | 0.70 | requests 0.71 to 0.96; everything else ≤ 0.61 |
 
 The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes.
 
-With ten stored facts, the prompt hook took 0.33 s for a cached question and about 4 s cold, about a second of which is the check for something worth saving. That check is skipped for acknowledgements, plain questions, generic questions and forget requests. These are small fixture sets, so read them as a trend rather than a benchmark. The details are in [verification](docs/verification.md).
+With ten stored facts, the prompt hook took 0.33 s for a cached question and about 4 s cold, about a second of which is the check for something worth saving. That check is skipped for acknowledgements, picks among options the agent listed ("haz 1 y 2", "do both"), plain questions, generic questions and forget requests. These are small fixture sets, so read them as a trend rather than a benchmark. The details are in [verification](docs/verification.md).
 
 ## Limits
 
@@ -154,6 +155,6 @@ With ten stored facts, the prompt hook took 0.33 s for a cached question and abo
 - jev's scores feed a policy; they aren't proof. A fact can pass validation and still be wrong, which is why captures are labelled, reversible, and announced when they change a confirmed value.
 - Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
 - Commits are a narrow channel. The filters and jev keep only clear choices for the whole project, so most commits add nothing. In this repository, where commits change how one tool behaves, 2 of its 13 decision-like commits were kept. Decision records are the dependable source.
-- Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute.
+- Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute. Python reads the kernel's own modules the same way, so a hook running from such a folder can be cancelled; `context-kernel doctor` warns when that can happen.
 
 More detail in [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md) and [verification](docs/verification.md).

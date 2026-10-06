@@ -60,6 +60,30 @@ def _wired_by_hand(root):
     return found
 
 
+SF_DATALESS = 0x40000000  # macOS: the file's content was evicted to iCloud and is downloaded on first read
+
+
+def icloud(paths, home=None, stat=os.stat):
+    """Folders iCloud syncs, and files in them it has evicted. Reading an evicted file waits for the
+    download: a hook that imports one can outlast its timeout (measured: a prompt hook cancelled at 15 s
+    while 14 of the kernel's modules were evicted; `git log` waited 44 s the same way)."""
+    home = Path(home or Path.home())
+    cloud = home / "Library" / "Mobile Documents"
+    synced = [cloud] + [home / name for name in ("Documents", "Desktop") if (cloud / "com~apple~CloudDocs" / name).is_dir()]
+    found = []
+    for path in map(Path, paths):
+        inside = any(path == root or root in path.parents for root in synced)
+        evicted = 0
+        for item in [path, *(list(path.rglob("*"))[:2000] if path.is_dir() else [])]:
+            try:
+                evicted += bool(getattr(stat(item, follow_symlinks=False), "st_flags", 0) & SF_DATALESS)
+            except OSError:
+                pass
+        if inside or evicted:
+            found.append({"path": str(path), "synced": inside, "evicted": evicted})
+    return found
+
+
 def doctor(config, jev, json_output=False):
     report = []
 
@@ -96,6 +120,15 @@ def doctor(config, jev, json_output=False):
             add("ok" if allowed else "warn", "jev",
                 f"{jev} · hosted · {backend['url']}" + ("" if allowed else
                     " · this scope does not allow a hosted judge, so nothing is saved: run `context-kernel setup`"))
+    for place in icloud([Path(__file__).resolve().parent, Path(config["db"]).expanduser().parent]):
+        where = place["path"]
+        if place["evicted"]:
+            add("warn", "icloud", f"{place['evicted']} file(s) under {where} are evicted to iCloud. A hook that reads one waits for "
+                                  "the download and can be cancelled. In Finder choose Keep Downloaded for that folder, or keep "
+                                  "the kernel outside Documents and Desktop (install.sh copies it to ~/.local/share/context-kernel).")
+        else:
+            add("warn", "icloud", f"{where} is in a folder iCloud syncs: macOS can evict its files later, and hooks would then wait "
+                                  "for downloads. Choose Keep Downloaded for it in Finder, or keep it outside Documents and Desktop.")
     if os.environ.get("CLAUDE_PLUGIN_ROOT"):
         twice = _wired_by_hand(workspace())
         if twice:

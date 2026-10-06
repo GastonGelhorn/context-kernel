@@ -66,6 +66,28 @@ def undo_request(prompt):
     return bool(_UNDO.search(fold(prompt)))
 
 
+# Picking among options the agent just listed ("haz 1 y 2", "la 3", "ambas", "go with option 2") says
+# nothing about the user's world, yet the gate read "haz 1 y 2" as two facts, confidently (2026-10-06).
+_CHOICE_REFS = re.compile(r"^(\d{1,2}[a-z]?|[a-d]|both|all|none|ambas|ambos|todas|todos|ninguna|ninguno|dos|tres|first|"
+                          r"second|third|fourth|last|primera|primero|segunda|segundo|tercera|tercero|cuarta|cuarto|"
+                          r"ultima|ultimo)$")
+_CHOICE_WORDS = {"haz", "hazlo", "hazla", "hazlas", "hazlos", "hagamos", "haga", "hace", "dale", "vale", "ok", "okay", "si",
+                 "va", "venga", "adelante", "sigue", "continua", "aplica", "implementa", "elige", "elijo", "prefiero",
+                 "quiero", "me", "quedo", "con", "voy", "vamos", "por", "favor", "porfa", "y", "e", "o", "u", "tambien",
+                 "solo", "el", "la", "los", "las", "lo", "ellas", "ellos", "opcion", "opciones", "punto", "puntos", "paso",
+                 "pasos", "numero", "do", "go", "with", "pick", "choose", "take", "apply", "implement", "lets", "let", "s",
+                 "yes", "please", "then", "and", "or", "also", "only", "just", "the", "one", "ones", "of", "them", "it",
+                 "option", "options", "item", "items", "number", "step", "steps", "idea", "ideas", "a"}
+
+
+def choice_reply(prompt):
+    """A short pick among listed options: every word is a reference to an option or a filler."""
+    words = re.sub(r"[^\w\s]", " ", fold(prompt)).split()
+    if not words or len(words) > 8:
+        return False
+    return any(_CHOICE_REFS.match(w) for w in words) and all(_CHOICE_REFS.match(w) or w in _CHOICE_WORDS for w in words)
+
+
 def trivial_continuation(prompt):
     """Acknowledgements that carry no new information. Privacy requests and replies to a pending
     question are checked by the caller first: "ok" can be meaningful when something is pending."""

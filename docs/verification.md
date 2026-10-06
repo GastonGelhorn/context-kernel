@@ -244,7 +244,7 @@ Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Olla
 
 ### Unit and subprocess suite
 
-248 tests pass, 31 of them new.
+253 tests pass, 36 of them new.
 
 `tests/test_repository.py` builds real git repositories in a temporary folder. It covers:
 
@@ -309,6 +309,24 @@ The `memory_standing` questions were scored on 13 rows (`standing_on` and `stand
 - Requests to stop scored 0.712 to 0.950; every other row scored 0.421 or less.
 
 Both use the shared 0.70 bar. The margin for stopping is thin, 0.012.
+
+### Later decisions replace earlier ones
+
+The replacement question was scored on 22 labelled pairs, one pair per request (`memory calibrate decision_replaces --score`).
+
+- Replacements scored 0.531 to 0.895. Other pairs scored 0.293 to 0.654; the highest of those was "Require Python 3.10 or newer" after "Drop support for Python 3.7", where both still hold.
+- At 0.70 it caught 7 of 10 replacements and no other pair.
+- A second question, asking whether the two decide the same thing differently, scored the other way round (AUC 0.33), so it was dropped.
+
+On a throwaway repository with "Use SQLite for the job queue", "Adopt pnpm as the package manager" and "Use Redis for the job queue instead of SQLite", one pass took 1.75 s. It kept all three as decisions and ended the SQLite one in favour of Redis; the pnpm decision stayed active.
+
+### Picks among listed options
+
+The previous turn of this session, "haz 1 y 2", reached the gate and was read as two facts with confidence. Only the missing MCP tools kept the Stop hook from asking for a capture. Short picks ("haz 1 y 2", "la 3", "ambas", "go with option 2") now skip the gate and relevance, as acknowledgements do. Replayed through the real prompt hook on a copy of the real memory, it took 0.12 s, made no judge call, and asked for no capture.
+
+### A cancelled prompt hook
+
+In this session, one prompt hook was cancelled at its 15 s timeout before it opened a turn. Replayed by hand with the same command, it took under a second. At that moment, 14 of the kernel's modules in this iCloud-synced checkout were evicted, and Python waits for a download when it reads one. `context-kernel doctor` now reports that: "10 file(s) under …/context_kernel are evicted to iCloud", with the two remedies.
 
 ### Not verified yet
 

@@ -179,3 +179,25 @@
 {"kind": "decision_commit", "message": "Usar el nombre correcto en el mensaje de error", "label": false, "source": "hard negative"}
 {"kind": "decision_commit", "message": "Dejar de imprimir trazas en la consola de pruebas", "label": false, "source": "hard negative"}
 {"kind": "decision_commit", "message": "Keep scrolling smooth on long lists", "label": false, "source": "hard negative"}
+{"kind": "decision_replaces", "message": "Use Redis for the job queue", "fact": "Use SQLite for the job queue", "label": true}
+{"kind": "decision_replaces", "message": "Use pnpm instead of npm", "fact": "Use npm as the package manager", "label": true}
+{"kind": "decision_replaces", "message": "Move CI to GitHub Actions", "fact": "Run CI on Travis", "label": true}
+{"kind": "decision_replaces", "message": "Allow deploys on Fridays again", "fact": "No deploys on Fridays", "label": true}
+{"kind": "decision_replaces", "message": "Store sessions in Postgres", "fact": "Store sessions in Redis", "label": true}
+{"kind": "decision_replaces", "message": "Usar Redis como cola de trabajos", "fact": "Usar SQLite como cola de trabajos", "label": true}
+{"kind": "decision_replaces", "message": "Re-enable the v1 API for partners", "fact": "Deprecate the v1 API", "label": true}
+{"kind": "decision_replaces", "message": "Use Vite for the frontend build", "fact": "Use Webpack for the frontend build", "label": true}
+{"kind": "decision_replaces", "message": "Log in JSON with structlog", "fact": "Standardize on the stdlib logging module", "label": true}
+{"kind": "decision_replaces", "message": "Volver a desplegar los viernes", "fact": "No desplegar los viernes", "label": true}
+{"kind": "decision_replaces", "message": "Use Redis for the job queue", "fact": "Adopt pnpm as the package manager", "label": false}
+{"kind": "decision_replaces", "message": "Use Postgres for analytics", "fact": "Use Redis for the job queue", "label": false}
+{"kind": "decision_replaces", "message": "Require two approvals before merging", "fact": "Switch CI to GitHub Actions", "label": false}
+{"kind": "decision_replaces", "message": "Require Python 3.10 or newer", "fact": "Drop support for Python 3.7", "label": false}
+{"kind": "decision_replaces", "message": "Use feature flags for new checkout code", "fact": "Use Stripe for payments", "label": false}
+{"kind": "decision_replaces", "message": "Pin Node to 20 LTS", "fact": "Use pnpm as the package manager", "label": false}
+{"kind": "decision_replaces", "message": "Serve images from the CDN", "fact": "Store uploads in S3", "label": false}
+{"kind": "decision_replaces", "message": "Usar pnpm en todo el monorepo", "fact": "Usar SQLite como cola de trabajos", "label": false}
+{"kind": "decision_replaces", "message": "Use UTC timestamps in the database", "fact": "Store money as integer cents", "label": false}
+{"kind": "decision_replaces", "message": "Deprecate the v1 API", "fact": "Move authentication to the API gateway", "label": false}
+{"kind": "decision_replaces", "message": "Store sessions in Redis", "fact": "Use Redis for the job queue", "label": false}
+{"kind": "decision_replaces", "message": "Use Vite for the frontend build", "fact": "Use pnpm for the frontend packages", "label": false}
