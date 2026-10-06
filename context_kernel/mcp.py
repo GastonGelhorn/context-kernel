@@ -59,7 +59,7 @@ TOOLS = [
      "inputSchema": schema(ID, ["id"])},
     {"name": "memory_dependents", "description": "Decisions and recommendations that rest on a statement, including earlier recommendations flagged for review when it changed.",
      "inputSchema": schema(ID, ["id"])},
-    {"name": "memory_forget", "description": "Delete every version of a remembered property, when the user's current message asks to forget it. Validated against the user's own words; refused otherwise.",
+    {"name": "memory_forget", "description": "Delete every version of a remembered property, when the user's current message asks to forget it. Validated against the user's own words; refused otherwise. One call per property: when the user asks to forget a whole thing, the result lists what is still remembered about that entity, so call it again for each property the request covers.",
      "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
     {"name": "memory_revoke", "description": "Stop using a statement as evidence (kept in history), when the user's current message says it no longer applies.",
      "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
@@ -221,7 +221,7 @@ class Server:
             return self.store.depend(arguments["id"], arguments["assumption_id"])
         self._asked(name, turn, statement)
         if name == "memory_forget":
-            return self.store.forget(arguments["id"])
+            return self.store.forget(arguments["id"], keep_token=turn["token"])
         if name == "memory_revoke":
             return self.store.revoke(arguments["id"])
         if name == "memory_confirm":

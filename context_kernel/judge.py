@@ -7,10 +7,14 @@ decided by the kernel per use, never inherited from jev's own configuration.
 """
 
 import ipaddress
+import json
+import os
 import re
 import subprocess
+import tempfile
 import time
 from urllib.parse import urlsplit
+from urllib.request import urlopen
 
 from .common import KernelError, canonical, text
 from .protocol import parse_json
@@ -35,8 +39,31 @@ def is_local(url):
         return False
 
 
+def weights(url, model):
+    """The digest of the weights behind a local Ollama model name, or None.
+
+    A judgment cache keyed by URL and model name keeps answers from an older model after the same
+    alias is pulled again. Only a loopback backend is asked, with a short timeout; any failure
+    leaves the fingerprint at None, which still differs from every known digest."""
+    if not model or not is_local(url):
+        return None
+    parts = urlsplit(url)
+    try:
+        with urlopen(f"{parts.scheme}://{parts.netloc}/api/tags", timeout=1) as response:
+            listed = json.load(response).get("models", [])
+    except (OSError, ValueError, AttributeError):
+        return None
+    names = {model, model + ":latest"} if ":" not in model else {model}
+    for item in listed if isinstance(listed, list) else ():
+        if isinstance(item, dict) and item.get("name") in names and isinstance(item.get("digest"), str):
+            return item["digest"][:16]
+    return None
+
+
 class JevCommand:
-    """Judge backed by the `jev` CLI, run as a subprocess with text on stdin, never on argv."""
+    """Judge backed by the `jev` CLI. Memory text and the user's words travel on stdin or in a
+    private temporary file, never on argv (visible to every local process) and never as a bare
+    `--query` value, which jev would read as a path when it starts with `@`."""
 
     RELEVANCE = "Is `candidate` a fact that someone answering `query` must take into account?"
 
@@ -57,15 +84,29 @@ class JevCommand:
     # Backward-compatible name used by traces and tests.
     QUESTION = RELEVANCE
 
-    def _run(self, argv, stdin, timeout=None):
+    def _run(self, argv, stdin, timeout=None, query=None):
         limit = min(self.timeout, timeout) if timeout else self.timeout
         if limit <= 0:
             raise JudgeError("No time left for the judge in this turn.")
         started = time.perf_counter()
+        folder = None
         try:
+            if query is not None:
+                # `--query @file`: the text never reaches argv, and a prompt such as "@src/app.py fix
+                # this" is sent as written instead of making jev read that file.
+                folder = tempfile.mkdtemp(prefix="context-kernel-")  # 0700, readable by this user only
+                path = os.path.join(folder, "query.txt")
+                with open(path, "w", encoding="utf-8") as handle:
+                    handle.write(query)
+                argv = [*argv, "--query", "@" + path]
             process = subprocess.run([self.command, *argv], input=stdin, capture_output=True, text=True, timeout=limit)
         except (OSError, subprocess.SubprocessError) as exc:
             raise JudgeError("jev is unavailable or timed out.") from exc
+        finally:
+            if folder:
+                for name in os.listdir(folder):
+                    os.unlink(os.path.join(folder, name))
+                os.rmdir(folder)
         if process.returncode != 0:
             # jev's last stderr line is its own error record (backend, budget, key status); it never
             # echoes candidates or state. Bounded so the trace explains the fallback.
@@ -77,13 +118,14 @@ class JevCommand:
     def describe(self):
         """Where jev would send a request, read from a dry run: nothing is sent."""
         if self._description is None:
-            result, _ = self._run(["rank", "--dry-run", "--json", "--query", "q",
-                                   "--instructions", "Is `candidate` relevant to `query`?"], "c\n", timeout=10)
+            result, _ = self._run(["rank", "--dry-run", "--json",
+                                   "--instructions", "Is `candidate` relevant to `query`?"], "c\n", timeout=10, query="q")
             url = result.get("url") if isinstance(result, dict) else None
             model = (result.get("body") or {}).get("model") if isinstance(result, dict) else None
             if not isinstance(url, str):
                 raise JudgeError("jev did not report its backend.")
-            self._description = {"url": url, "model": model, "local": is_local(url)}
+            # `weights` is part of every cached judgment's model key: a re-pulled alias starts fresh.
+            self._description = {"url": url, "model": model, "local": is_local(url), "weights": weights(url, model)}
         return self._description
 
     def require_local(self, allow_remote=False):
@@ -96,8 +138,8 @@ class JevCommand:
             raise KernelError("jev accepts 1-500 candidates per call.")
         if any("\n" in c for c in candidates):
             raise KernelError("jev candidates must be single lines.")
-        argv = ["rank", "--json", "--query", query, "--instructions", question or self.question] + (["--no-cache"] if no_cache else [])
-        result, latency = self._run(argv, "\n".join(candidates) + "\n", timeout)
+        argv = ["rank", "--json", "--instructions", question or self.question] + (["--no-cache"] if no_cache else [])
+        result, latency = self._run(argv, "\n".join(candidates) + "\n", timeout, query=query)
         rows = result.get("results") if isinstance(result, dict) else None
         if not isinstance(rows, list):
             raise JudgeError("Invalid jev response.")

@@ -59,14 +59,17 @@ def query_terms(query):
     return list(dict.fromkeys(expanded))[:32]
 
 
+# Entity keys too generic to identify anything: a question saying "project" or "user" names none of them.
+GENERIC_ENTITIES = frozenset({"user", "project", "person", "object", "usuario", "proyecto"})
+
+
 def entity_mentions(query, records):
     query = " " + re.sub(r"[^\w]+", " ", fold(query)).strip() + " "
     found = {}
-    reserved = {"user", "project", "person", "object", "usuario", "proyecto"}
     for row in records:
         for label in (row["entity_key"], row.get("label", ""), *row.get("aliases", [])):
             label = re.sub(r"[^\w]+", " ", fold(label)).strip()
-            if label and label not in reserved and " " + label + " " in query:
+            if label and label not in GENERIC_ENTITIES and " " + label + " " in query:
                 found.setdefault(label, set()).add(row["entity_key"])
     return found
 

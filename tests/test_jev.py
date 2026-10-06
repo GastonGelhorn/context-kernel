@@ -36,10 +36,13 @@ if sys.argv[1] == "ask":
     print(json.dumps({"answers": answers, "usage": {"input_tokens": 40}}))
     sys.exit(0)
 candidates = [line for line in raw.split("\\n") if line]
+query = sys.argv[sys.argv.index("--query") + 1]
+if query.startswith("@"):  # as jev does: the value names a file to read
+    query = open(query[1:], encoding="utf-8").read()
 log = os.environ.get("FAKE_JEV_LOG")
 if log:
     with open(log, "a") as handle:
-        handle.write(json.dumps({"argv": sys.argv[1:], "candidates": candidates}) + "\\n")
+        handle.write(json.dumps({"argv": sys.argv[1:], "candidates": candidates, "query": query}) + "\\n")
 mode = os.environ.get("FAKE_JEV_MODE", "score")
 if mode == "crash":
     print(json.dumps({"error": "7 questions would take about 14 s on the local model, more than the 10 s this call has", "exit_code": 4}), file=sys.stderr)
@@ -96,8 +99,28 @@ class JevTests(unittest.TestCase):
         self.compiler.project("A gift for my friend", strategy="jev")
         call = self.calls()[0]
         self.assertEqual(call["candidates"], ["user allergy: My friend cannot eat nuts | Also shellfish"])
-        self.assertEqual(call["argv"][:3], ["rank", "--json", "--query"])
+        self.assertEqual(call["argv"][:2], ["rank", "--json"])
         self.assertIn(Jev.QUESTION, call["argv"])
+        self.assertEqual(call["query"], "A gift for my friend")
+
+    def test_user_text_never_reaches_argv(self):
+        """The prompt goes in a private file named with `@`; candidate values go on stdin. A prompt that
+        starts with `@` is judged as written, not read as a path."""
+        self.add("allergy", "Secret Nut Canary")
+        for prompt in ("A gift for my friend, canary-7781", "@/etc/hosts canary-7781 gift for my friend"):
+            self.compiler.project(prompt, strategy="jev")
+        reply = "With canary-9932 in mind, I recommend we drop the hamper and pick flowers instead."
+        self.jev.rank(reply, ["user allergy: Secret Nut Canary"], no_cache=True)
+        calls = self.calls()
+        self.assertEqual(len(calls), 3)
+        for call in calls:
+            argv = " ".join(call["argv"])
+            for secret in ("canary-7781", "canary-9932", "Nut Canary", "/etc/hosts"):
+                self.assertNotIn(secret, argv)
+        self.assertEqual(calls[1]["query"], "@/etc/hosts canary-7781 gift for my friend")
+        self.assertEqual(calls[2]["query"], reply)
+        leftovers = [p for p in Path(tempfile.gettempdir()).glob("context-kernel-*")]
+        self.assertEqual(leftovers, [])
 
     def test_trace_never_copies_values_only_pair_scores(self):
         self.add("allergy", "Nut Canary")

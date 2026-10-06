@@ -159,6 +159,8 @@ class AutonomyTests(unittest.TestCase):
     def test_a_fact_the_message_does_not_affirm_is_rejected(self):
         self.judge.ask_fn = answers(affirmed=0.1)
         packet, _ = self.prompt("¿Quién es mi manager?")
+        self.assertEqual(self.capture(packet, ("user", "manager", "Dani"))[0]["reason"], "question_only")
+        packet, _ = self.prompt("Hablé con Dani ayer.")
         self.assertEqual(self.capture(packet, ("user", "manager", "Dani"))[0]["reason"], "not_affirmed")
         self.assertEqual(self.store.records(quarantined=True), [])
 
@@ -171,7 +173,7 @@ class AutonomyTests(unittest.TestCase):
         packet, _ = self.prompt("Recuerda que el deploy es los viernes")
         self.assertEqual(self.capture(packet, ("project", "deploy_day", "martes"))[0]["reason"], "not_affirmed")
         packet, _ = self.prompt("¿Recuerdas si usábamos pnpm?")
-        self.assertEqual(self.capture(packet, ("project", "package_manager", "pnpm"))[0]["reason"], "not_affirmed")
+        self.assertEqual(self.capture(packet, ("project", "package_manager", "pnpm"))[0]["reason"], "question_only")
         packet, _ = self.prompt("I remember Ana said the budget is 20k")
         self.assertEqual(self.capture(packet, ("project", "budget", "20k"))[0]["reason"], "not_affirmed")
 

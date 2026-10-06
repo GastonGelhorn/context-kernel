@@ -486,7 +486,10 @@ class Store:
             self._event("relate", {"relation_id": relation_id})
         return {"id": relation_id, "kind": "part_of"}
 
-    def forget(self, statement_id):
+    def forget(self, statement_id, keep_token=None):
+        """`keep_token` is the turn that asked for this forget: it stays until it expires, so the same
+        message can forget the entity's other properties ("forget the old database" covers its name
+        and its host). Every other turn excerpt goes."""
         with self.db:
             row = self._row(statement_id)
             ids = [r[0] for r in self.db.execute("SELECT id FROM statements WHERE scope=? AND entity_id=? AND predicate=?",
@@ -511,8 +514,10 @@ class Store:
             self.db.execute("DELETE FROM entities WHERE scope=? AND id NOT IN (SELECT entity_id FROM statements)", (self.scope,))
             # Conservative invalidation prevents forgotten content surviving in derived records,
             # including turn excerpts and cached judgments that embed values.
-            for table in ("plans", "projections", "proposals", "operations", "processed_events", "turns", "judgments"):
+            for table in ("plans", "projections", "proposals", "operations", "processed_events", "judgments"):
                 self.db.execute(f"DELETE FROM {table} WHERE scope=?", (self.scope,))
+            self.db.execute("DELETE FROM turns WHERE scope=? AND token IS NOT ?", (self.scope, keep_token))
+            self.db.execute("UPDATE turns SET projection_id=NULL WHERE scope=?", (self.scope,))  # projections are gone
             self.db.execute("DELETE FROM standing WHERE scope=? AND entity_key=? AND predicate=?",
                             (self.scope, row["entity_key"], row["predicate"]))
             # A repository source keeps its version, so an unchanged record is not read back in; only a
@@ -523,7 +528,12 @@ class Store:
             # evidence predates this request from bringing the property back.
             self._tombstone(row["entity_key"], row["predicate"])
             self._event("forget", {"removed_count": len(ids), "derived_removed": len(derived)})
+        # Ids and property names only: the agent decides whether the user's request covered them too.
+        remaining = [{"id": r["id"], "predicate": r["predicate"]} for r in self.records(quarantined=True)
+                     if r["entity_key"] == row["entity_key"]]
         return {"status": "forgotten", "removed_count": len(ids), "derived_removed": len(derived),
+                "entity": row["entity_key"],
+                "still_remembered_about_entity": remaining,
                 "limits": "Host history, external backups, and forensic disk erasure are not covered."}
 
     def propose(self, operation, payload, event_id=None):

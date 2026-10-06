@@ -30,6 +30,7 @@ RESTS_ON = ("Does the recommendation or decision in `query` rest on `candidate` 
 STRONG = 0.85
 WEAK = 0.5
 REPLY_LIMIT = 4000
+FENCE = re.compile(r"```.*?(```|$)", re.S)
 
 
 def mentions(reply, value):
@@ -40,8 +41,9 @@ def mentions(reply, value):
 
 
 def first_sentence(reply):
+    """The advice's opening sentence; a bare "Sí." or "No." opener is joined to the one after it."""
     flat = re.sub(r"\s+", " ", reply).strip()
-    match = re.search(r"(.+?[.!?])(\s|$)", flat)
+    match = re.search(r"(.{20,}?[.!?])(\s|$)", flat)
     return (match.group(1) if match else flat)[:300]
 
 
@@ -49,6 +51,9 @@ def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
     """Record a recommendation and its inferred premises. Returns metadata only."""
     # The agent sometimes repeats the kernel's receipt in its answer; that is not part of the advice.
     reply = "\n".join(line for line in (reply or "").splitlines() if not line.strip().startswith("Memory:")).strip()
+    # A command or snippet the user asked for is an answer, not advice: only the prose around code
+    # can recommend, and it is what gets stored ("fly deploy -a checkout-stg" is not a decision).
+    reply = FENCE.sub(" ", reply).strip()
     if not turn or len(reply) < 40:
         return {"calls": 0, "linked": 0}
     current = {r["id"]: r for r in store.records()}

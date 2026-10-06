@@ -133,6 +133,15 @@ def rules_plan(query, records, relations=()):
     return NeedPlan(needs, warnings=() if needs else ("unknown_task",))
 
 
+DURABLE_CATEGORIES = {"constraints", "project_decisions"}
+DURABLE_WORDS = ("constraint", "deadline", "decision", "policy", "rule", "allergy", "budget", "limit", "approver", "adr_")
+
+
+def durable(row):
+    """Constraints and decisions outlive the chatter around them; they are judged before newer facts."""
+    return row.get("category") in DURABLE_CATEGORIES or any(word in row["predicate"] for word in DURABLE_WORDS)
+
+
 def jev_candidate(entity, predicate, values):
     rendered = " | ".join(v if isinstance(v, str) else canonical(v) for v in values)
     return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()
@@ -153,18 +162,23 @@ def jev_plan(query, records, jev, relations=(), lexical=(), cache=None, deadline
         return NeedPlan(strategy="jev"), {"calls": 0}
     if ambiguous_entity_reference(query, records):
         return NeedPlan(strategy="jev", warnings=("clarification_required",)), {"calls": 0}
-    pairs, latest = {}, {}
+    pairs, latest, lasting = {}, {}, set()
     for row in records:
         pair = (row["entity_key"], row["predicate"])
         pairs.setdefault(pair, []).append(row["value"])
         latest[pair] = max(latest.get(pair, ""), row["recorded_at"])
+        if durable(row):
+            lasting.add(pair)
     lexical = set(lexical)
     keys = sorted(pairs)
     warnings = ()
     if len(keys) > jev.max_pairs:
         # A local model answers about 50 ms per pair once warm and several seconds cold; the hook has
-        # ten seconds. Judge the pairs the question mentions first, then the most recently recorded.
-        keys = sorted(sorted(keys, key=lambda k: latest[k], reverse=True), key=lambda k: k not in lexical)[:jev.max_pairs]
+        # ten seconds. Judge the pairs the question mentions first, then constraints and decisions (an
+        # old deadline matters more than last week's channel name), then the most recently recorded.
+        # Measured with tests/growth_check.py: by recency alone, no old constraint was judged past 48 facts.
+        keys = sorted(sorted(keys, key=lambda k: latest[k], reverse=True),
+                      key=lambda k: (k not in lexical, k not in lasting))[:jev.max_pairs]
         warnings = ("jev_inventory_capped",)
     if not keys:
         return NeedPlan(strategy="jev"), {"calls": 0}

@@ -2,7 +2,7 @@
 
 Memory for coding agents that you keep up to date just by talking to them. It remembers what you tell it, notices when you change your mind, and warns the agent when an earlier recommendation was based on something that is no longer true.
 
-It's plain Python with SQLite and FTS5 and has no runtime dependencies. It plugs into Claude Code and Codex through their own hooks and a local MCP server. The yes/no calls (is this worth keeping, is it relevant to this question, did that recommendation depend on it) are made by [jev](https://github.com/GastonGelhorn/jevmate), a small calibrated model that runs on your machine. Your agent's own model does the extraction, so there's no second LLM involved.
+The Python core uses only the standard library (SQLite with FTS5). It plugs into Claude Code and Codex through their own hooks and a local MCP server. Automatic capture needs two things besides your agent: [jev](https://github.com/GastonGelhorn/jevmate) and a backend for it. Your agent does the extraction; jev makes the small classification judgments (is this worth keeping, is it relevant to this question, did that recommendation depend on it) on a local model by default. No additional generative model is involved. Without jev, reading memory keeps working and nothing new is saved.
 
 ## An example
 
@@ -22,13 +22,13 @@ Agent: That recommendation assumed three months; with three weeks it needs revie
 
 You never typed a memory command in that exchange. Here's what happened underneath.
 
-On every prompt, a hook asks jev whether your message says something worth keeping. If it does, the kernel asks the agent to call `memory_capture`, and it lists facts already stored that look related so a change can point at the one it replaces. If the agent answers without saving something you clearly stated, the Stop hook gives the turn back to it once. Each proposed fact is checked against your own words in that message before it's stored, held for review, or refused, so the agent can't save something you didn't say. When two sessions name the same fact differently ("delivery timeline" in one, "deadline" in the next), the kernel works out that they're the same thing.
+On every prompt, a hook asks jev whether your message says something worth keeping. If it does, the kernel asks the agent to call `memory_capture`, and it lists facts already stored that look related so a change can point at the one it replaces. If the agent answers without saving something you clearly stated, the Stop hook gives the turn back to it once. Each proposed memory is checked against your current message before it can be stored, held for review, or refused. These checks reduce unsupported captures, but they don't eliminate them: on held-out messages, 2 of 20 that stated nothing were still saved (see [Thresholds](#thresholds)). When two sessions name the same fact differently ("delivery timeline" in one, "deadline" in the next), the kernel works out that they're the same thing.
 
 Changes are stored as new versions linked to the old ones. You can look at the history, and you can take a change back by asking.
 
 When the agent recommends something, the Stop hook asks jev which facts the recommendation relied on: the ones the kernel handed to the agent that turn, plus anything you said in the same message. Those links are saved. Later, when one of those facts changes, the next prompt that touches it tells the agent the earlier recommendation needs another look. It doesn't call the recommendation wrong and it doesn't paste the old text back in; the agent can ask `memory_dependents` if it wants the details.
 
-On each prompt jev also scores every stored fact for relevance, and only the relevant ones are delivered. Scores are cached, so asking the same thing again takes about 0.3 s.
+On each prompt jev also scores stored facts for relevance, and only the relevant ones are delivered. It judges at most 48 of them per prompt: the ones your words mention first, then constraints and decisions, then the most recent. Scores are cached, so asking the same thing again takes about 0.3 s; a new question over 48 facts takes 15 to 20 s on a cold local model, longer than the hook waits, and then selection falls back to keyword rules for that prompt.
 
 ## What the repository already says
 
@@ -46,6 +46,19 @@ When you've stated the same thing in three separate sessions ("use pnpm"), you s
 
 Ask "you don't need to keep that in mind every time" to take one off the list, and counting won't put it back. "Always keep this in mind" adds one directly.
 
+## Does it help? Measured
+
+`tests/compare_check.py` runs the same continuity script in fresh headless Claude Code sessions with no plugin, jevmate alone, the kernel alone (selection by rules) and both. The script teaches facts, corrects one, changes a deadline, forgets something, and supersedes a decision record. Over three repetitions:
+
+| | none | jevmate | kernel | kernel + jev selection |
+| --- | --- | --- | --- | --- |
+| Facts the user had to explain again (of 9) | 8 | 9 | 3 | 0 |
+| Stale recommendations not flagged (of 6) | 3 | 3 | 2 | 0 |
+| Median time per session | 8.1 s | 8.7 s | 11.0 s | 13.1 s |
+| Cost relative to none | – | +7% | +18% | +28% |
+
+Memory costs about 5 s per session: 3 s in the prompt hook and the rest in the agent's save round trip. One script on one machine is a trend, not a benchmark. The details and what it found are in [verification](docs/verification.md#v07-jevmate-alone-the-kernel-alone-both-and-neither).
+
 ## Trust and privacy
 
 Facts have three trust levels. `confirmed` ones come from you, either through the owner CLI or by restating something that was captured. `captured` ones were validated from the conversation and are delivered labelled as such. `quarantined` ones are stored but never delivered: pasted or quoted text, private details about other people, things that sounded unsure, and turns a person didn't type.
@@ -58,7 +71,10 @@ If you say "don't remember this", nothing from that message is stored, not even 
 
 Deleting things takes more than the model asking. `memory_forget`, `revoke`, `confirm`, `reaffirm` and policy changes need a turn token that only the hook hands out, a session the hook tied to the MCP server's own host process (by process ancestry, outside the model), and a message you typed that jev agrees is asking for that action on that fact. Prompts that come from continuations, schedules or host markup never count. A forget also wins over writes already in progress: anything that started before it is rejected.
 
-Your memory text stays on your machine. If jev is pointed at a hosted backend (say, through `TYPESAFE_BASE_URL`), the kernel sends it nothing unless you've allowed that for the scope. In that case it selects facts with keyword rules instead and refuses new writes. Calls that carry your text skip jev's own cache.
+Where your memory goes, in two levels:
+
+- **Storage and judging stay local.** The database is a SQLite file on your machine, and jev judges on a local model by default. If jev is pointed at a hosted backend (say, through `TYPESAFE_BASE_URL`), the kernel sends it nothing unless you've allowed that for the scope; in that case it selects facts with keyword rules instead and refuses new writes. Calls that carry your text skip jev's own cache, and your words reach jev through a private temporary file, never on the command line.
+- **Delivery goes to your agent's provider.** The facts selected for a prompt are added to that prompt's context (Claude Code's `additionalContext`, Codex's hook output), so the agent's model reads them, and they travel to that model's provider like the rest of the conversation. A local database doesn't make the agent local.
 
 When jev is unavailable, reading keeps working and writing stops. Selection falls back to keyword rules with a warning and your prompt goes through; nothing new is saved without a judge.
 
@@ -79,7 +95,7 @@ Install jevmate and the kernel from the same marketplace, then run the setup com
 
 The plugin brings its own hooks and MCP server, so there's nothing to copy into your projects. It asks for a scope, a database and a selection mode when you install it, and you can change those later in the plugin's settings. `/context-kernel:setup` checks the install and lets you pick the judge: jev on a local Ollama model, which is free and keeps everything on your machine, or jev's paid hosted service, which is faster but sends your memory text out, so the scope has to allow it.
 
-After each turn, a line above the prompt tells you what memory saved, held for review or didn't save, with an undo button. It shows up in the desktop app too, which doesn't display hook messages.
+After each turn, a line above the prompt tells you what memory saved, held for review or didn't save, with an undo button. It's meant to show up in the desktop app too, which doesn't display hook messages. Its configuration is validated, but nobody has watched it in an interactive session yet; until then, the receipt in the agent's reply ("Memory: saved …") is the dependable signal.
 
 ### Terminal and Codex
 
@@ -134,7 +150,7 @@ memory policy --threshold affirmed=0.75
 
 | Judgment | Default | Measured on 6 to 30 fixtures |
 | --- | --- | --- |
-| The message asserts this fact | 0.75 (held for review from 0.60) | every true row ≥ 0.76; highest false row 0.757 (a question) when set in v0.4; see below |
+| The message asserts this fact | 0.75 (held for review from 0.60) | every true row ≥ 0.76; highest false row 0.757 (a question) when set in v0.4; held-out results below |
 | The message states something worth keeping | P(none) < 0.15 | recall 1.0; the one false hit, a forget request, is excluded before judging |
 | The message asks to forget this fact | 0.70 | true rows 0.94 to 0.98; false rows ≤ 0.60 |
 | The reply recommends something | 0.70 | advice 0.80 to 0.95; reports, questions and refusals ≤ 0.61 |
@@ -143,7 +159,9 @@ memory policy --threshold affirmed=0.75
 | A later decision replaces an earlier one | 0.70, for decisions sharing a topic word | 7 of 10 replacements; 0 of 12 other pairs (highest 0.654) |
 | The message asks to keep a fact in mind always, or to stop | 0.70 | requests 0.71 to 0.96; everything else ≤ 0.61 |
 
-The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes.
+The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes. Cached judgments are keyed by the model's weights digest when the backend is a local Ollama, so a re-pulled alias doesn't reuse old answers.
+
+Thresholds were chosen on `fixtures/calibration.jsonl`. `fixtures/holdout.jsonl` was written afterwards and is never used to tune them; `python3 -m tests.holdout_check` runs it through the whole capture path with the real jev. With `tev1-32k` (weights `527084f384df0682`), 17 of 18 true statements were captured (the 18th was held because its category is off by default), and of 20 messages that stated nothing, 12 were refused, 4 held for review and 2 saved: an instruction to the agent ("Write a test that checks invoices are PDF only.") and sarcasm ("lol sure, we totally have infinite budget for AWS"). 38 rows is still a small sample.
 
 With ten stored facts, the prompt hook took 0.33 s for a cached question and about 4 s cold, about a second of which is the check for something worth saving. That check is skipped for acknowledgements, picks among options the agent listed ("haz 1 y 2", "do both"), plain questions, generic questions and forget requests. These are small fixture sets, so read them as a trend rather than a benchmark. The details are in [verification](docs/verification.md).
 
@@ -154,6 +172,7 @@ With ten stored facts, the prompt hook took 0.33 s for a cached question and abo
 - `UserPromptSubmit` doesn't prove a person typed the prompt. The kernel is cautious about where a prompt came from and never lets an uncertain origin authorize a deletion, but that's a heuristic, not authentication.
 - jev's scores feed a policy; they aren't proof. A fact can pass validation and still be wrong, which is why captures are labelled, reversible, and announced when they change a confirmed value.
 - Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
+- Relevance on paraphrases is weak. Asked "Is there room to squeeze the payments refactor in before we ship?", the local judge scored the stored checkout deadline 0.55 and unrelated facts (a feature flag, a Slack channel) up to 0.63. `python3 -m tests.growth_check` measures how often an old constraint, asked about in other words, reaches the agent as memory grows: 2 of 3 at 13 facts, 1 to 2 of 3 at 100 to 200.
 - Commits are a narrow channel. The filters and jev keep only clear choices for the whole project, so most commits add nothing. In this repository, where commits change how one tool behaves, 2 of its 13 decision-like commits were kept. Decision records are the dependable source.
 - Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute. Python reads the kernel's own modules the same way, so a hook running from such a folder can be cancelled; `context-kernel doctor` warns when that can happen.
 

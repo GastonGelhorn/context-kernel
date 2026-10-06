@@ -238,6 +238,103 @@ Both clients have now passed the same pre-registered scenario once each, with no
 
 We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
+## v0.7: jevmate alone, the kernel alone, both, and neither
+
+Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`) and Claude Code 2.1.287 headless on the owner's subscription, with fictional prompts.
+
+### The comparison the plan asked for
+
+`tests/compare_check.py` runs the same continuity script in four variants, each in its own throwaway git repository with one decision record. Every step is a fresh `claude -p` session. Nobody types a memory command.
+
+| Variant | Kernel | jev | jevmate plugin |
+| --- | --- | --- | --- |
+| none | no | no | off |
+| jevmate | no | through the plugin | on |
+| kernel | hooks and MCP server, selection by rules | only as the kernel's capture judge | off |
+| both | hooks and MCP server, selection by jev | yes | on |
+
+"Kernel alone" can't mean "without jev": without a judge every capture is refused (`judge_unavailable`). What the plugin adds on top is its own hooks and tools.
+
+Read, Glob and Grep are allowed everywhere, so a variant without memory can still read the repository. Other plugins, claude.ai connectors and user MCP servers are switched off in all four. The script teaches three facts (staging app, package manager, release meeting), asks for two recommendations (job queue, payment rewrite), corrects the meeting day, shortens the deadline, teaches and then forgets a legacy database, and supersedes the queue decision in the repository. Fresh sessions then ask for each fact, ask whether the two recommendations still hold, ask about the forgotten database, and ask one generic question.
+
+Three repetitions on the final v0.7 code, variants interleaved in random order, graded by checks fixed before the run. A recall check passes only when the answer contains what the user said (`fly deploy` with `checkout-stg`, `pnpm`, `martes`). A stale check passes when the answer names the change (Redis, three weeks) and doesn't claim that no decision exists.
+
+| Per 3 repetitions | none | jevmate | kernel | both |
+| --- | --- | --- | --- | --- |
+| Facts the user would have to explain again (of 9) | 8 | 9 | 3 | **0** |
+| Stale recommendations not flagged (of 6) | 3 | 3 | 2 | **0** |
+| Forgotten facts that came back (of 3) | 0 | 0 | 0 | 0 |
+| Generic question answered normally (of 3) | 3 | 3 | 3 | 3 |
+| Median time per session | 8.1 s | 8.7 s | 11.0 s | 13.1 s |
+| Kernel prompt hook, median | – | – | 0.94 s | 3.09 s |
+| Cost of the 48 sessions (subscription, API equivalent) | $4.15 | $4.44 | $4.89 | $5.31 |
+| Memory commands typed | 0 | 0 | 0 | 0 |
+| Items left held for the owner's review | – | – | 2 | 2 |
+| Tool calls to jevmate's own tools | – | 0 | – | 0 |
+
+Read it this way:
+
+- **jevmate alone adds nothing to continuity.** It is no different from no plugin at all, for 7% more cost. Its value is elsewhere: sifting, ranking, picking tests, reviewing diffs. No task here asked for any of that, and the agent never called its tools. This comparison can't measure that value; it needs its own tasks.
+- **The kernel with rule-based selection stores well and delivers poorly.** It captured the staging app, but delivered it without the platform, so the agent refused to make up a command three times out of three.
+- **The kernel with jev selection brought back every fact and flagged every changed recommendation.** It cost about 5 s more per session than no memory, and 28% more. Of those 5 s, 3.1 s is the prompt hook; the rest is the agent's extra `memory_capture` round trip on turns that state something. Claude Code defers MCP tools, so each save also costs a `ToolSearch`.
+- **The queue question passes in every variant.** The repository's decision records say Redis, and every agent can read them. The kernel's contribution there is knowing what it had recommended before; without memory, the agents guessed ("if it was SQLite…").
+
+Graded with the first, looser keyword checks, the first v0.7 run had passed answers such as "I can't give you the command" because they mentioned `checkout-stg` in passing. Regraded strictly, that run had `kernel` at 5 of 9 and 2 of 6, and `both` at 0 of 9 and 3 of 6.
+
+Two small faults visible in the final run were fixed afterwards, with unit tests, without repeating the 48 sessions:
+
+- A reply opening with a bare "Sí." stored "Sí." as the recommendation.
+- `review_recommended` still came with the pnpm question, because "proyecto" also reads as "project", so one word counted as the two needed to name a recommendation.
+
+### What the first run found, and what changed
+
+One repetition on v0.6 surfaced these problems. Each now has a test in `tests/test_v07.py`.
+
+- **A forget covered one property only.** Asked to forget "the old database", the agent forgot its name and its host stayed. The cause was `Store.forget()`, which deleted every turn in the scope, including the one carrying the request. The second `memory_forget` of the same message then failed for want of a token. The authorizing turn now stays until it expires, and the result lists what is still remembered about the entity.
+- **A requested command was stored as a recommendation.** "fly deploy -a checkout-stg" became `project.recommendation`. Code blocks are now removed before the recommendation check, and a reply that is only code recommends nothing.
+- **`review_recommended` appeared on unrelated prompts.** Reviews matched any selected claim of the same entity, and `project` holds unrelated facts. The keyword index also matched the bare word "project" against every fact stored under it. A review now needs one of the changed premises themselves, or two words of the recommendation's own text. Generic entity names (`project`, `user`…) no longer match by keyword.
+- **A review gave the agent nothing to say.** In `both`, the agent answered that memory held no decision about the payment module. A review now brings the changed premise's current version ("three weeks") into the packet. The recommendation's text is still not injected.
+- **The reader rules crowded out the facts.** The eight `reader_rules` took 1.1 KB of the 2 KB packet in every prompt, so there was room for two or three claims. In one run the meeting day ("martes") was cut for `optional_budget`; in another, the deadline that a review needed. A packet now carries the three general rules plus only those that explain something it holds, and a review's premise is packed before any optional claim.
+- **Selection by rules stored but didn't deliver.** `checkout-stg` and the meeting day were stored, but the rules plan stopped at an ambiguous reference ("deploy" fits several projects) and delivered nothing. Keyword matches are now delivered in that case when they all name one entity.
+
+### The judge client
+
+`JevCommand.rank()` passed the user's prompt as `--query TEXT`, on the command line, where any local process can read it. It is now written to a private temporary file (0700 folder, removed after the call) and passed as `--query @file`. That also fixes a worse problem: jev reads a `--query` value that starts with `@` as a path. A prompt such as "@src/app.py fix this" made jev read that file and judge its contents. A dry run with `--query @/etc/hosts` sent the file's text as the query. `test_user_text_never_reaches_argv` checks that neither the prompt, the agent's reply nor a candidate value appears in the argument list.
+
+The judgment cache was keyed by URL, model name and locality. For a local Ollama backend, `describe()` now adds the weights digest from `/api/tags`, so pulling a new model under the same alias starts with an empty cache.
+
+### Growth: an old constraint among newer facts
+
+`tests/growth_check.py` stores three old facts (a deadline, a data-residency constraint, an allergy). It then adds N newer, unrelated facts a month later and asks one question per old fact in other words. The real jev judges with a 60 s timeout.
+
+| Facts | v0.6: delivered (judged) | v0.7: delivered (judged) | Projection time, cold |
+| --- | --- | --- | --- |
+| 13 | 2 of 3 (3) | 2 of 3 (3) | about 5 s |
+| 48 | 2 of 3 (3) | 2 of 3 (3) | about 18 s |
+| 103 | 0 of 3 (0) | 1 of 3 (3) | about 18 s |
+| 203 | 0 of 3 (0) | 2 of 3 (3) | about 20 s |
+
+In v0.6, past 48 pairs the cap judged the most recent ones, so no old constraint was even judged. The cap now judges, in order: pairs the question mentions, then constraints and decisions, then the most recent.
+
+Two more findings:
+
+- **Critical claims over budget used to empty the packet.** Five pairs judged critical that didn't fit in 2 KB delivered nothing at all (`selected: []`). Claims are now added best-judged first until the budget is full. The status is still `insufficient_context` and the warning is still `critical_budget_overflow`.
+- **The judge separates paraphrases poorly.** The deadline scored 0.55 against "Is there room to squeeze the payments refactor in before we ship?", while a feature flag scored 0.63 and a Slack channel 0.61. That is why the deadline is never delivered. It is a calibration problem, not an ordering one. It needs labelled relevance rows, not a new bar chosen on these three questions.
+
+A cold projection over 48 pairs takes longer than the prompt hook waits. In real use that prompt falls back to keyword rules with a `jev_unavailable` warning.
+
+### Held-out capture
+
+`fixtures/holdout.jsonl` has 38 `affirmed` rows and 6 `forget_asked` rows, all written after the thresholds were set. They are not used for tuning. With the thresholds frozen at 0.75 and 0.70:
+
+- The affirmed question alone captured all 18 true rows and 6 of 20 false ones (questions, an instruction, a third party's diet, sarcasm, a quoted ticket). The forget question separated its 6 rows.
+- `tests/holdout_check.py` runs each affirmed row through the real prompt hook and `memory_capture`, as if the agent proposed exactly that fact. In v0.6, 4 of 20 false rows were saved. Two of them were plain questions ("Does Ops own the on-call rotation now?"). The hook skipped its nudge for questions, but a capture the agent proposed on its own still reached the judge. A message made only of questions is now refused before judging (`question_only`).
+- In v0.7, 17 of 18 true rows are captured; the other is held because its category is off by default. Of the 20 false rows, 12 are refused, 4 are held for review and 2 are saved: an instruction to the agent and sarcasm.
+
+### Unit and subprocess suite
+
+269 tests pass on Python 3.14.3 and on macOS's Python 3.9.6, 16 of them new. `.github/workflows/test.yml` runs the same suite on Ubuntu and macOS with Python 3.9 and 3.13. The `*_check.py` measurements need the owner's clients and a real jev, so they stay out of CI.
+
 ## v0.6: decisions from the repository, and standing facts
 
 Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama), with no paid API.

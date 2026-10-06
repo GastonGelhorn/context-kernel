@@ -53,7 +53,22 @@ The first step shipped in v0.5. The kernel is its own Claude Code plugin, listed
 /plugin install context-kernel@gastongelhorn
 ```
 
-Whether to merge the two into one plugin is decided later. One option is for jevmate to be the only thing people install, with the kernel as an experimental memory module that each scope turns on. Before deciding, I want to compare jevmate alone, the kernel alone and both together on the same continuity tasks, counting repeated explanations, stale recommendations, added latency per turn and manual maintenance. The two get merged only if the combination wins without adding wait or work. A shared repository is a maintenance question for later.
+Whether to merge the two into one plugin was left until jevmate alone, the kernel alone and both together had been compared on the same continuity tasks. The rule was to merge them only if the combination won without adding wait or work.
+
+That comparison ran in v0.7 (`tests/compare_check.py`, [verification](verification.md#v07-jevmate-alone-the-kernel-alone-both-and-neither)). Over three repetitions:
+
+- With both, the user explained nothing twice (0 of 9) and no stale recommendation went unflagged (0 of 6).
+- With the kernel alone, the figures were 3 of 9 and 2 of 6.
+- With jevmate alone, 9 of 9 and 3 of 6, the same as with nothing.
+- The combination costs about 5 s more per session and 28% more tokens than no memory.
+
+So the combination wins on continuity, but not without adding wait. The decision:
+
+- **Keep them as two plugins.** jevmate alone does nothing for continuity, and the kernel already depends only on `jev`, not on the plugin. Merging would load jevmate's hooks into sessions that want memory, and memory's latency into sessions that only want jevmate.
+- **Recommend installing them together for memory.** The kernel without jev selection is clearly worse. The plugin already defaults to jev selection; rules are only the fallback when jev is missing or slow, and the docs say so.
+- **Work on the cost before revisiting the merge.** The cost is the 3 s prompt hook (cold judgments) and the extra tool round trip per save. Revisit when a cold prompt costs under 1 s.
+
+A shared repository is a maintenance question for later.
 
 ## Out of scope
 

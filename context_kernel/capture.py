@@ -246,6 +246,11 @@ def gate(judge, prompt, deadline=None, none_bar=None):
 def _decide(store, judge, turn, triple, rules, deadline):
     entity, predicate, value = triple
     authored, quoted = segments(turn["prompt_excerpt"] or "")
+    # A message made only of questions states nothing. The hook already skips its nudge for these, but
+    # an agent proposing on its own reached the judge, which read "Does Ops own on-call now?" as an
+    # assertion (0.89 on held-out rows). As with asking to remember, a question never counts.
+    if only_questions(authored):
+        return "rejected", "question_only", None, None
     line = fact_line(entity, predicate, value)
     timeout = deadline.timeout(judge.timeout) if deadline else None
     answers, _ = judge.ask({"text": authored, "fact": line},
@@ -500,5 +505,5 @@ def describe_results(results):
 WHY = {"not_affirmed": "not read as something you stated", "uncertain": "sounded unsure",
        "quoted_source": "came from pasted text", "origin_unverified": "not typed by you",
        "category_disabled": "this kind is off for the scope", "forgotten": "you asked to forget it",
-       "judge_unavailable": "jev did not answer", "cap": "too many in one turn", "expired": "too late for that message",
+       "judge_unavailable": "jev did not answer", "question_only": "the message only asked", "cap": "too many in one turn", "expired": "too late for that message",
        "replaces_mismatch": "named the wrong fact to replace", "unknown_target": "named a fact that does not exist"}

@@ -1,0 +1,44 @@
+{"kind": "affirmed", "message": "Nuestra base de pedidos vive en Postgres 16.", "fact": "orders database: Postgres 16", "label": true}
+{"kind": "affirmed", "message": "We ship the iOS app every second Thursday.", "fact": "ios release cadence: every second Thursday", "label": true}
+{"kind": "affirmed", "message": "La revisión de seguridad la firma Irene.", "fact": "security review approver: Irene", "label": true}
+{"kind": "affirmed", "message": "From now on, write commit messages in English.", "fact": "user preference: commit messages in English", "label": true}
+{"kind": "affirmed", "message": "Decidimos no usar GraphQL en el backend nuevo.", "fact": "backend decision: no GraphQL", "label": true}
+{"kind": "affirmed", "message": "The staging cluster is called kestrel-stg.", "fact": "staging cluster name: kestrel-stg", "label": true}
+{"kind": "affirmed", "message": "Tengo que entregar el informe antes del 30 de noviembre.", "fact": "report deadline: 2026-11-30", "label": true}
+{"kind": "affirmed", "message": "I'm vegetarian, so skip meat suggestions.", "fact": "user diet: vegetarian", "label": true}
+{"kind": "affirmed", "message": "El límite de gasto mensual en AWS es 3.000 dólares.", "fact": "aws monthly budget: 3000 USD", "label": true}
+{"kind": "affirmed", "message": "Ops owns the on-call rotation now, not the backend team.", "fact": "on-call rotation owner: Ops", "label": true}
+{"kind": "affirmed", "message": "Recuerda que el cliente solo acepta facturas en PDF.", "fact": "client invoice format: PDF only", "label": true}
+{"kind": "affirmed", "message": "Our API must stay backwards compatible until v3.", "fact": "api constraint: backwards compatible until v3", "label": true}
+{"kind": "affirmed", "message": "Pasamos el lanzamiento al 12 de enero.", "fact": "launch date: 2027-01-12", "label": true}
+{"kind": "affirmed", "message": "Lina is the product owner for search.", "fact": "search product owner: Lina", "label": true}
+{"kind": "affirmed", "message": "Usamos Tailwind en todos los proyectos web.", "fact": "web styling decision: Tailwind", "label": true}
+{"kind": "affirmed", "message": "Never deploy on Fridays here.", "fact": "deploy policy: no Friday deploys", "label": true}
+{"kind": "affirmed", "message": "Mi horario es de 8 a 16.", "fact": "user work schedule: 8-16", "label": true}
+{"kind": "affirmed", "message": "The mobile team moved from Jira to Linear last month.", "fact": "mobile issue tracker: Linear", "label": true}
+{"kind": "affirmed", "message": "¿La base de pedidos vive en Postgres 16?", "fact": "orders database: Postgres 16", "label": false}
+{"kind": "affirmed", "message": "Maybe we should ship the iOS app every second Thursday?", "fact": "ios release cadence: every second Thursday", "label": false}
+{"kind": "affirmed", "message": "Irene dijo que ella firma la revisión de seguridad, pero no lo tengo claro.", "fact": "security review approver: Irene", "label": false}
+{"kind": "affirmed", "message": "Remind me to write the commit messages in English tomorrow.", "fact": "user preference: commit messages in English", "label": false}
+{"kind": "affirmed", "message": "¿Y si decidiéramos no usar GraphQL?", "fact": "backend decision: no GraphQL", "label": false}
+{"kind": "affirmed", "message": "The staging cluster used to be called kestrel-stg; it's heron-stg now.", "fact": "staging cluster name: kestrel-stg", "label": false}
+{"kind": "affirmed", "message": "No sé si el informe es para el 30 de noviembre o para diciembre.", "fact": "report deadline: 2026-11-30", "label": false}
+{"kind": "affirmed", "message": "My sister is vegetarian, so for her dinner skip meat.", "fact": "user diet: vegetarian", "label": false}
+{"kind": "affirmed", "message": "El ticket dice: 'límite de gasto mensual 3.000 dólares'. ¿Es razonable?", "fact": "aws monthly budget: 3000 USD", "label": false}
+{"kind": "affirmed", "message": "Does Ops own the on-call rotation now?", "fact": "on-call rotation owner: Ops", "label": false}
+{"kind": "affirmed", "message": "Write a test that checks invoices are PDF only.", "fact": "client invoice format: PDF only", "label": false}
+{"kind": "affirmed", "message": "Here's the RFC draft: 'The API must stay backwards compatible until v3.' Thoughts?", "fact": "api constraint: backwards compatible until v3", "label": false}
+{"kind": "affirmed", "message": "Si pasamos el lanzamiento al 12 de enero, ¿llegamos?", "fact": "launch date: 2027-01-12", "label": false}
+{"kind": "affirmed", "message": "Lina is not the product owner for search anymore.", "fact": "search product owner: Lina", "label": false}
+{"kind": "affirmed", "message": "Explícame qué ventajas tiene Tailwind.", "fact": "web styling decision: Tailwind", "label": false}
+{"kind": "affirmed", "message": "Why do some teams never deploy on Fridays?", "fact": "deploy policy: no Friday deploys", "label": false}
+{"kind": "affirmed", "message": "Mi horario era de 8 a 16 hasta septiembre.", "fact": "user work schedule: 8-16", "label": false}
+{"kind": "affirmed", "message": "Should the mobile team move from Jira to Linear?", "fact": "mobile issue tracker: Linear", "label": false}
+{"kind": "affirmed", "message": "lol sure, we totally have infinite budget for AWS", "fact": "aws monthly budget: unlimited", "label": false}
+{"kind": "affirmed", "message": "Error: connection refused to orders-db (Postgres 16) at 10.0.0.4", "fact": "orders database: Postgres 16", "label": false}
+{"kind": "forget_asked", "message": "Borra lo que sabes de mi horario.", "fact": "user work schedule: 8-16", "label": true}
+{"kind": "forget_asked", "message": "Please stop remembering the staging cluster name.", "fact": "staging cluster name: kestrel-stg", "label": true}
+{"kind": "forget_asked", "message": "Ya no hace falta que recuerdes el límite de AWS, olvídalo.", "fact": "aws monthly budget: 3000 USD", "label": true}
+{"kind": "forget_asked", "message": "Can you remember that the staging cluster is kestrel-stg?", "fact": "staging cluster name: kestrel-stg", "label": false}
+{"kind": "forget_asked", "message": "The script forgets to delete the temp folder.", "fact": "user work schedule: 8-16", "label": false}
+{"kind": "forget_asked", "message": "No borres el límite de AWS, sigue vigente.", "fact": "aws monthly budget: 3000 USD", "label": false}
