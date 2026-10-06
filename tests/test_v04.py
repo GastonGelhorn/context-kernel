@@ -313,8 +313,13 @@ class AutonomyTests(unittest.TestCase):
         self.assertIn({"outcome": "missed", "reason": "excerpt_expired", "count": 1}, self.store.capture_metrics())
 
     def test_nothing_saved_is_reported_and_generic_questions_skip_the_gate(self):
+        self.server()  # the memory tools are running for this host process
         packet, event = self.prompt("Mi manager es Dani")
-        self.assertIn("not saved", self.stop(event, "Ok.")["systemMessage"])
+        nudge = self.stop(event, "Ok.")
+        self.assertEqual(nudge["decision"], "block")  # handed back once to save what was stated
+        continued = stop_response({"cwd": str(self.workspace), "hook_event_name": "Stop", "session_id": "s1",
+                                   "stop_hook_active": True, "last_assistant_message": "Ok."}, self.workspace, self.store, self.judge)
+        self.assertIn("not saved", continued["systemMessage"])
         before = len(self.judge.calls)
         packet, _ = self.prompt("Explain what a SQLite primary key is.")
         self.assertNotIn("capture", packet["turn"])

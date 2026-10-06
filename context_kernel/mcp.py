@@ -322,6 +322,10 @@ class Server:
                 return error(-32602, "Invalid initialization parameters.")
             version = params["protocolVersion"]
             self.initialized = True
+            try:
+                self.store.register_server(self.parent)  # lets the hooks know someone can act on capture requests
+            except Exception:
+                pass  # presence is advisory; the tools still check binding on every write
             result = {"protocolVersion": version if version in VERSIONS else "2025-06-18",
                       "capabilities": {"tools": {"listChanged": False}},
                       "serverInfo": {"name": "context-kernel", "version": __version__},

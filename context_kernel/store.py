@@ -8,7 +8,7 @@ import sqlite3
 from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp, timestamp_offset
 
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS entities(
@@ -65,7 +65,7 @@ CREATE TABLE IF NOT EXISTS turns(
  origin TEXT NOT NULL CHECK(origin IN ('interactive','continuation','unknown')),
  prompt_digest TEXT NOT NULL, prompt_excerpt TEXT, projection_id TEXT,
  delivered_ids TEXT NOT NULL DEFAULT '[]', captured_ids TEXT NOT NULL DEFAULT '[]',
- gate_count INTEGER NOT NULL DEFAULT 0, flags TEXT NOT NULL DEFAULT '[]', opened_at TEXT NOT NULL, closed_at TEXT,
+ gate_count INTEGER NOT NULL DEFAULT 0, flags TEXT NOT NULL DEFAULT '[]', reply_excerpt TEXT, opened_at TEXT NOT NULL, closed_at TEXT,
  expires_at TEXT NOT NULL, PRIMARY KEY(scope,session_id,turn_key));
 CREATE TABLE IF NOT EXISTS judgments(
  scope TEXT NOT NULL, kind TEXT NOT NULL, question TEXT NOT NULL, model TEXT NOT NULL,
@@ -78,6 +78,9 @@ CREATE TABLE IF NOT EXISTS tombstones(
  scope TEXT NOT NULL, entity_key TEXT NOT NULL, predicate TEXT NOT NULL, at TEXT NOT NULL,
  PRIMARY KEY(scope,entity_key,predicate));
 CREATE TABLE IF NOT EXISTS scopes(scope TEXT PRIMARY KEY, policy TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS servers(
+ scope TEXT NOT NULL, pid INTEGER NOT NULL, started TEXT NOT NULL, seen_at TEXT NOT NULL,
+ PRIMARY KEY(scope,pid,started));
 """
 
 # Columns added after the tables first shipped; a migration adds whichever are missing.
@@ -87,6 +90,7 @@ ADDED_COLUMNS = (
     ("statements", "last_confirmed_at", "TEXT"),
     ("relations", "provenance", "TEXT NOT NULL DEFAULT 'declared' CHECK(provenance IN ('declared','inferred'))"),
     ("relations", "recorded_at", "TEXT"),
+    ("turns", "reply_excerpt", "TEXT"),
 )
 RELATION_COLUMNS = "id,scope,kind,from_statement,to_statement,from_entity,to_entity"
 
@@ -119,7 +123,7 @@ class Store:
             if os.name == "posix":
                 self.path.chmod(0o600)
         version = self.db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
-        if version and version[0] in {"1", "2"}:
+        if version and version[0] in {"1", "2", "3"}:
             self._migrate(version[0])
             version = (SCHEMA_VERSION,)
         if not version or version[0] != SCHEMA_VERSION:
@@ -127,7 +131,7 @@ class Store:
 
     def _migrate(self, version):
         """Copy-based and additive: no row is dropped. v1 -> v2 rebuilds `relations` (SQLite
-        cannot alter a CHECK in place); v2 -> v3 adds columns and tables."""
+        cannot alter a CHECK in place); later versions only add tables and columns."""
         with self.db:
             if version == "1":
                 self.db.execute("ALTER TABLE relations RENAME TO relations_v1")
@@ -639,6 +643,21 @@ class Store:
             self.db.execute("INSERT OR REPLACE INTO sessions VALUES(?,?,?,?,?)",
                             (self.scope, text(session_id, 256), host, canonical(chain), self.clock()))
 
+    def register_server(self, parent):
+        """An MCP server of this scope is running under this host process (pid and start time)."""
+        if parent:
+            with self.db:
+                self.db.execute("INSERT OR REPLACE INTO servers VALUES(?,?,?,?)", (self.scope, parent[0], parent[1], self.clock()))
+
+    def tools_available(self, session_id):
+        """Whether a memory MCP server runs under the same host process as this session's hooks.
+        Without one, nobody can act on capture requests, so none are pushed and none count as missed."""
+        row = self.db.execute("SELECT chain FROM sessions WHERE scope=? AND session_id=?", (self.scope, session_id)).fetchone()
+        if not row:
+            return False
+        chain = [tuple(entry) for entry in json.loads(row[0])]
+        return any((r[0], r[1]) in chain for r in self.db.execute("SELECT pid, started FROM servers WHERE scope=?", (self.scope,)))
+
     def sessions_for_parent(self, parent):
         """Sessions whose recorded hook ancestry contains this (pid, start)."""
         if not parent:
@@ -653,7 +672,8 @@ class Store:
                             (self.scope, session_id, turn_key, token, origin, prompt_digest, excerpt, self.clock(), expires_at))
 
     def update_turn(self, session_id, turn_key, **fields):
-        allowed = {"projection_id", "delivered_ids", "captured_ids", "gate_count", "flags", "closed_at", "prompt_excerpt", "expires_at"}
+        allowed = {"projection_id", "delivered_ids", "captured_ids", "gate_count", "flags", "closed_at", "prompt_excerpt",
+                   "expires_at", "reply_excerpt"}
         if set(fields) - allowed:
             raise KernelError("Unsupported turn fields.")
         assignments = ",".join(f"{name}=?" for name in fields)

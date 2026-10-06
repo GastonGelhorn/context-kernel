@@ -8,7 +8,8 @@ import shutil
 import sys
 
 from .binding import ancestors
-from .capture import describe_results, gate, only_questions, policy as capture_policy, related_facts, segments
+from .capture import CONFIDENT_NONE, describe_results, gate, only_questions, policy as capture_policy, related_facts, segments
+from .turns import mask_secrets
 from .common import KernelError, canonical, digest, text, timestamp_offset
 from .inference import infer
 from .language import fold
@@ -127,6 +128,8 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
             # A message often states a fact and asks something; the instruction score is not a veto.
             if result["facts"]:
                 gate_count = result["facts"]
+                if result["p_none"] <= CONFIDENT_NONE:
+                    flags.append("gate_confident")
                 marker["capture"] = {"facts_stated": gate_count, "call": "memory_capture",
                                      "how": "Extract each as entity.predicate = value. If one changes a fact in related, pass its id as replaces."}
                 related = related_facts(store, prompt)
@@ -197,15 +200,53 @@ def packet_of(context):
     return json.loads(context[context.index("{"):]) if context else None
 
 
+def nudge_reason(turn):
+    return (f"Before finishing: the user's last message stated facts worth remembering and nothing was saved. Call "
+            f"memory_capture with token \"{turn['token']}\" for what the user stated there (only what they said), then "
+            "reply with the tool's receipt in one line and nothing else.")
+
+
 def stop_response(event, workspace, store, judge=None, deadline=None):
-    """Stop: close the turn, tell the user in one line what memory did, infer what a recommendation
-    rested on. Writes nothing the user said; capture happened through the tool during the turn."""
+    """Stop: tell the user in one line what memory did, and infer what a recommendation rested on.
+
+    When the user's message confidently stated facts, the agent has the memory tools, and nothing
+    was saved, the turn is handed back to the agent once (`decision: block`; both hosts continue,
+    Codex with the reason as a new prompt). The capture must use the original turn's token, so it is
+    validated against the user's words, and the original reply is kept for the inference that runs
+    after the capture. A continuation never nudges again."""
     _check_event(event, workspace, "Stop")
+    session = str(event.get("session_id") or "unknown-session")
+    reply = event.get("last_assistant_message") or ""
     if event.get("stop_hook_active"):
-        return {}
+        # Codex opened a new turn for the continuation; Claude continues the same one. Either way the
+        # work left is the nudged turn's receipt and inference.
+        turn = next((t for t in store.recent_turns(session, 4)
+                     if "capture_nudged" in t["flags"] and "nudge_done" not in t["flags"]), None)
+        close_turn(store, event)
+        if not turn:
+            return {}
+        store.update_turn(session, turn["turn_key"], flags=turn["flags"] + ["nudge_done"])
+        turn = store.turn(session, turn["turn_key"])
+        return _report(store, judge, deadline, turn, turn["reply_excerpt"] or reply, nudged=True)
     turn = close_turn(store, event)
     if not turn:
         return {}
+    tools = store.tools_available(session)
+    missing = turn["gate_count"] - len(turn["captured_ids"])
+    if not tools and turn["gate_count"]:
+        # Nobody could act on the capture request: not a miss, and the excerpt goes now.
+        store.update_turn(session, turn["turn_key"], gate_count=0, prompt_excerpt=None, flags=turn["flags"] + ["no_tools"])
+        turn = store.turn(session, turn["turn_key"])
+        missing = 0
+    if tools and missing > 0 and not turn["captured_ids"] and turn["origin"] == "interactive" \
+            and "gate_confident" in turn["flags"] and "capture_nudged" not in turn["flags"]:
+        store.update_turn(session, turn["turn_key"], flags=turn["flags"] + ["capture_nudged"],
+                          reply_excerpt=mask_secrets(reply)[:4000])
+        return {"decision": "block", "reason": nudge_reason(turn)}
+    return _report(store, judge, deadline, turn, reply)
+
+
+def _report(store, judge, deadline, turn, reply, nudged=False):
     notes = []
     results = store.captures_for_turn(turn["session_id"], turn["turn_key"])
     rows = {r["id"]: r for r in store.records(history=True)}
@@ -223,11 +264,14 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
     if missing <= 0 and turn["prompt_excerpt"]:
         # Nothing left to validate against this message: its excerpt goes now, not at expiry.
         store.update_turn(turn["session_id"], turn["turn_key"], prompt_excerpt=None)
+    if turn["reply_excerpt"] and nudged:
+        store.update_turn(turn["session_id"], turn["turn_key"], reply_excerpt=None)
     if "forget_requested" in turn["flags"] and not store.operations_since(turn["opened_at"], ("forget", "revoke", "undo")):
         notes.append("Memory: nothing was forgotten in that turn.")
     if judge:
         policy = capture_policy(store)
-        inferred = infer(store, judge, turn, event.get("last_assistant_message") or "", policy["allow_remote_judge"], deadline)
+        inferred = infer(store, judge, store.turn(turn["session_id"], turn["turn_key"]) or turn, reply,
+                         policy["allow_remote_judge"], deadline)
         if inferred.get("linked"):
             notes.append(f"Memory: linked the recommendation to {inferred['linked']} fact(s) it relied on.")
     return {"systemMessage": " ".join(notes)} if notes else {}

@@ -6,7 +6,7 @@ Checked on 2026-10-05: macOS arm64, Python 3.14.3, SQLite 3.51.2 with FTS5, Olla
 
 Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama). No paid API was used for these checks.
 
-**Unit and subprocess suite.** 206 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
+**Unit and subprocess suite.** 209 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
 
 - turn tokens;
 - refusal of a server bound to another host process, and of unknown or expired tokens;
@@ -155,6 +155,28 @@ Now:
 - the capture request tells the agent to stay silent when nothing is stated.
 
 Replayed with the real jev and the run's exact wording, the link was made, the drifted key resolved, the question raised no capture request, and the fresh session got `review_required` with only "three weeks". Native reruns are pending.
+
+**Second Codex run (gpt-5.6-sol via the subscription; it ran at 02:02 local, before the fixes saved at 02:03, so it tested commit d475614).**
+
+Results:
+- Codex now captured in conversation: the deadline change in session 2 went through the bound server.
+- The forget removed the fact and its derived recommendation.
+- In session 1 Codex answered "No—given the three-month deadline, … refactor the payment module…" without calling `memory_capture`, so the chain had no premise to link and nothing to flag later.
+- The run also showed the old noise: capture requests on a question and on "Please forget …".
+
+The kernel cannot extract without a second model, and an agent may skip a request. Both hosts let a Stop hook hand the turn back: `decision: block` with a reason. Codex turns the reason into a new prompt; Claude Code continues. The Stop hook now does that once, under these conditions:
+- the gate was confident, at P(none) ≤ 0.05; fact-bearing messages measured 0.004 to 0.04, while a forget request measured 0.12 and a generic question 0.27;
+- nothing was saved;
+- the turn was typed;
+- a memory server is registered under the same host process.
+
+How it works:
+1. The reason carries the original turn's token, so the capture is validated against the user's words rather than the nudge.
+2. The original reply is kept and inferred from after the capture.
+3. A continuation never nudges again.
+4. Without a server, as in sessions that lack the memory tools, there is no nudge and nothing is counted as missed. Thirteen earlier "missed" captures in the owner's scope came from such a session.
+
+"Answer in one sentence." raised P(none) from 0.033 to 0.068 on the first message, so instructions about how to answer are removed before the gate. A real-process smoke with the real jev reproduced the run's first message and Codex's exact reply. The first Stop returned the nudge, a capture with the original token was saved, and the continuation's Stop reported the save and linked the recommendation.
 
 **Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 

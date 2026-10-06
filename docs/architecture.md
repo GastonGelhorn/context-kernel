@@ -25,7 +25,7 @@ Stop hook                                          memory_forget / revoke / conf
 
 ## Data model
 
-The executable schema is `store.SCHEMA` (version 3). Migrations from version 1 and version 2 are copy-based and additive; no row is dropped. Unknown versions are refused.
+The executable schema is `store.SCHEMA` (version 4). Migrations from versions 1 to 3 are copy-based and additive; no row is dropped. Unknown versions are refused.
 
 | Table | Responsibility |
 | --- | --- |
@@ -39,6 +39,7 @@ The executable schema is `store.SCHEMA` (version 3). Migrations from version 1 a
 | judgments | Cached probabilities keyed by question, model, and digests of state and candidate, never text |
 | captures_log | Outcome per proposed fact: captured, quarantined, confirmed, duplicate, needs_confirmation, rejected, omitted, missed |
 | tombstones | Last forget or revoke per property; writes whose evidence predates it are refused |
+| servers | Host processes under which a memory MCP server initialized; whether anyone can act on capture requests |
 | scopes | Policy: categories, thresholds, auto capture, remote judge allowance |
 
 ## Capture
@@ -65,6 +66,10 @@ The host agent extracts. The kernel never asks a second generative model to read
    - The same value restated in a typed message promotes the existing statement to confirmed.
 
 The evidence stored is the sentence that best supports the fact, not the message. Excerpts are masked for secrets, capped at 4 KiB, and dropped at Stop unless a stated fact is still uncaptured. After ten minutes they are dropped in any case and the shortfall is logged as `missed`. "Don't remember this" stores neither an excerpt nor a capture.
+
+## Handing the turn back once
+
+If the gate was confident (P(none) ≤ 0.05), the turn was typed, a memory server is registered under the session's host process, and nothing was captured, the Stop hook answers `decision: block`. The reason asks the agent to call `memory_capture` with the original turn's token. Codex turns that reason into a new prompt; Claude Code continues the turn. The original reply is stored masked, and the inference runs on it after the capture, at the continuation's Stop. A continuation never nudges again. MCP servers record their host process when they initialize (`servers`), and the Stop hook checks that record. Sessions without memory tools are therefore never nudged, and their gate estimates are not counted as missed.
 
 ## Requests to the agent
 

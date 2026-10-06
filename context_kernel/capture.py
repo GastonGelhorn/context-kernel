@@ -16,6 +16,9 @@ from .turns import do_not_remember
 
 
 NONE_BAR = 0.15
+# Fact-bearing messages put P(none) at 0.04 or less in the calibration set; the nearest non-statement
+# (a forget request) at 0.12 and a generic question at 0.27. Only this confident band earns a nudge.
+CONFIDENT_NONE = 0.05
 CATEGORIES = {
     "project_state": "the status, scope, or progress of a project or piece of work",
     "project_decisions": "a decision, plan, or choice the user or their team made",
@@ -116,6 +119,14 @@ _ANSWER_STYLE = re.compile(r"^(please\s+)?(answer|reply|respond|explain|keep it|
                            r"responde|contesta|explica|se breve|en una frase|resumelo|resume)\b", re.I)
 
 
+def statement_text(prompt):
+    """The authored text without instructions about how to answer ("Answer in one sentence."), which
+    say nothing about the user's world: measured, that sentence alone moved P(none) from 0.033 to 0.068."""
+    authored, _ = segments(prompt)
+    sentences = [s.strip() for s in re.split(r"(?<=[.!?\n])\s+", authored) if s.strip()]
+    return " ".join(s for s in sentences if not _ANSWER_STYLE.match(fold(s)))
+
+
 def only_questions(prompt):
     """Every authored sentence is a question, or an instruction about how to answer ("Answer in one
     sentence."): nothing is being stated, so the gate is skipped."""
@@ -140,9 +151,9 @@ def evidence_sentence(authored, triple):
 def gate(judge, prompt, deadline=None, none_bar=None):
     """How many facts the authored part of this prompt states, and whether it is mostly an
     instruction. Cheap: one request; called only when the budget allows."""
-    authored, _ = segments(prompt)
+    authored = statement_text(prompt)
     if not authored or do_not_remember(prompt):
-        return {"facts": 0, "instruction": 0.0, "calls": 0}
+        return {"facts": 0, "p_none": 1.0, "instruction": 0.0, "calls": 0}
     timeout = deadline.timeout(judge.timeout) if deadline else None
     answers, usage = judge.ask({"text": authored}, {"count": ("choice", FACT_COUNT, COUNTS),
                                                     "instruction": ("noul", INSTRUCTION)}, timeout=timeout)
@@ -155,7 +166,8 @@ def gate(judge, prompt, deadline=None, none_bar=None):
     else:
         best = max((k for k in counts if k != "none"), key=counts.get)
         facts = {"one": 1, "two": 2, "several": 3}[best]
-    return {"facts": facts, "instruction": answers["instruction"], "calls": 1, "latency_ms": usage.get("latency_ms")}
+    return {"facts": facts, "p_none": counts.get("none", 0.0), "instruction": answers["instruction"], "calls": 1,
+            "latency_ms": usage.get("latency_ms")}
 
 
 def _decide(store, judge, turn, triple, rules, deadline):

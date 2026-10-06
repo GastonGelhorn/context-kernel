@@ -140,6 +140,48 @@ class ReviewFixTests(unittest.TestCase):
         context = self.prompt("We have three months to deliver checkout.")
         self.assertIn("do not mention this request", context.split("\n", 1)[0])
 
+    # Codex answered the first message without saving: the Stop hook hands the turn back once
+
+    def stop(self, reply, **event):
+        from context_kernel.adapters import stop_response
+        self.now = timestamp_offset(self.now, 2)
+        return stop_response({"cwd": str(self.workspace), "hook_event_name": "Stop", "session_id": "s1",
+                              "last_assistant_message": reply} | event, self.workspace, self.store, self.judge)
+
+    def test_an_unsaved_fact_is_handed_back_once_with_the_original_token(self):
+        from context_kernel.inference import RESTS_ON
+        self.judge.ask_fn = answers(category="constraints")
+        self.judge.rank_fn = lambda query, line, question: 0.9 if question == RESTS_ON else 0.1
+        self.tool("memory_status", {})  # a memory server is running under this host
+        token = packet_of(self.prompt("We have three months to deliver checkout. Should we rewrite it?"))["turn"]["token"]
+        reply = "No: with three months, refactor the payment module incrementally instead of rewriting it."
+        nudge = self.stop(reply)
+        self.assertEqual(nudge["decision"], "block")
+        self.assertIn(token, nudge["reason"])
+        # The agent saves with the original token: validated against the user's words, not the nudge.
+        result, error = self.tool("memory_capture", {"token": token, "facts": [
+            {"entity": "checkout", "predicate": "deadline", "value": "three months"}]})
+        self.assertFalse(error, result)
+        report = self.stop("Memory: saved checkout.deadline.", stop_hook_active=True)
+        self.assertIn("saved checkout.deadline", report["systemMessage"])
+        self.assertIn("linked the recommendation", report["systemMessage"])  # inferred from the original reply
+        self.assertEqual(self.stop("ok", stop_hook_active=True), {})  # never twice
+
+    def test_no_nudge_and_no_miss_without_memory_tools(self):
+        self.prompt("We have three months to deliver checkout.")
+        self.assertNotIn("decision", self.stop("Sure."))
+        self.assertNotIn("missed", [m["outcome"] for m in self.store.capture_metrics()])
+        self.now = timestamp_offset(self.now, 900)
+        self.prompt("ok")  # expiry runs
+        self.assertNotIn("missed", [m["outcome"] for m in self.store.capture_metrics()])
+
+    def test_an_uncertain_gate_does_not_nudge(self):
+        self.tool("memory_status", {})
+        self.judge.ask_fn = lambda qid, state, spec: ({"none": 0.1, "one": 0.9, "two": 0.0, "several": 0.0}
+                                                      if spec[0] == "choice" else 0.05)
+        self.prompt("Something that may or may not be a fact.")
+        self.assertNotIn("decision", self.stop("Ok."))
+
 
 if __name__ == "__main__":
     unittest.main()
