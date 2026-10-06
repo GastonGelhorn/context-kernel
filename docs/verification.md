@@ -1,50 +1,58 @@
 # Verification
 
-Checked on 2026-10-05: macOS arm64, Python 3.14.3, SQLite 3.51.2 with FTS5, Ollama 0.34.4, and the existing `qwen3.5:9b` model. No model was downloaded and no paid model API was used.
+Checked on 2026-10-05 on macOS arm64 with Python 3.14.3, SQLite 3.51.2 with FTS5, Ollama 0.34.4 and the already installed `qwen3.5:9b` model. I downloaded no model and used no paid model API.
 
 ## v0.4 results
 
-Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama). No paid API was used for these checks.
+Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama), with no paid API.
 
-**Unit and subprocess suite.** 209 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
+### Unit and subprocess suite
 
-- turn tokens;
-- refusal of a server bound to another host process, and of unknown or expired tokens;
-- continuation and markup origins;
+209 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory, and a fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
+
+- turn tokens
+- refusing a server bound to another host process, and refusing unknown or expired tokens
+- continuation and markup origins
 - each row of the plan's message table:
-  - a project constraint without a first-person subject;
-  - a relation the user names;
-  - another person's allergy, held;
-  - a decision typed after a pasted log, captured, while the log's fact is held as `quoted_source`;
-  - an unaffirmed fact, rejected;
-  - "don't save it", which stores nothing;
-- instruction-shaped and oversized values;
-- a hosted judge, which stores nothing;
-- the trust lattice and a proposal instead of overriding a confirmed value;
-- undo only when asked;
-- caps counted as omissions;
-- a forget that lands during a slow capture, which wins;
-- forget, policy and confirmation only with the user's own words;
-- truthful receipts and missed-capture accounting;
-- acknowledgements that cost no judgment;
-- the 90-day digest and 180-day eligibility;
-- confirmation by restating;
-- the post's scenario with an empty memory. A premise stated in the same turn is linked by inference, and its later change flags the recommendation in a new projection, without its text;
-- the bundle for both clients;
-- additive migration from v1 and v2 databases.
+  - a project constraint with no first-person subject
+  - a relation the user names
+  - another person's allergy, which is held
+  - a decision typed after a pasted log, which is captured while the log's fact is held as `quoted_source`
+  - an unaffirmed fact, which is rejected
+  - "don't save it", which stores nothing
+- instruction-shaped and oversized values
+- a hosted judge, which stores nothing
+- the trust lattice, and a proposal in place of overriding a confirmed value
+- undo only when the user asks for it
+- caps counted as omissions
+- a forget that lands during a slow capture (the forget wins)
+- forget, policy and confirmation only from the user's own words
+- truthful receipts and accounting for missed captures
+- acknowledgements that cost no judgment
+- the 90-day digest and 180-day eligibility
+- confirmation by restating
+- the post's scenario with an empty memory. A premise stated in the same turn is linked by inference, and when it later changes, a new projection flags the recommendation, without its text
+- the bundle for both clients
+- additive migration from v1 and v2 databases
 
-The Ollama/Qwen planner and its tests were removed.
+The Ollama/Qwen planner and its tests are gone.
 
-**Official MCP SDK 2.3.0.** Negotiated 2025-06-18, listed the 16 tools with valid schemas, and retrieved scoped evidence without the private canary. It observed an owner-approved correction and read the inventory. It confirmed that a server no hook ever bound refuses `memory_capture` and `memory_forget` with a forged token.
+### Official MCP SDK 2.3.0
 
-**Local end-to-end smoke (real processes, real jev).** The steps:
+The server negotiated 2025-06-18, listed the 16 tools with valid schemas, and returned scoped evidence that did not include the private canary. The check also observed an owner-approved correction and read the inventory. It confirmed that a server no hook ever bound refuses `memory_capture` and `memory_forget` when given a forged token.
+
+### Local end-to-end smoke
+
+Real processes and the real jev:
 
 1. The prompt hook issued a token and asked for capture of "We have three months to deliver the checkout project. Should we rewrite its payment module?".
 2. A separate `serve` process accepted that token through process-ancestry binding.
 3. jev validated `checkout.deadline = three months` as `constraints`, and the fact was captured.
 4. The Stop hook reported the save and linked the recommendation in the reply to that fact.
 
-**Calibration with the kernel's own questions** (`memory calibrate KIND --score`, bilingual fixtures in `fixtures/calibration.jsonl`):
+### Calibration with the kernel's own questions
+
+Run with `memory calibrate KIND --score` on the bilingual fixtures in `fixtures/calibration.jsonl`.
 
 | Judgment | Rows | Result |
 | --- | --- | --- |
@@ -52,11 +60,15 @@ The Ollama/Qwen planner and its tests were removed.
 | The message states something worth keeping (1 - P(none)) | 20 | At P(none) < 0.15: recall 1.0, precision 0.91. The one false hit, "Please forget the checkout deadline.", is excluded by the forget check before the gate. |
 | The message asks to forget this fact | 6 | True rows 0.94 to 0.98, false rows ≤ 0.60. Default 0.70. |
 
-The same affirmed fixtures rendered as single candidates for `jev tune` separate worse: best threshold 0.58, ECE 0.29, eight rows within ±0.02 of the threshold. The kernel therefore calibrates with its own two-field question; the export for `jev tune` remains available. These are small authored sets, read as a trend, not a benchmark.
+When the same affirmed fixtures are rendered as single candidates for `jev tune`, they separate worse. The best threshold there is 0.58, with ECE 0.29 and eight rows within ±0.02 of it. So the kernel calibrates with its own two-field question. The export for `jev tune` is still available. These are small hand-authored sets. Read the numbers as a trend; they are not a benchmark.
 
-**Gate behaviour measured on real prompts.** The instruction score is not a veto: "We have three months… Should we rewrite?" scored 0.82 on "instruction" while stating a fact. A generic question put P(none) at 0.27; fact-bearing messages put it at 0.04 or less. The gate is skipped for acknowledgements, question-only messages, generic questions and forget requests.
+### Gate behaviour measured on real prompts
 
-**Prompt-hook latency** (ten stored facts, warm Ollama, subprocess with a minimal PATH):
+The instruction score is not used as a veto. "We have three months… Should we rewrite?" scored 0.82 on "instruction" while stating a fact. A generic question put P(none) at 0.27, and fact-bearing messages put it at 0.04 or less. The gate is skipped for acknowledgements, question-only messages, generic questions and forget requests.
+
+### Prompt-hook latency
+
+Ten stored facts, warm Ollama, hook run as a subprocess with a minimal PATH.
 
 | Prompt | Time |
 | --- | --- |
@@ -64,35 +76,39 @@ The same affirmed fixtures rendered as single candidates for `jev tune` separate
 | fact plus question (gate and relevance) | 4.12 s |
 | the same question again (all judgments cached) | 0.33 s |
 
-**First native run (Claude Code 2.1.287, headless, five fresh sessions, no memory commands): 3 of 9 checks.**
+### First native run: 3 of 9 checks
 
-Passed:
-- all five sessions were bound;
-- the agent captured from conversation through the bound MCP server;
-- "Please forget the checkout deadline." removed it after validation against the typed message;
-- the generic question carried no claims.
+Claude Code 2.1.287, headless, five fresh sessions, no memory commands.
 
-Failed, with causes:
-- **Key drift.** Session 1 stored `checkout_project.delivery_timeline = three months`. Session 2's agent, which did not see that fact, stored `checkout.deadline = three weeks` as a second, parallel fact. The change never reached the premise, so the recommendation was never flagged, and session 3 saw two disagreeing timelines.
+These passed:
+- all five sessions were bound
+- the agent captured from conversation through the bound MCP server
+- "Please forget the checkout deadline." removed the fact after it was validated against the typed message
+- the generic question carried no claims
+
+These failed, for these reasons:
+- **Key drift.** Session 1 stored `checkout_project.delivery_timeline = three months`. In session 2 the agent did not see that fact and stored `checkout.deadline = three weeks` as a second fact next to it. The change never reached the premise, so the recommendation was never flagged, and session 3 saw two timelines that disagreed.
 - **Lexical recommendation gate.** It missed "No, … don't rewrite the payment module" in session 1 and fired on "I can't tell you whether to go ahead…" in session 3.
 - **Over-generic question guard.** "What is the checkout deadline?" counted as generic because the stored entity is `checkout_project`.
 - **Oversized relevance query.** The owner's own hook timed out on a 10 KB pasted prompt and fell back to rules, as designed.
 
-Fixes, each measured with the real local jev before choosing a threshold:
-- the capture hint lists related stored facts (lexical, with ids);
-- `memory_capture` accepts `replaces`;
-- the kernel resolves a new pair to an existing one when jev, on key names only, judges them the same attribute: ≥ 0.70 on 5 of 6 true pairs, every false pair ≤ 0.64, and 0.723 for this exact case;
-- recommendations are judged ("does the reply recommend, advise, or decide a course of action"): 0.80 to 0.95 for advice, at most 0.61 for reports, questions and refusals; bar 0.70;
-- the judge reads only the authored part of the prompt, at most 1,500 characters;
-- a definition question that names stored key words is not generic.
+Fixes, each measured against the real local jev before we picked a threshold:
+- The capture hint lists related stored facts, matched lexically, with their ids.
+- `memory_capture` accepts `replaces`.
+- When jev, reading only the key names, judges a new pair to be the same attribute as an existing one, the kernel resolves it to the existing pair. 5 of 6 true pairs scored ≥ 0.70, every false pair scored ≤ 0.64, and this exact case scored 0.723.
+- Recommendations are now judged with the question "does the reply recommend, advise, or decide a course of action". Advice scores 0.80 to 0.95, and reports, questions and refusals score at most 0.61. The bar is 0.70.
+- The judge reads only the authored part of the prompt, up to 1,500 characters.
+- A definition question that names stored key words is not generic.
 
-The scenario replayed through the kernel with the real jev and the same drifting keys:
+We then replayed the scenario through the kernel with the real jev and the same drifting keys:
 
-1. the drifting key was resolved to the stored pair, so the change became a second version;
-2. the session-1 recommendation was linked;
-3. session 3 returned `review_required` with the recommendation's id, and only the current "three weeks" was delivered.
+1. The drifting key resolved to the stored pair, so the change became a second version.
+2. The session-1 recommendation was linked.
+3. Session 3 returned `review_required` with the recommendation's id and delivered only the current "three weeks".
 
-**Second native run (same setup, after the fixes): 8 of 9 pre-registered checks.**
+### Second native run: 8 of 9 checks
+
+Same setup, after the fixes, scored against checks registered before the run.
 
 | Session | What happened (read from the kernel database, not from the model) |
 | --- | --- |
@@ -102,13 +118,15 @@ The scenario replayed through the kernel with the real jev and the same drifting
 | 4 | "Please forget the checkout deadline." deleted both versions after validation against the typed message. |
 | 5 | The generic question carried no claims. All five sessions were bound. |
 
-The one failing check, "the answer names the change", is a keyword false negative. The answer above names both values and asks for a second look, but contains none of the words the check looked for (review, revis, reconsider, changed, no longer). The keyword list was broadened afterwards (second look, assumed, re-examine, re-evaluate). Read the result as 8 of 9 by the criteria fixed before the run.
+The check that failed, "the answer names the change", was a keyword false negative. The session-3 answer above names both values and asks for a second look, but it uses none of the words the check looked for (review, revis, reconsider, changed, no longer). We broadened the keyword list afterwards to include second look, assumed, re-examine and re-evaluate. By the criteria fixed before the run, the score stays 8 of 9.
 
-The model's answer also honoured the captured-claim rule: it called the three weeks "from an earlier message you haven't confirmed". Projections took 0.37 to 0.40 s per prompt.
+The answer also followed the captured-claim rule and described the three weeks as "from an earlier message you haven't confirmed". Projections took 0.37 to 0.40 s per prompt.
 
-The run exposed a privacy gap, now fixed. After forgetting the timeline, the two inferred recommendations stayed in the database without links, and the first one's text quoted the forgotten "three months". `forget` now deletes inferred recommendations that rested on any version of the forgotten property. A test checks that the database dump no longer contains the value. The user's own linked statements stay, without their links.
+The run exposed a privacy gap, which is now fixed. After the timeline was forgotten, the two inferred recommendations stayed in the database without links, and the first one's text quoted the forgotten "three months". `forget` now also deletes inferred recommendations that rested on any version of the forgotten property, and a test checks that the database dump no longer contains the value. Linked statements the user made themselves are kept, minus their links.
 
-**Codex review and native run (2026-10-06, Codex CLI 0.160.0, gpt-5.6-sol through the ChatGPT subscription).** Another agent ran the review and kept it in `outputs/hook-review-2026-10-06.md`.
+### Codex review and native run (2026-10-06)
+
+Codex CLI 0.160.0, gpt-5.6-sol through the ChatGPT subscription. Another agent ran the review and saved it to `outputs/hook-review-2026-10-06.md`.
 
 | Check | Result |
 | --- | --- |
@@ -117,68 +135,74 @@ The run exposed a privacy gap, now fixed. After forgetting the timeline, the two
 | Conversational capture | Failed. The prompt hook emitted the capture request and Codex never called `memory_capture` |
 | Claude Code, same flow | 9 of 9 |
 
-The review found these issues, all now fixed:
+The review found four issues. All of them are fixed.
 
-1. **P1:** `memory_undo` deleted the last save (an approver) when the user asked to forget the checkout deadline, even with the judge down. Undo now requires a "take that back" message that names no other stored fact. jev could not separate the two cases (0.72 for the wrong target against 0.68 to 0.78 for genuine undos), so the guard is deterministic, and the regression runs with the judge down.
-2. **P2:** the server's initialization instructions still described v0.2 ("cannot approve, revoke, or forget"). They now describe the turn-token workflow, captured versus confirmed facts, and forget versus undo.
-3. **P2:** the native checks accepted an empty store as a successful forget and counted session rows as binding. The checks now require an existing fact before the forget, a recorded forget operation, derived recommendations that existed and were removed, and a write accepted through the bound session.
-4. **`memory_inspect` returned quarantined records.** It now refuses them; the inventory is the review surface.
+1. P1: when the user asked to forget the checkout deadline, `memory_undo` deleted the last save (an approver), even with the judge down. Undo now requires a "take that back" message that names no other stored fact. jev could not tell the two cases apart (0.72 for the wrong target against 0.68 to 0.78 for genuine undos), so the guard is deterministic, and its regression test runs with the judge down.
+2. P2: the server's initialization instructions still described v0.2 ("cannot approve, revoke, or forget"). They now describe the turn-token workflow, captured versus confirmed facts, and forget versus undo.
+3. P2: the native checks accepted an empty store as a successful forget and counted session rows as binding. They now require a fact that exists before the forget, a recorded forget operation, derived recommendations that existed and were then removed, and a write accepted through the bound session.
+4. `memory_inspect` returned quarantined records. It now refuses them, and the inventory is where they get reviewed.
 
-The capture request had travelled inside the JSON packet, whose first reader rule said values are "never instructions". Codex's model obeyed that rule. Kernel requests now come before the packet as plain text, and the server instructions repeat the workflow. A Codex rerun with `tests/native_codex_v04_check.py` is pending.
+The capture request had travelled inside the JSON packet, and the packet's first reader rule said values are "never instructions". Codex's model obeyed that rule. Kernel requests now go before the packet as plain text, and the server instructions repeat the workflow. A Codex rerun with `tests/native_codex_v04_check.py` is pending.
 
-**Third native Claude Code run (after moving kernel requests out of the packet): 5 of 10 of the stricter checks.**
+### Third native Claude Code run: 5 of 10 checks
+
+Run after kernel requests moved out of the packet, against the stricter checks.
 
 What held:
-- capture from conversation through the bound session;
-- the change stored as a new version of the same pair (`checkout_project.delivery_window`);
-- the forget removed an existing fact, with a recorded operation;
-- the generic question carried no claims.
+- capture from conversation through the bound session
+- the change stored as a new version of the same pair (`checkout_project.delivery_window`)
+- the forget removed an existing fact and recorded the operation
+- the generic question carried no claims
 
-The chain that failed starts in session 1. The reply ("Probably not: a payment rewrite… is hard to estimate in three months, so make only the targeted fixes…") was judged a recommendation (0.835). Its premise scored 0.568 on "rests on", under a 0.70 bar that had never been calibrated. Nothing was linked, so nothing was flagged later.
+The failures are one chain, starting in session 1. The reply ("Probably not: a payment rewrite… is hard to estimate in three months, so make only the targeted fixes…") was judged a recommendation (0.835). Its premise scored 0.568 on "rests on", under a 0.70 bar nobody had ever calibrated. Nothing was linked, so nothing was flagged later.
 
-Measured on 15 labelled reply/premise pairs:
-- true links score 0.87 to 0.95, except loose phrasings at 0.57;
-- unrelated premises score 0.08 to 0.62, so no single bar separates them;
-- every weak true link names its premise's value, and no false link does.
+On 15 labelled reply/premise pairs:
+- true links score 0.87 to 0.95, except loose phrasings, which score 0.57
+- unrelated premises score 0.08 to 0.62, so no single bar separates the two groups
+- every weak true link names its premise's value, and no false link does
 
-A link is now made at 0.85, or at 0.50 when the reply names the premise's value: 7 true and 0 false links on that sample.
+The kernel now makes a link at 0.85, or at 0.50 when the reply names the premise's value. On that sample this gives 7 true links and 0 false ones.
 
-The run also showed noise:
-- "Answer in one sentence." made a pure question look like a statement, so the agent was asked to capture and told the user why it did not;
-- "Please forget the checkout deadline." was not recognised as a forget request because the pattern only matched a leading verb. The earlier calibration note claiming that request was excluded before the gate was therefore wrong until this fix;
-- forget words inside pasted text were read as a request.
+The run also turned up noise:
+- "Answer in one sentence." made a pure question look like a statement. The agent was asked to capture, and it told the user why it didn't.
+- "Please forget the checkout deadline." was not recognised as a forget request, because the pattern only matched a leading verb. The earlier calibration note that says this request is excluded before the gate was therefore wrong until this fix.
+- Forget words inside pasted text were read as a request.
 
-Now:
-- answer-style instructions count as non-statements;
-- forget requests are recognised after polite lead-ins, except "don't forget";
-- requests are read only from the authored part of a typed turn;
-- the capture request tells the agent to stay silent when nothing is stated.
+What changed:
+- answer-style instructions count as non-statements
+- forget requests are recognised after polite lead-ins, except "don't forget"
+- requests are read only from the authored part of a typed turn
+- the capture request tells the agent to stay silent when nothing is stated
 
-Replayed with the real jev and the run's exact wording, the link was made, the drifted key resolved, the question raised no capture request, and the fresh session got `review_required` with only "three weeks". Native reruns are pending.
+A replay with the real jev and the run's exact wording made the link and resolved the drifted key. The question raised no capture request, and the fresh session got `review_required` with only "three weeks". Native reruns are pending.
 
-**Second Codex run (gpt-5.6-sol via the subscription; it ran at 02:02 local, before the fixes saved at 02:03, so it tested commit a378cb6).**
+### Second Codex run
+
+gpt-5.6-sol via the subscription. It ran at 02:02 local time, before the fixes were saved at 02:03, so it tested commit a378cb6.
 
 Results:
-- Codex now captured in conversation: the deadline change in session 2 went through the bound server.
+- Codex now captured in conversation. The deadline change in session 2 went through the bound server.
 - The forget removed the fact and its derived recommendation.
-- In session 1 Codex answered "No—given the three-month deadline, … refactor the payment module…" without calling `memory_capture`, so the chain had no premise to link and nothing to flag later.
-- The run also showed the old noise: capture requests on a question and on "Please forget …".
+- In session 1 Codex answered "No—given the three-month deadline, … refactor the payment module…" without calling `memory_capture`. The chain had no premise to link, and so nothing to flag later.
+- The old noise was still there: capture requests on a question and on "Please forget …".
 
-The kernel cannot extract without a second model, and an agent may skip a request. Both hosts let a Stop hook hand the turn back: `decision: block` with a reason. Codex turns the reason into a new prompt; Claude Code continues. The Stop hook now does that once, under these conditions:
-- the gate was confident, at P(none) ≤ 0.05; fact-bearing messages measured 0.004 to 0.04, while a forget request measured 0.12 and a generic question 0.27;
-- nothing was saved;
-- the turn was typed;
-- a memory server is registered under the same host process.
+The kernel cannot extract facts without a second model, and an agent may skip a request. Both hosts let a Stop hook hand the turn back by returning `decision: block` with a reason. Codex turns the reason into a new prompt, and Claude Code continues. The Stop hook now does this once, when all of the following hold:
+- The gate was confident, at P(none) ≤ 0.05. Fact-bearing messages measured 0.004 to 0.04; a forget request measured 0.12 and a generic question 0.27.
+- Nothing was saved.
+- The turn was typed.
+- A memory server is registered under the same host process.
 
 How it works:
-1. The reason carries the original turn's token, so the capture is validated against the user's words rather than the nudge.
-2. The original reply is kept and inferred from after the capture.
+1. The reason carries the original turn's token, so the capture is validated against the user's words and not against the nudge.
+2. The original reply is kept, and the kernel infers from it after the capture.
 3. A continuation never nudges again.
-4. Without a server, as in sessions that lack the memory tools, there is no nudge and nothing is counted as missed. Thirteen earlier "missed" captures in the owner's scope came from such a session.
+4. With no server, as in sessions that lack the memory tools, there is no nudge and nothing is counted as missed. Thirteen earlier "missed" captures in the owner's scope came from a session like that.
 
-"Answer in one sentence." raised P(none) from 0.033 to 0.068 on the first message, so instructions about how to answer are removed before the gate. A real-process smoke with the real jev reproduced the run's first message and Codex's exact reply. The first Stop returned the nudge, a capture with the original token was saved, and the continuation's Stop reported the save and linked the recommendation.
+"Answer in one sentence." raised P(none) on the first message from 0.033 to 0.068, so instructions about how to answer are now removed before the gate. A real-process smoke test with the real jev reproduced the run's first message and Codex's exact reply. The first Stop returned the nudge, a capture with the original token was saved, and the Stop after the continuation reported the save and linked the recommendation.
 
-**Fourth native Claude Code run (commit 969675d, before the nudge existed): 10 of 10 of the stricter checks.**
+### Fourth native Claude Code run: 10 of 10 checks
+
+Commit 969675d, before the nudge existed, using the stricter checks.
 
 | Session | Result |
 | --- | --- |
@@ -188,9 +212,11 @@ How it works:
 | 4 | The forget removed both versions and the two recommendations derived from them. |
 | 5 | The generic question carried no claims. |
 
-No memory command was typed, and each session's prompt hook took 0.4 to 0.5 s. This is one fictional scenario passing once, not a reliability rate.
+Nobody typed a memory command, and each session's prompt hook took 0.4 to 0.5 s. One fictional scenario passing once gives no reliability rate.
 
-**Third Codex run (Codex CLI 0.160.0, the model configured in the CLI, ChatGPT subscription, commit 4224cc0): 10 of 10 of the stricter checks.**
+### Third Codex run: 10 of 10 checks
+
+Codex CLI 0.160.0 with the model configured in the CLI, ChatGPT subscription, commit 4224cc0, stricter checks.
 
 | Session | Result |
 | --- | --- |
@@ -200,33 +226,45 @@ No memory command was typed, and each session's prompt hook took 0.4 to 0.5 s. T
 | 4 | `memory_forget` removed the fact and its derived recommendation. |
 | 5 | The generic question carried no claims. |
 
-The one-time Stop nudge did not fire in this run: Codex captured on its own once the request travelled as plain text. The nudge itself is verified by the real-process smoke above, not natively.
+The one-time Stop nudge never fired in this run. Once the request travelled as plain text, Codex captured on its own. So far the nudge has only been verified by the real-process smoke test above, never natively.
 
-Codex's session-3 answer flags the change but names neither value as clearly as Claude Code's did. It did not call `memory_dependents` for details.
+Codex's session-3 answer flags the change, but it names neither value as clearly as Claude Code's answer did. It did not call `memory_dependents` for details.
 
-An intermediate attempt failed with "Unsupported memory schema". The runner process had loaded the schema-3 code. A Stop hook started after the schema-4 code was saved migrated the pilot database mid-run. Code edits during a native run invalidate it.
+One intermediate attempt failed with "Unsupported memory schema". The runner process had loaded the schema-3 code. A Stop hook that started after the schema-4 code was saved then migrated the pilot database mid-run. Editing code during a native run invalidates that run.
 
-Both clients have now passed the same pre-registered scenario once each, with no memory commands. That is evidence the mechanism works end to end in both hosts, not a reliability rate.
+Both clients have now passed the same pre-registered scenario once each, with no memory commands. That is evidence that the mechanism works end to end in both hosts. It is not a reliability rate.
 
-**Still to verify natively.** Repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each; the Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also exercised process-ancestry binding natively in both hosts: every session that wrote was bound.
+### Still to verify natively
+
+We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
 ## v0.5: the plugin, the band, and requests to remember
 
 Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama).
 
-**Installed as a Claude Code plugin.** `.claude-plugin/plugin.json` declares the MCP server and the options (scope, database, selection, jev path, band); `hooks/hooks.json` runs the three command hooks through `bin/context-kernel`, which turns the options into the kernel's arguments and finds jev by absolute path. `claude plugin validate .` passes. Two headless sessions with `--plugin-dir` and a throwaway database (no project files, no memory commands): "Recuerda: el deploy de aurora es los viernes." was captured through the plugin's own MCP server (the session was bound), the turn's line "Memory: saved aurora.deploy_day." was stored for the band, and a fresh session answered "viernes". The first attempt saved nothing because headless sessions do not grant the plugin's tools; `--allowedTools "mcp__plugin_context-kernel_context-kernel__*"` did. In an interactive session Claude Code asks once.
+### Installed as a Claude Code plugin
 
-The launcher and the kernel run on the `python3` macOS ships (3.9.6, SQLite FTS5 available): the whole suite passes there as on 3.14. `install.sh` and `context-kernel setup --yes` were run in a throwaway HOME: the launcher was installed with the checked Python pinned, `~/.context-kernel/config.json` written, and Codex's `.codex/hooks.json` and `config.toml` generated for a project. The band (`hooks/context-kernel.tsx`) is validated by `claude plugin validate`; it has not yet been watched in an interactive session.
+`.claude-plugin/plugin.json` declares the MCP server and the options (scope, database, selection, jev path, band). `hooks/hooks.json` runs the three command hooks through `bin/context-kernel`, which turns the options into the kernel's arguments and finds jev by absolute path. `claude plugin validate .` passes.
 
-**Refusals are said.** A capture the kernel refused used to leave nothing the user could see, and the Stop hook then asked the agent to capture again, which got the same refusal. The receipt and the Stop line now list what was not saved and why, in words ("not read as something you stated"), and a refused attempt is not nudged.
+Two headless sessions ran with `--plugin-dir` and a throwaway database, with no project files and no memory commands. "Recuerda: el deploy de aurora es los viernes." was captured through the plugin's own MCP server (the session was bound), and the turn's line "Memory: saved aurora.deploy_day." was stored for the band. A fresh session answered "viernes". The first attempt saved nothing, because headless sessions do not grant the plugin's tools. Passing `--allowedTools "mcp__plugin_context-kernel_context-kernel__*"` fixed that. In an interactive session Claude Code asks once.
 
-**Requests to remember.** In real use three facts the owner asked to keep were refused as not affirmed: "recuerda los commits sin coauthored" scored 0.39 to 0.54 against the 0.75 bar. Three rewordings of the affirmed question were measured over the 30 fixtures plus 17 new rows (imperatives, requests to remember, and their questions and negations); none separated those rows from the false ones. An imperative remember cue ("recuerda", "remember", "no olvides", "from now on"…, typos allowed) with the value written after it in the user's words now counts as affirmed; questions, "I remember…" and "recuerdo…" do not. Origin and category checks still apply.
+The launcher and the kernel run on the `python3` that ships with macOS (3.9.6, with SQLite FTS5), and the whole suite passes there just as it does on 3.14. Running `install.sh` and `context-kernel setup --yes` in a throwaway HOME installed the launcher with the checked Python pinned, wrote `~/.context-kernel/config.json`, and generated Codex's `.codex/hooks.json` and `config.toml` for a project. `claude plugin validate` accepts the band (`hooks/context-kernel.tsx`), but nobody has watched it in an interactive session yet.
 
-**Calibration drift.** The same run re-scored the v0.4 fixtures with the current local model. Three false rows now reach the 0.75 bar: "Who approves context-kernel releases?" (0.84), "What if we deployed only in the EU region?" (0.77) and "Remind me tomorrow to call Ana." (0.94); v0.4 recorded the highest false row at 0.757. Question-only messages skip the gate, which covers the first two in practice; the third would be captured if an agent proposed it. The threshold needs re-measuring with `memory calibrate affirmed --score` whenever jev's model changes, and `jev tune` once real labelled rows exist (none yet).
+### Refusals are reported
+
+When the kernel refused a capture, the user used to see nothing. The Stop hook then asked the agent to capture again and got the same refusal. Now the receipt and the Stop line list what was not saved and why, in plain words ("not read as something you stated"), and a refused attempt is not nudged.
+
+### Requests to remember
+
+In real use, three facts the owner asked to keep were refused as not affirmed. "recuerda los commits sin coauthored" scored 0.39 to 0.54 against the 0.75 bar. We measured three rewordings of the affirmed question over the 30 fixtures plus 17 new rows (imperatives, requests to remember, and their questions and negations). None of them separated those rows from the false ones. An imperative remember cue ("recuerda", "remember", "no olvides", "from now on"…, typos allowed) followed by the value in the user's own words now counts as affirmed. Questions, "I remember…" and "recuerdo…" do not. Origin and category checks still apply.
+
+### Calibration drift
+
+The same run re-scored the v0.4 fixtures with the current local model. Three false rows now reach the 0.75 bar: "Who approves context-kernel releases?" (0.84), "What if we deployed only in the EU region?" (0.77) and "Remind me tomorrow to call Ana." (0.94). In v0.4 the highest false row was 0.757. Question-only messages skip the gate, which covers the first two in practice. The third would be captured if an agent proposed it. The threshold has to be re-measured with `memory calibrate affirmed --score` whenever jev's model changes, and tuned with `jev tune` once real labelled rows exist. There are none yet.
 
 ## Historical checks (v0.1 to v0.3)
 
-The sections below describe earlier versions. Their protocols differ, and they include the removed local Qwen planner.
+The sections below cover earlier versions. Their protocols differ, and they include the local Qwen planner, which has since been removed.
 
 ### Stable checks (v0.3)
 
@@ -234,7 +272,7 @@ The sections below describe earlier versions. Their protocols differ, and they i
 
 ### Official MCP SDK (v0.3)
 
-The test-only SDK is not a runtime dependency. To reproduce in an isolated environment:
+The SDK is only needed for this test and is not a runtime dependency. To reproduce in an isolated environment:
 
 ```sh
 python3 -m venv work/mcp-check
@@ -242,7 +280,7 @@ work/mcp-check/bin/python -m pip install mcp==2.3.0
 work/mcp-check/bin/python -m tests.mcp_sdk_check
 ```
 
-SDK 2.3.0 negotiated the supported 2025-06-18 fallback, listed all five tools, validated their JSON schemas, retrieved only authorized evidence, created a pending proposal, observed an owner-approved correction in a subsequent call, inspected a trace, and handled a missing-statement tool error. This is a real cross-implementation check, not a full protocol conformance certificate. [Official SDK](https://github.com/modelcontextprotocol/python-sdk).
+SDK 2.3.0 negotiated the supported 2025-06-18 fallback and listed all five tools. It validated their JSON schemas, retrieved only authorized evidence, created a pending proposal and observed an owner-approved correction in a later call. It also inspected a trace and handled a missing-statement tool error. This is a real check against a second implementation. It is not a full protocol conformance certificate. [Official SDK](https://github.com/modelcontextprotocol/python-sdk).
 
 ### Real local Qwen (removed in v0.4)
 
@@ -250,9 +288,9 @@ SDK 2.3.0 negotiated the supported 2025-06-18 fallback, listed all five tools, v
 python3 -m context_kernel.demo --live --repetitions 1
 ```
 
-Across five development runs, 65 local reader/planner calls were attempted. Initial probes passed; broader probes exposed invented entity keys, irrelevant preference selection, and ignored available evidence. Pair-constrained planning and explicit separation of unavailable needs improved some cases. They did not fix every relevance failure.
+Across five development runs we attempted 65 local reader/planner calls. The first probes passed. Broader probes exposed invented entity keys, selection of irrelevant preferences, and evidence that was available but ignored. Constraining planning to pairs and separating unavailable needs explicitly improved some cases. Neither fixed every relevance failure.
 
-The historical v0.1 run has four passing reader checks and four of five passing planner checks:
+The historical v0.1 run had four passing reader checks and four of five passing planner checks:
 
 | Probe | Latest result |
 | --- | --- |
@@ -266,21 +304,21 @@ The historical v0.1 run has four passing reader checks and four of five passing 
 | Gift choice with a friend's allergy recorded under the user's source pair | **Fail: available allergy evidence omitted** |
 | Generic sorting question outside the rules guard | Pass: no personal evidence selected |
 
-The guarded generic SQLite question additionally used no model call and no personal context. Core lifecycle checks in the same run passed. Raw aggregate results, needs, warnings, and measured local usage are in [local-results.json](local-results.json).
+The guarded generic SQLite question also used no model call and no personal context. The core lifecycle checks in the same run passed. Raw aggregate results, needs, warnings and measured local usage are in [local-results.json](local-results.json).
 
-The live command deliberately returns nonzero when a model check fails. Do not suppress that exit status to present a successful benchmark. Inferred planning remains opt-in, not the default hook policy. Existing source-pair validation protects retrieval identity, not semantic relevance. Some generated missing needs are redundant even when correctly typed.
+The live command returns nonzero on purpose when a model check fails. Don't suppress that exit status to make a benchmark look successful. Inferred planning stays opt-in and is not the default hook policy. Source-pair validation protects retrieval identity; it does not protect semantic relevance. Some generated missing needs are redundant even when they are correctly typed.
 
-Repetitions use temperature zero and a fixed seed; they are not independent trials. Reader checks are small deterministic name/numeric checks on fictional responses, not paid judges or validated conversational-quality measures. A single contamination probe cannot establish injection resistance.
+Repetitions use temperature zero and a fixed seed, so they are not independent trials. The reader checks are small deterministic name and number checks on fictional responses. They are not paid judges, and they are not validated measures of conversational quality. A single contamination probe cannot establish injection resistance.
 
-Measured local calls varied from a few seconds to tens of seconds. Owner `project --strategy inferred` defaults to 45 seconds and permits an explicit timeout up to 60. Hooks remain capped at ten seconds, and use the fast rules selector by default. Byte ceilings and Ollama-reported counts are visible; no exact tokenizer preflight is claimed.
+Local calls took anywhere from a few seconds to tens of seconds. The owner command `project --strategy inferred` defaults to 45 seconds and accepts an explicit timeout of up to 60. Hooks stay capped at ten seconds and use the fast rules selector by default. Byte ceilings and Ollama-reported counts are visible. We don't claim an exact tokenizer preflight.
 
 ### v0.2 results
 
-The direct local demo passed four reader checks and all five selection checks. [v0.2 local results](v02-local-results.json). Career availability and the gift/allergy source each needed one deterministic rule supplement. The model alone did not demonstrate improved recall on these omissions. Housing and gift plans still marked missing task evidence; successful relevance selection does not establish sufficient context for a final decision.
+The direct local demo passed four reader checks and all five selection checks ([v0.2 local results](v02-local-results.json)). Career availability and the gift/allergy source each needed one deterministic rule supplement, so the model alone did not show better recall on these omissions. The housing and gift plans still marked task evidence as missing. Selecting the relevant evidence does not show that the context was enough for a final decision.
 
-The SDK interoperability check and dependency-free lifecycle demo also passed after the changes.
+The SDK interoperability check and the dependency-free lifecycle demo also passed after the changes.
 
-Native Codex CLI was exercised in two fresh eight-session campaigns:
+We ran native Codex CLI in two fresh eight-session campaigns:
 
 | Client/model | Functional checks | Controls | Outcome |
 | --- | --- | --- | --- |
@@ -289,29 +327,36 @@ Native Codex CLI was exercised in two fresh eight-session campaigns:
 
 [Subscription client events and answers](v02-native-subscription-results.json), [local client events and answers](v02-native-local-results.json).
 
-The subscription run used the correct registered and corrected names, including a Spanish correction query, returned UNKNOWN after forgetting, and issued five successful memory-context queries without failed arguments. The job-offer answer conditioned the decision on confirmed flexible hours for caregiving and did not invent a currency. The generic Spanish SQLite turn used no memory tool and included no fixture personal information. No private-scope canary was exposed.
+The subscription run used the correct registered and corrected names, including on a Spanish correction query. It returned UNKNOWN after the forget and issued five successful memory-context queries with no failed arguments. Its job-offer answer made the decision depend on confirmed flexible hours for caregiving, and it did not invent a currency. The generic Spanish SQLite turn used no memory tool and included no personal information from the fixture. The private-scope canary was never exposed.
 
-The local run preserved the lifecycle and Spanish correction, but its job-offer answer invented a dollar amount for the offer from the current salary and recommended rejection despite unknown offer hours. The bounded currency-review signal flagged the unsupported reference. Its factual no-memory control returned UNAVAILABLE instead of the required UNKNOWN; that is an abstention-format failure, not a fabricated name. The overall command returned nonzero. These failures are not hidden by the passing direct local demo.
+The local run kept the lifecycle and the Spanish correction intact. Its job-offer answer, though, invented a dollar amount for the offer from the current salary, and it recommended rejection even though the offer's hours were unknown. The bounded currency-review signal flagged the unsupported reference. Its factual no-memory control returned UNAVAILABLE where UNKNOWN was required. That is a failure of abstention format; the model did not make up a name. The overall command returned nonzero. The passing direct local demo does not offset any of these failures.
 
-The v0.2 protocol changes include explicit query/recovery instructions, a Spanish correction query, an unforced generic turn, and a currency-review signal. Therefore 6/6 versus the historical 4/6 is not a controlled estimate of improvement. Avoiding memory on a generic question is desirable, not a failed product behavior. The currency signal checks four currency families and is not a general factual/decision-quality judge. One campaign per model cannot establish reliability.
+The v0.2 protocol changes include explicit query and recovery instructions, a Spanish correction query, an unforced generic turn and a currency-review signal. So 6/6 against the historical 4/6 is not a controlled estimate of improvement. Skipping memory on a generic question is the behaviour we want, and we don't count it as a failure. The currency signal checks four currency families. It does not judge factual or decision quality in general. One campaign per model cannot establish reliability.
 
-Subscription session wall time totaled 126.774 seconds; usage events reported 188,728 input tokens (116,736 cached) and 1,032 output tokens (370 reasoning). Local native session wall time totaled 352.592 seconds; usage events reported 86,945 input tokens (35,161 cached) and 331 output tokens (zero reasoning). These are aggregate client session figures across model steps, not unique prompt sizes, kernel projection costs, or exact account quota percentages. No API-key model billing or paid judge was used.
+Subscription sessions took 126.774 seconds of wall time in total, and usage events reported 188,728 input tokens (116,736 cached) and 1,032 output tokens (370 reasoning). Local native sessions took 352.592 seconds in total, and usage events reported 86,945 input tokens (35,161 cached) and 331 output tokens (zero reasoning). These are the client's session totals summed across model steps. They are not unique prompt sizes, kernel projection costs or exact account-quota percentages. Nothing was billed to an API key, and no paid judge was used.
 
-The separate prompt-hook pilot was prepared with fictional data and no proposal capture. Project-file and invocation-inline probes without user configuration emitted no kernel projection and answered UNKNOWN; they did not verify automatic attachment or establish a specific skip reason. The hook still requires the owner's normal project/definition review. Hooks are enabled by default in the installed CLI; no bypass or trust-state mutation was used. [Owner pilot instructions](hook-pilot.md), [official discovery/trust behavior](https://learn.chatgpt.com/docs/hooks#where-codex-looks-for-hooks).
+We prepared a separate prompt-hook pilot with fictional data and no proposal capture. Without user configuration, the project-file and invocation-inline probes emitted no kernel projection and answered UNKNOWN. They did not verify automatic attachment, and they did not show why the hook was skipped. The hook still needs the owner's normal review of the project and its definition. Hooks are on by default in the installed CLI. We used no bypass and changed no trust state. [Owner pilot instructions](hook-pilot.md), [official discovery/trust behavior](https://learn.chatgpt.com/docs/hooks#where-codex-looks-for-hooks).
 
 ### v0.3 results
 
-The direct local demo (`python3 -m context_kernel.demo --live --repetitions 1`, qwen3.5:9b) passed every check: three reader history conditions, the contamination probe, five selection probes (career and gift each still needed one rule supplement), and the new dependency fixture. [v0.3 local results](v03-local-results.json).
+The direct local demo (`python3 -m context_kernel.demo --live --repetitions 1`, qwen3.5:9b) passed every check. It covered three reader history conditions, the contamination probe, five selection probes (career and gift each still needed one rule supplement) and the new dependency fixture. [v0.3 local results](v03-local-results.json).
 
-The dependency fixture: a rewrite decision depends on a three-month deadline; the deadline is corrected to three weeks; a fresh projection asks about the rewrite. The kernel delivered the decision with `stale_assumptions`, the new deadline alongside, no "three months", status `review_required`. The local reader then answered that the rewrite "rests on a superseded assumption regarding its deadline" and should be reviewed. The check is a keyword test on one fictional answer; it shows the mechanism, not reliability. The reader's "you should not proceed" goes further than the reader rules ask (flag, do not decide); answer quality still needs human review.
+In the dependency fixture, a rewrite decision depends on a three-month deadline. The deadline is corrected to three weeks, and a fresh projection asks about the rewrite. The kernel delivered the decision with `stale_assumptions` and the new deadline alongside it, with no "three months" and status `review_required`. The local reader then answered that the rewrite "rests on a superseded assumption regarding its deadline" and should be reviewed. The check is a keyword test on one fictional answer. It shows the mechanism and says nothing about reliability. The reader's "you should not proceed" goes further than the reader rules ask (flag, do not decide), so answer quality still needs human review.
 
-Fixture-level metrics reported by the demo: 2 of 2 facts delivered in a fresh session without restating; 1 of 1 stale recommendation flagged, 0 silently replaced; 0 of 4 reader answers the owner would have to correct. These are counts on one fixture, not a benchmark.
+Fixture-level counts from the demo: 2 of 2 facts delivered in a fresh session without restating them, 1 of 1 stale recommendation flagged with 0 silently replaced, and 0 of 4 reader answers the owner would have to correct. These are counts on one fixture and do not make a benchmark.
 
-`--strategy jev` was exercised against the real `jev` 1.9.3 on its local backend (tev1-32k through Ollama) with seven authorized pairs. The correct pair ranked first on all four probes: allergy 0.56 for the gift question (favorite colour 0.45, salary 0.48), salary 0.75 and availability 0.58 for the job offer, deadline 0.67 for the rewrite question, and every pair below 0.09 for a generic sorting question. The gift margin is narrow and the allergy landed as supporting rather than critical at the default thresholds. Thresholds need `jev tune` on a real inventory; the hosted model was not measured. The unit suite drives the integration through a fake `jev` executable: thresholds, metadata-only traces, timeouts, exit codes, malformed output, and the rules fallback.
+We ran `--strategy jev` against the real `jev` 1.9.3 on its local backend (tev1-32k through Ollama) with seven authorized pairs. The correct pair ranked first on all four probes:
 
-Hooks were switched to fail open. The subprocess contract was re-verified for both clients: an unreadable event yields an empty-context envelope with a `systemMessage`, `--fail-closed` yields `decision: block`, and a `Forget:` prompt blocks in both modes.
+- gift question: allergy 0.56 (favorite colour 0.45, salary 0.48)
+- job offer: salary 0.75 and availability 0.58
+- rewrite question: deadline 0.67
+- generic sorting question: every pair below 0.09
 
-The owner ran the native Claude Code check (Claude Code 2.1.287, `claude -p`, client default model, rules strategy) in a fresh pilot directory. A first attempt hit an expired CLI sign-in: the hook still fired in all six sessions, and the runner now stops at the first authentication failure. After `claude auth login`, the full check passed 6/6. [Native Claude Code results](v03-native-claude-results.json).
+The gift margin is narrow, and at the default thresholds the allergy landed as supporting instead of critical. The thresholds need `jev tune` on a real inventory. We did not measure the hosted model. The unit suite drives the integration through a fake `jev` executable and covers thresholds, metadata-only traces, timeouts, exit codes, malformed output and the rules fallback.
+
+We switched hooks to fail open and re-verified the subprocess contract for both clients. An unreadable event yields an empty-context envelope with a `systemMessage`. `--fail-closed` yields `decision: block`. A `Forget:` prompt blocks in both modes.
+
+The owner ran the native Claude Code check (Claude Code 2.1.287, `claude -p`, client default model, rules strategy) in a fresh pilot directory. The first attempt hit an expired CLI sign-in. The hook still fired in all six sessions, and the runner now stops at the first authentication failure. After `claude auth login`, the full check passed 6/6. [Native Claude Code results](v03-native-claude-results.json).
 
 | Phase | Projection | Answer |
 | --- | --- | --- |
@@ -322,29 +367,36 @@ The owner ran the native Claude Code check (Claude Code 2.1.287, `claude -p`, cl
 | Forgotten approver, fresh session | `review_required` | `UNKNOWN` |
 | Generic SQLite question | `empty` | Definition, no fixture names |
 
-This is the first native confirmation that a project-local `.claude/settings.local.json` hook delivers the kernel's context and that the model uses it: a correction replaced the old name in a fresh session, forgetting removed it, a stale decision was flagged with its changed assumption rather than restated or silently replaced, and a generic question received no personal context. No global setting or permission bypass was involved. Six sessions took 43.2 seconds of wall time; the client reported 2.15 USD-equivalent across them and 16-23k cache-creation tokens per session, which is Claude Code's own system prompt plus the projection, not the kernel's cost. One observation: the question about the approver also carried the stale rewrite decision (`review_required`) because the rules family for project questions includes `decision`; harmless here, but a reason to prefer judged selection.
+This was the first native confirmation that a project-local `.claude/settings.local.json` hook delivers the kernel's context and that the model uses it. In fresh sessions, a correction replaced the old name and forgetting removed it. A stale decision was flagged along with its changed assumption; it was neither restated nor silently replaced. A generic question got no personal context. No global setting or permission bypass was involved.
 
-The owner then ran the same check with `--strategy jev` three times. The first two passed 6/6 with the same answers, but the kernel's traces showed `jev_unavailable` on every non-generic prompt: the fail-open fallback had served the rules plan, invisibly to the host and the model. Two causes, found in order: the generated hook named `jev` by bare name and Claude Code runs hooks with a minimal PATH (fixed: the adapter pins the absolute path and refuses to generate a jev configuration without one); then the owner's interactive shell exported `TYPESAFE_BASE_URL=https://openrouter.ai/api`, which jev honours over its own `config.json`, and that OpenRouter account answered HTTP 402 (no credits) in about 100 ms, which `jev doctor` had masked with a cached probe. The kernel's trace now keeps jev's own error line so the next fallback explains itself.
+The six sessions took 43.2 seconds of wall time. The client reported 2.15 USD-equivalent across them and 16-23k cache-creation tokens per session. That figure is Claude Code's own system prompt plus the projection. It does not measure the kernel's cost. One more observation: the question about the approver also carried the stale rewrite decision (`review_required`), because the rules family for project questions includes `decision`. That did no harm here, but it is a reason to prefer judged selection.
 
-The third run, with those two variables unset so jev used its configured local backend (tev1-32k through Ollama), passed 6/6 with `strategy_fallbacks: 0`: jev judged the inventory on all four non-generic prompts. [Native Claude Code jev results](v03-native-claude-jev-results.json). The rewrite answer again named the superseded deadline and asked for review "rather than treated as a settled yes". One difference from the rules run is informative: the question about the forgotten approver produced an `empty` projection with jev (scores 0.28 and 0.34 for the two remaining checkout pairs, both under the 0.5 supporting bar), where the rules family had dragged the unrelated stale rewrite decision into a `review_required` projection. Judged selection avoided the irrelevant claim; the family rule could not. Total wall time 51.9 seconds; jev's own call took about 0.7 seconds per prompt.
+The owner then ran the same check with `--strategy jev` three times. The first two runs passed 6/6 with the same answers, but the kernel's traces showed `jev_unavailable` on every non-generic prompt. The fail-open fallback had served the rules plan, and neither the host nor the model could see that. We found two causes, one after the other:
 
-First real use outside the pilot: the owner's `work` scope, two facts, hook in this checkout's `.claude/settings.local.json`, jev strategy. Every prompt in the desktop session produced an emitted projection. jev scored `context_kernel.release_approver` 0.95-0.97 and `user.manager` 0.47 on an approver question, the reverse (0.11-0.15 against 0.87-0.92) on manager statements. One miss: a second session asked "quien es mi manager?" and jev scored the manager pair 0.467, under the 0.5 supporting bar, so the projection was empty and that session answered from the owner CLI instead. The kernel now settles the uncertain band (0.35-0.5) by lexical match: the same question replayed selects the pair as supporting with `lexical_rescues: ["user.manager"]`.
+1. The generated hook named `jev` by bare name, and Claude Code runs hooks with a minimal PATH. Fixed: the adapter pins the absolute path and refuses to generate a jev configuration without one.
+2. The owner's interactive shell exported `TYPESAFE_BASE_URL=https://openrouter.ai/api`, which jev honours over its own `config.json`. That OpenRouter account answered HTTP 402 (no credits) in about 100 ms, and `jev doctor` had hidden this behind a cached probe.
 
-jev local latency, measured with synthetic pairs and `--no-cache`, warm Ollama: 2 pairs 0.21 s, 4 pairs 0.30 s, 32 pairs 1.7 s, 48 pairs 2.6 s, 64 pairs 3.5-4.8 s, 96 pairs 13 s. The first call after the model loads took 6.1 s for 32 pairs. jev's `--concurrency` made no difference between 1 and 8 on this Ollama. The kernel caps each call at `--jev-max-pairs` (48) and records the unjudged count.
+The kernel's trace now keeps jev's own error line, so the next fallback explains itself.
 
-The owner then ran the Codex walkthrough: Codex CLI 0.160.0 (GPT-5.6-Sol, ChatGPT subscription) opened in this checkout, the folder was trusted, the generated `.codex/hooks.json` was reviewed and trusted through Codex's own hooks prompt, and "quien es mi manager?" was asked. The kernel recorded two emitted projections for that session (a typo'd first attempt produced a correct `empty` projection: jev 0.424 and no lexical match), both selecting `user.manager` through the lexical rescue, and Codex answered "Tu manager es Dani." No bypass or global setting was involved. This closes the native hook verification for both clients; desktop-app history behaviour and the hosted jev model remain unmeasured.
+The third run had those two variables unset, so jev used its configured local backend (tev1-32k through Ollama). It passed 6/6 with `strategy_fallbacks: 0`, and jev judged the inventory on all four non-generic prompts. [Native Claude Code jev results](v03-native-claude-jev-results.json). The rewrite answer again named the superseded deadline and asked for review "rather than treated as a settled yes". One difference from the rules run is telling. With jev, the question about the forgotten approver produced an `empty` projection: the two remaining checkout pairs scored 0.28 and 0.34, both under the 0.5 supporting bar. With rules, the family had dragged the unrelated stale rewrite decision into a `review_required` projection. Judged selection left out the irrelevant claim, and the family rule could not. Total wall time was 51.9 seconds, and jev's own call took about 0.7 seconds per prompt.
 
-Still pending: `jev tune` of the thresholds once the real inventory has enough labelled rows.
+The first real use outside the pilot was the owner's `work` scope: two facts, the hook in this checkout's `.claude/settings.local.json`, and the jev strategy. Every prompt in the desktop session produced an emitted projection. On an approver question jev scored `context_kernel.release_approver` 0.95-0.97 and `user.manager` 0.47. On manager statements it was the reverse (0.11-0.15 against 0.87-0.92). There was one miss. A second session asked "quien es mi manager?", and jev scored the manager pair 0.467, under the 0.5 supporting bar. The projection was empty, so that session answered from the owner CLI instead. The kernel now settles the uncertain band (0.35-0.5) by lexical match, and replaying the same question selects the pair as supporting with `lexical_rescues: ["user.manager"]`.
+
+Local jev latency, measured with synthetic pairs and `--no-cache` on a warm Ollama: 2 pairs 0.21 s, 4 pairs 0.30 s, 32 pairs 1.7 s, 48 pairs 2.6 s, 64 pairs 3.5-4.8 s, 96 pairs 13 s. The first call after the model loaded took 6.1 s for 32 pairs. On this Ollama, setting jev's `--concurrency` anywhere from 1 to 8 made no difference. The kernel caps each call at `--jev-max-pairs` (48) and records how many pairs went unjudged.
+
+The owner then ran the Codex walkthrough with Codex CLI 0.160.0 (GPT-5.6-Sol, ChatGPT subscription) opened in this checkout. The folder was trusted, the generated `.codex/hooks.json` was reviewed and trusted through Codex's own hooks prompt, and the owner asked "quien es mi manager?". The kernel recorded two emitted projections for that session, both selecting `user.manager` through the lexical rescue. (A first attempt with a typo produced a correct `empty` projection: jev 0.424 and no lexical match.) Codex answered "Tu manager es Dani." No bypass or global setting was involved. This closed the native hook verification for both clients. Desktop-app history behaviour and the hosted jev model are still unmeasured.
+
+Still pending: running `jev tune` on the thresholds once the real inventory has enough labelled rows.
 
 ### Native Codex CLI
 
-The following paragraphs retain the historical v0.1 native results. Codex CLI 0.160.0 ran with invocation-specific MCP configuration in disposable fictional workspaces. Global configuration was not edited. Shell tools, apps, web search, and subagents were disabled. No hook-trust bypass was used. Every condition started a fresh ephemeral session.
+These are the historical v0.1 native results. Codex CLI 0.160.0 ran with invocation-specific MCP configuration in disposable fictional workspaces. We did not edit global configuration. Shell tools, apps, web search and subagents were disabled, no hook-trust bypass was used, and every condition started a fresh ephemeral session.
 
-The local `qwen3.5:9b` run completed six mechanical evidence/lifecycle checks: empty memory, registered approver, corrected approver, forgotten approver, career constraint, and generic technical question. The private-scope canary was not exposed. [Native local results](native-local-results.json) retain the client tool events and answers. The career answer prematurely recommended rejecting an offer without knowing its hours; passing an evidence-use check did not imply a good answer. Codex reported fallback metadata warnings for this local model.
+The local `qwen3.5:9b` run completed six mechanical evidence and lifecycle checks: empty memory, registered approver, corrected approver, forgotten approver, career constraint and a generic technical question. The private-scope canary was not exposed. [Native local results](native-local-results.json) keep the client tool events and answers. The career answer recommended rejecting an offer too early, without knowing its hours, so passing an evidence-use check did not mean the answer was good. Codex reported fallback metadata warnings for this local model.
 
-The owner then requested evaluation through their existing OpenAI subscription. `codex login status` reported ChatGPT authentication. The test selected the owner's CLI-configured `gpt-5.6-sol` with high reasoning, explicitly required ChatGPT sign-in, and stripped API-key variables from child processes. The kernel and its MCP server stayed local, but fictional evidence/prompts went to OpenAI and subscription quota was consumed. No API-key billing, purchase, global settings edit, or paid judge was involved. [Official authentication documentation](https://learn.chatgpt.com/docs/auth).
+The owner then asked for a run on their existing OpenAI subscription. `codex login status` reported ChatGPT authentication. The test selected the owner's CLI-configured `gpt-5.6-sol` with high reasoning, required ChatGPT sign-in explicitly, and stripped API-key variables from child processes. The kernel and its MCP server stayed local, but the fictional evidence and prompts went to OpenAI and used subscription quota. There was no API-key billing, purchase, global settings edit or paid judge. [Official authentication documentation](https://learn.chatgpt.com/docs/auth).
 
-Eight subscription sessions completed, including two same-prompt controls without the memory server. Four of six mechanical memory checks and both control checks passed; the overall command returned nonzero. [Subscription results](native-subscription-results.json).
+Eight subscription sessions completed, including two same-prompt controls without the memory server. Four of six mechanical memory checks passed, as did both control checks. The overall command returned nonzero. [Subscription results](native-subscription-results.json).
 
 | Condition | Observed result |
 | --- | --- |
@@ -357,13 +409,13 @@ Eight subscription sessions completed, including two same-prompt controls withou
 | Registered approver without memory | `UNKNOWN`, no tool call |
 | Job offer without memory | Said the available evidence was insufficient; no personal constraint available |
 
-The registration failure occurred before selection: the required `query` argument was absent, so evidence never reached the reader. The server's schema requires that argument and its validator rejected the call; this is not evidence of missing canonical state. The generic question's tool omission fails this particular observation check, but avoiding irrelevant memory is otherwise desirable.
+The registration failure happened before selection. The required `query` argument was missing, so the evidence never reached the reader. The server's schema requires that argument and its validator rejected the call, so this failure says nothing about missing canonical state. Skipping the tool on the generic question fails this particular observation check, though avoiding irrelevant memory is otherwise what we want.
 
-The job-offer answer was more context-specific with memory, yet not fully grounded: salary was a plain number with no currency. The mechanical check only validates selected evidence and a constraint mention. Answer quality must be reviewed separately, not reported as a green benchmark. The local and subscription career prompts differed, so their answers are not a controlled model-quality comparison.
+With memory, the job-offer answer was more specific to the context but not fully grounded: salary was a plain number with no currency. The mechanical check only validates the selected evidence and a mention of the constraint. Answer quality has to be reviewed separately and should not be reported as a green benchmark. The local and subscription career prompts were different, so their answers are not a controlled comparison of model quality.
 
-Subscription session wall time totaled 134.281 seconds, ranging from 5.249 to 32.810 seconds. Native usage events summed to 184,513 input tokens (including 120,192 cached tokens) and 1,538 output tokens (including 789 reasoning tokens). These are client-reported session totals across model steps, not unique prompt sizes, kernel projection tokens, a price calculation, or an exact subscription-quota percentage. Selection itself took milliseconds in the observed successful tool traces.
+Subscription sessions took 134.281 seconds of wall time in total, from 5.249 to 32.810 seconds each. Native usage events summed to 184,513 input tokens (120,192 of them cached) and 1,538 output tokens (789 of them reasoning). These are client-reported session totals across model steps. They are not unique prompt sizes, kernel projection tokens, a price calculation or an exact subscription-quota percentage. In the successful tool traces we observed, selection itself took milliseconds.
 
-To reproduce the bounded checks after explicitly choosing an installed local model or an account-accessible subscription model:
+To reproduce the bounded checks, first pick an installed local model or a subscription model your account can use:
 
 ```sh
 mktemp -d work/codex-pilot.XXXXXX
@@ -371,10 +423,10 @@ python3 -m tests.native_codex_check --workspace /absolute/path/to/new/pilot --co
 python3 -m tests.native_codex_check --workspace /absolute/path/to/another/new/pilot --codex /absolute/path/to/codex --provider chatgpt --model YOUR_SELECTED_MODEL --reasoning high --controls
 ```
 
-Use a new empty pilot for each run. The default uses the existing Ollama model and does not download it. Subscription mode requires an explicit model and refuses API-key authentication. Six sessions run by default; `--controls` adds two. These tests explicitly request memory use and do not establish autonomous relevance, statistical reliability, resistance to long accumulated desktop history, or complete ActiveRequestTrace visibility. Native CLI behavior is not proof of the exact model/settings of the current desktop chat.
+Use a new empty pilot for each run. The default uses the existing Ollama model and does not download it. Subscription mode requires an explicit model and refuses API-key authentication. Six sessions run by default, and `--controls` adds two. These tests ask for memory use explicitly. They do not establish autonomous relevance, statistical reliability, resistance to long accumulated desktop history or complete ActiveRequestTrace visibility. Native CLI behaviour proves nothing about the exact model and settings of the current desktop chat.
 
 ### Not yet verified (v0.3)
 
-The automatic Codex prompt-hook and native Claude Code walkthrough still require the owner's normal project trust/approval step. Their hook envelopes were tested through subprocesses; native Codex MCP testing does not verify automatic hook injection. Antigravity was not installed here. Its adapter follows official MCP configuration, but native activation is unverified.
+The automatic Codex prompt hook and the native Claude Code walkthrough still need the owner's normal project trust and approval step. Their hook envelopes were tested through subprocesses, and native Codex MCP testing does not verify automatic hook injection. Antigravity was not installed here. Its adapter follows the official MCP configuration, but native activation is unverified.
 
-No global client configuration, unrelated project, remote repository, or hosting service was changed. The repository is local and unpushed. There is no claim of benchmark superiority, remote data erasure, automatic human-authenticated ingestion, or solved arbitrary need discovery.
+We changed no global client configuration, unrelated project, remote repository or hosting service. The repository is local and unpushed. We do not claim benchmark superiority, remote data erasure, automatic human-authenticated ingestion, or that arbitrary need discovery is solved.

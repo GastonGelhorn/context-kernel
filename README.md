@@ -1,10 +1,10 @@
 # Context Kernel
 
-Memory for coding agents that you maintain by talking, not by typing commands. It remembers what you state, notices when you change it, and tells the agent which earlier recommendations rested on something that has since changed.
+Memory for coding agents that you keep up to date just by talking to them. It remembers what you tell it, notices when you change your mind, and warns the agent when an earlier recommendation was based on something that is no longer true.
 
-Python, SQLite and FTS5, no runtime dependencies. It runs in Claude Code and Codex through their own hooks and a local MCP server. Judgments (is this a fact worth keeping, is it relevant, does this recommendation rest on it) come from [jev](https://github.com/GastonGelhorn/jevmate), a small calibrated model already on your machine. Extraction is done by your agent's own model. There is no second LLM.
+It's plain Python with SQLite and FTS5 and has no runtime dependencies. It plugs into Claude Code and Codex through their own hooks and a local MCP server. The yes/no calls (is this worth keeping, is it relevant to this question, did that recommendation depend on it) are made by [jev](https://github.com/GastonGelhorn/jevmate), a small calibrated model that runs on your machine. Your agent's own model does the extraction, so there's no second LLM involved.
 
-## What it does
+## An example
 
 ```text
 You: We have three months to deliver checkout. Should we rewrite the payment module?
@@ -20,35 +20,39 @@ You: Should we still go ahead with the payment module plan?
 Agent: That recommendation assumed three months; with three weeks it needs review before we commit.
 ```
 
-Nothing in that exchange was typed as a memory command. The kernel:
+You never typed a memory command in that exchange. Here's what happened underneath.
 
-1. **Captures from the conversation.** On every prompt a hook asks jev whether the message states something worth keeping. If it does, the kernel asks the agent, in plain text outside the data packet, to call `memory_capture`. If the agent answers without saving a fact you clearly stated, the Stop hook hands the turn back once to save it. It also lists related stored facts, so a change can name the fact it `replaces`. When two sessions name the same fact differently, the kernel resolves the keys. The kernel checks each proposed fact against your own words in that message, classifies it, and stores it, holds it for review, or refuses it. The agent cannot make up a fact you did not say.
-2. **Keeps versions, not summaries.** A change is a new version linked to the old one. History stays inspectable, and you can undo by saying so.
-3. **Links recommendations to their premises.** When the agent recommends something, the Stop hook asks jev which premises it rested on: the facts the kernel delivered in that turn, plus facts you stated in that same message. It records those links as inferences.
-4. **Flags rather than replaces.** When a premise changes, the next projection that touches it says an earlier recommendation needs review. It does not say the recommendation is wrong, and it does not inject the old text. The agent can ask `memory_dependents` for details.
-5. **Delivers only what matters.** On each prompt jev scores every stored fact for relevance to the question. Judgments are cached by digest, so a repeated question costs about 0.3 s.
+On every prompt, a hook asks jev whether your message says something worth keeping. If it does, the kernel asks the agent to call `memory_capture`, and it lists facts already stored that look related so a change can point at the one it replaces. If the agent answers without saving something you clearly stated, the Stop hook gives the turn back to it once. Each proposed fact is checked against your own words in that message before it's stored, held for review, or refused, so the agent can't save something you didn't say. When two sessions name the same fact differently ("delivery timeline" in one, "deadline" in the next), the kernel works out that they're the same thing.
 
-## Trust, consent and privacy
+Changes are stored as new versions linked to the old ones. You can look at the history, and you can take a change back by asking.
 
-- **Three trust levels.** `confirmed` comes from you, through the owner CLI or by restating a captured value. `captured` was validated from the conversation and is delivered marked as such. `quarantined` is stored but never delivered: pasted or quoted text, private details about other people, uncertain readings, and turns that a person did not type.
-- **Autonomy within categories you allow.** Each scope has a policy. In `work`, project state, decisions, constraints, roles and preferences are captured automatically. Personal attributes and other people's private details are held until you enable them, which you can do by asking in chat. A change you type to a confirmed fact is applied as a new version, and the receipt says what it was ("user.approver (was \"Gaston\")"). A question is asked only when the kernel itself chose which fact to change, or when two values already disagree.
-- **"Don't remember this" means nothing is stored**, not even in quarantine, and the turn's excerpt is dropped too.
-- **Undo takes back only the last save, and only when you don't name something else.** "Forget the checkout deadline" is a forget of that fact, never an undo of whatever was saved last. That holds even when the judge is down.
-- **Deletions need your words and a real turn.** `memory_forget`, `revoke`, `confirm`, `reaffirm` and policy changes need three things:
-  - a turn token that only the hook injects;
-  - a session that the hook bound to the MCP server's own host process (by process ancestry, outside the model);
-  - a message you typed whose recorded text asks for that action on that fact, as judged by jev.
+When the agent recommends something, the Stop hook asks jev which facts the recommendation relied on: the ones the kernel handed to the agent that turn, plus anything you said in the same message. Those links are saved. Later, when one of those facts changes, the next prompt that touches it tells the agent the earlier recommendation needs another look. It doesn't call the recommendation wrong and it doesn't paste the old text back in; the agent can ask `memory_dependents` if it wants the details.
 
-  Prompts produced by continuations, schedules or host markup never authorize them.
-- **A forget beats writes already in flight.** A tombstone rejects any capture or inference that started before the forget.
-- **Memory text stays local.** If jev is configured for a hosted backend (for example `TYPESAFE_BASE_URL`), the kernel sends it nothing unless the scope explicitly allows it. Selection falls back to rules, and validated writes are refused. Calls that carry your text bypass jev's own cache.
-- **Failure policy per use.** Selection fails open: if jev is down, rules are used with a warning and your prompt still goes through. Writes fail closed: without a usable judge nothing is stored.
+On each prompt jev also scores every stored fact for relevance, and only the relevant ones are delivered. Scores are cached, so asking the same thing again takes about 0.3 s.
+
+## Trust and privacy
+
+Facts have three trust levels. `confirmed` ones come from you, either through the owner CLI or by restating something that was captured. `captured` ones were validated from the conversation and are delivered labelled as such. `quarantined` ones are stored but never delivered: pasted or quoted text, private details about other people, things that sounded unsure, and turns a person didn't type.
+
+Each scope has its own policy about what gets saved without asking. In `work`, project state, decisions, constraints, roles and preferences are saved automatically. Personal details and other people's private information are held until you turn those categories on, which you can also do by asking in chat. If you change a confirmed fact, the new value is applied as a new version and the receipt tells you what it replaced (`user.approver (was "Gaston")`). You only get asked first when the kernel itself had to guess which fact you meant, or when two stored values already disagree. Explicit requests like "remember that…" or "from now on…" count as you stating the fact.
+
+If you say "don't remember this", nothing from that message is stored, not even in quarantine, and the excerpt of the message is dropped.
+
+"Undo" takes back the last thing saved, and only when you don't name something else. "Forget the checkout deadline" forgets that fact; it never undoes whatever happened to be saved last. This holds even when jev is down.
+
+Deleting things takes more than the model asking. `memory_forget`, `revoke`, `confirm`, `reaffirm` and policy changes need a turn token that only the hook hands out, a session the hook tied to the MCP server's own host process (by process ancestry, outside the model), and a message you typed that jev agrees is asking for that action on that fact. Prompts that come from continuations, schedules or host markup never count. A forget also wins over writes already in progress: anything that started before it is rejected.
+
+Your memory text stays on your machine. If jev is pointed at a hosted backend (say, through `TYPESAFE_BASE_URL`), the kernel sends it nothing unless you've allowed that for the scope. In that case it selects facts with keyword rules instead and refuses new writes. Calls that carry your text skip jev's own cache.
+
+When jev is unavailable, reading keeps working and writing stops. Selection falls back to keyword rules with a warning and your prompt goes through; nothing new is saved without a judge.
 
 ## Install
 
-Python 3.9+ with SQLite FTS5 (the `python3` macOS ships is enough) and `jev` from [jevmate](https://github.com/GastonGelhorn/jevmate).
+You need Python 3.9 or newer with SQLite FTS5 (the `python3` that ships with macOS works) and `jev` from [jevmate](https://github.com/GastonGelhorn/jevmate).
 
-**Claude Code.** Install jevmate and the kernel from the same marketplace:
+### Claude Code
+
+Install jevmate and the kernel from the same marketplace, then run the setup command:
 
 ```text
 /plugin marketplace add GastonGelhorn/jevmate
@@ -57,17 +61,23 @@ Python 3.9+ with SQLite FTS5 (the `python3` macOS ships is enough) and `jev` fro
 /context-kernel:setup
 ```
 
-The plugin brings its own hooks and MCP server; nothing is copied into a project. Its options (scope, database, selection) are asked at install and changed in the plugin's settings. `/context-kernel:setup` checks the install and lets you choose the judge: jev on a local Ollama model (free, private) or jev's paid hosted service (faster; your memory text leaves the machine, so the scope must allow it). After each turn a line above the prompt says what memory saved, held for review or did not save, with an undo button; it also shows in the desktop app, where hook messages do not.
+The plugin brings its own hooks and MCP server, so there's nothing to copy into your projects. It asks for a scope, a database and a selection mode when you install it, and you can change those later in the plugin's settings. `/context-kernel:setup` checks the install and lets you pick the judge: jev on a local Ollama model, which is free and keeps everything on your machine, or jev's paid hosted service, which is faster but sends your memory text out, so the scope has to allow it.
 
-**Terminal and Codex.** From a checkout:
+After each turn, a line above the prompt tells you what memory saved, held for review or didn't save, with an undo button. It shows up in the desktop app too, which doesn't display hook messages.
+
+### Terminal and Codex
+
+From a checkout:
 
 ```sh
 ./install.sh
 ```
 
-It finds a usable Python (or uses one managed by `uv`), installs `~/.local/bin/context-kernel` and runs `context-kernel setup`: the judge, the scope and database (saved in `~/.context-kernel/config.json`), the Claude Code plugin, and Codex hooks for a project (shown before they are written; Codex then asks you to review them). `context-kernel doctor` checks everything again, including hooks that would run twice when a project still wires the kernel by hand.
+The script finds a Python that works (or uses one managed by `uv`), installs `~/.local/bin/context-kernel`, and starts `context-kernel setup`. The setup asks about the judge, the scope and the database (saved to `~/.context-kernel/config.json`), offers to install the Claude Code plugin, and can wire Codex for a project. It shows you the Codex files before writing them, and Codex will ask you to review the hooks the next time it opens that folder. Run `context-kernel doctor` any time to check the install. It also warns you if a project still wires the kernel by hand, which would make every hook run twice.
 
-**By hand.** The generator below prints configuration for one project instead:
+### By hand
+
+If you'd rather wire a single project yourself, the generator prints the configuration:
 
 ```sh
 python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work init
@@ -75,11 +85,11 @@ python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work adap
 python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work adapter claude --workspace /path/to/project --strategy jev --mode mcp
 ```
 
-The first `adapter` command prints the hooks (prompt, stop, session start) for `.claude/settings.local.json`. The second prints the MCP server for `.mcp.json`. Use `adapter codex` for `.codex/hooks.json` and `.codex/config.toml`. Review and merge them yourself. The generator writes nothing, pins absolute paths (hosts run hooks with a minimal PATH), and never bypasses the host's trust or approval steps. Codex asks you to review hooks again after they change.
+The first `adapter` command prints the hooks (prompt, stop, session start) for `.claude/settings.local.json` and the second prints the MCP server for `.mcp.json`. `adapter codex` does the same for `.codex/hooks.json` and `.codex/config.toml`. The generator doesn't write anything; you review and merge the output yourself. It pins absolute paths, because hosts run hooks with a minimal PATH, and it doesn't skip any of the host's trust or approval steps. Codex asks you to review hooks again whenever they change.
 
-## Audit from the terminal (optional)
+## Looking under the hood
 
-Day to day you talk. The CLI is for looking under the hood:
+Day to day you just talk. The CLI is there when you want to see what's going on:
 
 ```sh
 memory --pretty inventory          # everything held, by entity, with trust and category
@@ -90,11 +100,11 @@ memory undo STATEMENT_ID
 memory forget STATEMENT_ID
 ```
 
-`remember`, `correct`, `depend`, `reaffirm`, `revoke` and `confirm` still exist for scripting and for confirmed facts. `forget` removes every version of a property, its orphan evidence, derived plans, traces, turn excerpts and cached judgments in that scope. It does not erase host transcripts, backups or anything a model already received.
+`remember`, `correct`, `depend`, `reaffirm`, `revoke` and `confirm` are still around for scripting and for confirmed facts. `forget` removes every version of a property in that scope, along with its orphaned evidence, derived plans, traces, turn excerpts and cached judgments. It can't erase host transcripts, backups, or anything a model has already seen.
 
-## Calibrated, not guessed
+## Thresholds
 
-Thresholds come from measurements on the local model (`tev1-32k` through Ollama). Re-measure on your own setup:
+The thresholds were measured on the local model (`tev1-32k` through Ollama). You can re-measure them on your own setup:
 
 ```sh
 memory calibrate affirmed --score        # the kernel's exact question over bilingual fixtures, with a threshold sweep
@@ -105,20 +115,22 @@ memory policy --threshold affirmed=0.75
 
 | Judgment | Default | Measured on 6 to 30 fixtures |
 | --- | --- | --- |
-| The message asserts this fact | 0.75 (held for review from 0.60) | every true row ≥ 0.76; highest false row 0.757 (a question) |
+| The message asserts this fact | 0.75 (held for review from 0.60) | every true row ≥ 0.76; highest false row 0.757 (a question) when set in v0.4; see below |
 | The message states something worth keeping | P(none) < 0.15 | recall 1.0; the one false hit, a forget request, is excluded before judging |
 | The message asks to forget this fact | 0.70 | true rows 0.94 to 0.98; false rows ≤ 0.60 |
 | The reply recommends something | 0.70 | advice 0.80 to 0.95; reports, questions and refusals ≤ 0.61 |
 | The recommendation rests on this premise | 0.85, or 0.50 when the reply names the premise's value | 7 true and 0 false links on 15 labelled pairs |
 
-Measured prompt-hook latency with ten stored facts: 0.33 s for a cached question and about 4 s cold, of which the capture gate takes about one second. The gate is skipped for acknowledgements, question-only messages, generic questions and forget requests. These are small fixture sets, not a benchmark. See [verification](docs/verification.md).
+The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes.
 
-## Boundaries
+With ten stored facts, the prompt hook took 0.33 s for a cached question and about 4 s cold, about a second of which is the check for something worth saving. That check is skipped for acknowledgements, plain questions, generic questions and forget requests. These are small fixture sets, so read them as a trend rather than a benchmark. The details are in [verification](docs/verification.md).
 
-- One local owner per database. Scopes are application filters, not OS security. A process that can read the SQLite file can read the memory.
-- Process-ancestry binding assumes the host starts hooks and MCP servers under the same per-session process. That holds in the Claude desktop app's process tree and in local subprocess tests; `tests/native_claude_check.py` checks it in headless Claude Code, and the Codex walkthrough checks it there. Where it does not hold, the server stays unbound and refuses every write.
-- `UserPromptSubmit` does not prove a person typed the prompt. The kernel tags origin conservatively and never lets an uncertain origin authorize deletions. That is a heuristic, not authentication.
-- jev's scores are signals for the policy. A fact can be validated and still be wrong. That is why captures are marked, reversible, and never override confirmed facts.
-- The agent's own model still answers. A projection reduces the chance of stale or invented context. It does not guarantee the answer.
+## Limits
 
-Read [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md) and [verification](docs/verification.md).
+- One owner per database. Scopes separate memories inside the application; they aren't OS-level security, and anything that can read the SQLite file can read the memory.
+- Tying a session to its MCP server by process ancestry assumes the host starts hooks and MCP servers under the same per-session process. That's true in the Claude desktop app, in headless Claude Code and in Codex, where it was checked. Where it isn't, the server stays unbound and refuses every write.
+- `UserPromptSubmit` doesn't prove a person typed the prompt. The kernel is cautious about where a prompt came from and never lets an uncertain origin authorize a deletion, but that's a heuristic, not authentication.
+- jev's scores feed a policy; they aren't proof. A fact can pass validation and still be wrong, which is why captures are labelled, reversible, and announced when they change a confirmed value.
+- Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
+
+More detail in [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md) and [verification](docs/verification.md).

@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "context-kernel"
 version = "0.5.0"
-description = "Local, correctable context for coding agents"
+description = "Memory for coding agents that you keep up to date by talking"
 requires-python = ">=3.9"
 authors = [{name = "Gaston Gelhorn", email = "gastongelhorn@gmail.com"}]
 dependencies = []

@@ -2,7 +2,7 @@
   "name": "context-kernel",
   "displayName": "Context Kernel",
   "version": "0.5.0",
-  "description": "Memory for coding agents that you maintain by talking. It remembers what you state, notices when you change it, and tells the agent which earlier recommendations rested on something that has since changed. Local SQLite; judgments by jev (install jevmate first). A line above the prompt says what each turn saved, held or did not save, with undo.",
+  "description": "Memory for coding agents that you keep up to date just by talking. It remembers what you tell it, notices when you change your mind, and warns the agent when an earlier recommendation relied on something that changed. Stored locally in SQLite; needs jev, from jevmate. After each turn a line above the prompt says what was saved, with undo.",
   "author": {
     "name": "Gaston Gelhorn",
     "email": "gastongelhorn@gmail.com"
@@ -30,19 +30,19 @@
     "scope": {
       "type": "string",
       "title": "Scope",
-      "description": "Which memory this install reads and writes: work, personal, a client. Each scope is separate and has its own capture policy.",
+      "description": "Which memory to use: work, personal, a client. Each scope is kept separate and has its own rules for what gets saved.",
       "default": "work"
     },
     "db": {
       "type": "string",
       "title": "Database",
-      "description": "SQLite file for the memory. Empty: ~/.context-kernel/memory.sqlite, shared with the terminal install and Codex.",
+      "description": "Where the memory lives. Leave it empty to use ~/.context-kernel/memory.sqlite, which the terminal install and Codex share.",
       "default": ""
     },
     "strategy": {
       "type": "string",
       "title": "Selection",
-      "description": "jev: jev scores every stored fact for relevance to each prompt (needs jevmate). rules: keyword rules only, no judge; nothing new is saved from the conversation without jev.",
+      "description": "jev: jev scores each stored fact against every prompt (needs jevmate). rules: keyword matching only. Without jev nothing new gets saved from the conversation.",
       "default": "jev",
       "options": [
         "jev",
@@ -52,13 +52,13 @@
     "jev_command": {
       "type": "string",
       "title": "jev executable",
-      "description": "Absolute path to jev. Empty: ~/.local/bin/jev, then the jevmate plugin's own copy, then PATH. Whether jev runs locally (Ollama) or hosted is jev's own setting: run /context-kernel:setup.",
+      "description": "Full path to jev. Leave it empty to look in ~/.local/bin/jev, then the jevmate plugin, then PATH. Whether jev runs locally on Ollama or on the hosted service is jev's own setting; /context-kernel:setup changes it.",
       "default": ""
     },
     "band": {
       "type": "string",
       "title": "Line above the prompt",
-      "description": "on: after each turn, one line says what memory saved, held for review or did not save, with undo. off: nothing (the terminal still shows the hook's message).",
+      "description": "on: after each turn, a line above the prompt says what memory saved, held for review or didn't save, with undo. off: no line (the terminal still shows the hook's message).",
       "default": "on",
       "options": [
         "on",

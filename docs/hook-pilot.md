@@ -1,5 +1,7 @@
 # Prompt-hook pilots
 
+The two runners below exercise the v0.4 conversation flow in real Claude Code and Codex sessions. Each one wires the kernel into a pilot folder with the generated `adapter` configuration and its own `pilot` scope and database.
+
 ## Claude Code (v0.4, conversation only)
 
 ```sh
@@ -7,7 +9,7 @@ mkdir -p work/claude-pilot
 python3 -m tests.native_claude_check --workspace "$(mktemp -d work/claude-pilot/run.XXXXXX)"
 ```
 
-The runner writes the generated hooks into the empty pilot's `.claude/settings.local.json` and passes the memory MCP server with `--mcp-config`. It then runs five fresh `claude -p` sessions. File, shell and web tools are disallowed, and only the memory tools are allowed. No memory command is typed:
+The runner writes the generated hooks into the empty pilot folder's `.claude/settings.local.json` and passes the memory MCP server with `--mcp-config`. It then runs five fresh `claude -p` sessions with file, shell and web tools disallowed and only the memory tools allowed. None of the prompts is a memory command:
 
 1. "We have three months to deliver the checkout project. Should we rewrite its payment module?"
 2. "Update: the checkout deadline changed, we now have three weeks."
@@ -15,11 +17,20 @@ The runner writes the generated hooks into the empty pilot's `.claude/settings.l
 4. "Please forget the checkout deadline."
 5. A generic SQLite question.
 
-After each session it reads the kernel database directly. It checks capture, inferred linking, the new version, the review flag, the fresh-session projection and answer, removal, the absence of claims on the generic question, and that every session was bound. It uses your Claude Code sign-in and quota and sends fictional prompts to Anthropic. It never touches `~/.claude`.
+After each session the runner reads the kernel database directly. Across the run it checks:
+
+- capture and inferred linking;
+- the new version and the review flag;
+- the fresh session's projection and answer;
+- removal;
+- no claims on the generic question;
+- that every session was bound.
+
+The runner uses your Claude Code sign-in and quota and sends the fictional prompts to Anthropic. It never touches `~/.claude`.
 
 ## Codex (v0.4, ChatGPT subscription)
 
-Codex asks a person to review project hooks once. The runner therefore works on a prepared pilot, whose hooks keep their trust between runs while its memory is reset:
+Codex asks a person to review project hooks once, so this runner works on a prepared pilot. The hooks keep their trust between runs, and each run resets only the pilot's memory:
 
 ```sh
 python3 -m tests.native_codex_v04_check --prepare /abs/pilot
@@ -33,23 +44,23 @@ Between the two commands:
 3. Review and trust the three context-kernel hooks in its prompt or under `/hooks`.
 4. Quit.
 
-The run uses the model configured in your Codex CLI with your ChatGPT sign-in. API-key variables are removed, and the memory tools are pre-approved for these invocations only. It runs the same five phases and pre-registered checks as the Claude Code runner (`tests/native_claude_check.py:evaluate`). Pass `--disable-mcp NAME …` to switch off unrelated servers for the run.
+The run uses the model configured in your Codex CLI and your ChatGPT sign-in. The runner removes API-key variables from the environment and pre-approves the memory tools for these invocations only. It runs the same five phases and pre-registered checks as the Claude Code runner (`tests/native_claude_check.py:evaluate`). Pass `--disable-mcp NAME …` to turn off unrelated MCP servers for the run.
 
-Regenerating the hooks (for example after an upgrade) changes their definitions, and Codex asks for review again.
+If you regenerate the hooks, for example after an upgrade, their definitions change and Codex asks you to review them again.
 
 ## Historical pilots (v0.1 to v0.3)
 
-The read-only Codex hook pilot below predates v0.4. It used fictional fixtures and a local Qwen model for Codex itself. Keep it for history only; current Codex checks use the subscription runner above.
+The read-only Codex hook pilot below predates v0.4. It used fictional fixtures and ran Codex itself on a local Qwen model. It is kept for the record; current Codex checks use the subscription runner above.
 
 ### Codex (v0.3)
 
-This host-local pilot contains fictional data only. It is separate from personal and real project databases. No trust hash is created or modified by the kernel.
+This pilot ran on this machine with fictional data only, in a database separate from personal and real project memory. The kernel creates or modifies no trust hash.
 
 Pilot workspace: /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao
 
-The prepared `.codex/hooks.json` runs the local owner-reviewed kernel command with a fixed `pilot` scope. Proposal capture is disabled. The hook can read current evidence and write derived local traces; it cannot approve facts or erase memory.
+The prepared `.codex/hooks.json` runs the local, owner-reviewed kernel command with a fixed `pilot` scope and proposal capture turned off. The hook can read current evidence and write derived local traces. It cannot approve facts or erase memory.
 
-## Owner review
+### Owner review
 
 Start the CLI in the pilot workspace with the existing local model:
 
@@ -57,17 +68,17 @@ Start the CLI in the pilot workspace with the existing local model:
 (historical) /Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex --cd /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao --oss --local-provider ollama --model qwen3.5:9b -c 'model_reasoning_effort="none"' --disable apps --disable multi_agent --disable shell_tool -c 'web_search="disabled"'
 ```
 
-The interactive CLI uses your existing user settings. `--ignore-user-config` is an exec-only option and must not be used here. The command explicitly selects the local provider and disables shell, apps, web, and subagents for this pilot. Existing user-level hooks or MCP configuration may still be present; inspect them in the normal client UI.
+The interactive CLI reads your existing user settings. Don't add `--ignore-user-config` here; it only works with `exec`. The command selects the local provider explicitly and turns off shell, apps, web search and subagents for this pilot. User-level hooks or MCP configuration you already have may still load, so check them in the normal client UI.
 
-Use the normal project-trust prompt if shown. Then open `/hooks`, inspect the exact command and database path, and trust this definition only if it matches your intended scope. This action must be performed through Codex's review flow; no bypass is necessary.
+Accept the normal project-trust prompt if it appears. Then open `/hooks`, check the exact command and database path, and trust the definition only if it matches the scope you intend. Do this through Codex's own review flow; no bypass is needed.
 
-## Observe delivery
+### Observe delivery
 
-Ask `Who is the current release approver? Reply with just the name. Do not use tools.`. The fixture answer is `Nyra Vale`. There is no project-local MCP server configured for this pilot. Inspect hook observations and confirm that no tool supplied the answer before attributing it to automatic delivery.
+Ask `Who is the current release approver? Reply with just the name. Do not use tools.`. The fixture answer is `Nyra Vale`. The pilot has no project-local MCP server configured. Before crediting automatic delivery for a correct answer, check the hook observations and confirm that no tool supplied it.
 
-From the kernel checkout, inspect projection traces or retrieve the latest projection ID using the owner CLI. An emitted trace proves local hook output, not complete host attachment. A correct answer and native hook observation are separate checks.
+From the kernel checkout, inspect the projection traces or get the latest projection ID with the owner CLI. An emitted trace shows that the hook produced output locally. It does not show that the host attached all of it, so a correct answer and a native hook observation have to be checked separately.
 
-Correct the fictional approver using the owner CLI, start a fresh CLI conversation, and repeat the question. Then explicitly forget that fixture and repeat in another fresh conversation. Forgetting does not erase already-delivered host history.
+Correct the fictional approver with the owner CLI, start a fresh CLI conversation and ask again. Then forget that fixture explicitly and ask once more in another fresh conversation. Forgetting does not erase host history that already received the fact.
 
 ```sh
 python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot list
@@ -76,11 +87,10 @@ python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/o
 python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot why PROJECTION_ID
 ```
 
-Inspect the returned replacement ID before an explicit `forget` command. Keep the old fixture only for history tests, not as current evidence.
+Check the replacement ID the CLI returns before running an explicit `forget`. Keep the old fixture only for history tests, and don't use it as current evidence.
 
-## Limits
+### Limits
 
-This prepared hook is not yet owner-trusted or automatically active in the current desktop chat. Current native MCP results do not substitute for this step. No global settings were edited. Remove only the pilot's context-kernel hook entry to disconnect it; unrelated settings and host histories remain untouched.
+This prepared hook has not been trusted by the owner yet and is not active in the current desktop chat. The native MCP results so far do not replace that step. No global settings were edited. To disconnect the pilot, remove only its context-kernel hook entry; unrelated settings and host histories stay as they are.
 
-On another checkout, regenerate configuration using `memory adapter codex --workspace /your/pilot --raw` and review the new command. This pilot uses absolute paths specific to this host.
-
+The paths in this pilot are specific to this machine. On another checkout, regenerate the configuration with `memory adapter codex --workspace /your/pilot --raw` and review the new command.
