@@ -190,7 +190,25 @@ How it works:
 
 No memory command was typed, and each session's prompt hook took 0.4 to 0.5 s. This is one fictional scenario passing once, not a reliability rate.
 
-**Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
+**Third Codex run (Codex CLI 0.160.0, the model configured in the CLI, ChatGPT subscription, commit 15b7272): 10 of 10 of the stricter checks.**
+
+| Session | Result |
+| --- | --- |
+| 1 | Codex called `memory_capture` while answering ("…memory saved: checkout project timeline is three months"). The kernel stored `checkout_project.delivery_timeline` and rejected one extra item the user had not stated. The reply was linked to the premise. |
+| 2 | The change became a second version of the same pair, and the recommendation was flagged. |
+| 3 | `review_required`. Answer: "Not unchanged—we should first revisit the plan because one of its underlying assumptions has changed, despite the three-week timeline." |
+| 4 | `memory_forget` removed the fact and its derived recommendation. |
+| 5 | The generic question carried no claims. |
+
+The one-time Stop nudge did not fire in this run: Codex captured on its own once the request travelled as plain text. The nudge itself is verified by the real-process smoke above, not natively.
+
+Codex's session-3 answer flags the change but names neither value as clearly as Claude Code's did. It did not call `memory_dependents` for details.
+
+An intermediate attempt failed with "Unsupported memory schema". The runner process had loaded the schema-3 code. A Stop hook started after the schema-4 code was saved migrated the pilot database mid-run. Code edits during a native run invalidate it.
+
+Both clients have now passed the same pre-registered scenario once each, with no memory commands. That is evidence the mechanism works end to end in both hosts, not a reliability rate.
+
+**Still to verify natively.** Repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. For reference, `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 
 ## Historical checks (v0.1 to v0.3)
 
