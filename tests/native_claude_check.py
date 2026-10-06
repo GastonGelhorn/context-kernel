@@ -12,10 +12,11 @@ and web tools are disallowed.
 
 import argparse
 import json
-from pathlib import Path
+import os
 import shutil
 import subprocess
 import time
+from pathlib import Path
 
 from context_kernel.adapters import configuration
 from context_kernel.common import KernelError, canonical
@@ -48,7 +49,9 @@ def invoke(claude, workspace, prompt, mcp_config, model=None):
         command.extend(["--model", model])
     started = time.perf_counter()
     try:
-        result = subprocess.run(command, cwd=workspace, input="", text=True, capture_output=True, timeout=240)
+        # An installed Context Kernel plugin would also run here, against the owner's real memory.
+        env = dict(os.environ, CONTEXT_KERNEL_OFF="1")
+        result = subprocess.run(command, cwd=workspace, input="", text=True, capture_output=True, timeout=240, env=env)
     except subprocess.TimeoutExpired as exc:
         return {"exit_code": 124, "answer": None, "stderr": str(exc), "duration_seconds": 240.0}
     raw = None

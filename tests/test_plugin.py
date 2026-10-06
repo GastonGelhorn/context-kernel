@@ -59,6 +59,15 @@ class PluginTests(unittest.TestCase):
             plugin.main(["activity", "--session", "nobody"])
         self.assertEqual(json.loads(out.getvalue())["undo"], [])
 
+    def test_the_native_runners_switch_an_installed_plugin_off(self):
+        os.environ["CLAUDE_PLUGIN_OPTION_DB"] = str(self.root / "real.sqlite")
+        os.environ["CONTEXT_KERNEL_OFF"] = "1"
+        with redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(plugin.main(["hook", "prompt"]), 0)
+            self.assertEqual(plugin.main(["serve"]), 0)
+        self.assertEqual(out.getvalue(), "{}\n")
+        self.assertFalse((self.root / "real.sqlite").exists())
+
     def test_codex_files_run_the_launcher_for_every_event(self):
         hooks_path, hooks, toml_path, toml = codex_files(self.root, "/usr/bin/python3", "/home/me/.local/bin/context-kernel")
         self.assertEqual(hooks_path, self.root / ".codex" / "hooks.json")

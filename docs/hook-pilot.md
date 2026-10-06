@@ -9,7 +9,7 @@ mkdir -p work/claude-pilot
 python3 -m tests.native_claude_check --workspace "$(mktemp -d work/claude-pilot/run.XXXXXX)"
 ```
 
-The runner writes the generated hooks into the empty pilot folder's `.claude/settings.local.json` and passes the memory MCP server with `--mcp-config`. It then runs five fresh `claude -p` sessions with file, shell and web tools disallowed and only the memory tools allowed. None of the prompts is a memory command:
+The runner writes the generated hooks into the empty pilot folder's `.claude/settings.local.json` and passes the memory MCP server with `--mcp-config`. It then runs five fresh `claude -p` sessions with file, shell and web tools disallowed and only the memory tools allowed. Each session gets `CONTEXT_KERNEL_OFF=1`, so a Context Kernel plugin you have installed stays out of the run and the fictional prompts never reach your real memory. None of the prompts is a memory command:
 
 1. "We have three months to deliver the checkout project. Should we rewrite its payment module?"
 2. "Update: the checkout deadline changed, we now have three weeks."
@@ -56,7 +56,7 @@ The read-only Codex hook pilot below predates v0.4. It used fictional fixtures a
 
 This pilot ran on this machine with fictional data only, in a database separate from personal and real project memory. The kernel creates or modifies no trust hash.
 
-Pilot workspace: /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao
+Pilot workspace: /path/to/context-kernel/work/codex-hook-v02.zoKyao
 
 The prepared `.codex/hooks.json` runs the local, owner-reviewed kernel command with a fixed `pilot` scope and proposal capture turned off. The hook can read current evidence and write derived local traces. It cannot approve facts or erase memory.
 
@@ -65,7 +65,7 @@ The prepared `.codex/hooks.json` runs the local, owner-reviewed kernel command w
 Start the CLI in the pilot workspace with the existing local model:
 
 ```text
-(historical) /Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex --cd /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao --oss --local-provider ollama --model qwen3.5:9b -c 'model_reasoning_effort="none"' --disable apps --disable multi_agent --disable shell_tool -c 'web_search="disabled"'
+(historical) codex --cd /path/to/context-kernel/work/codex-hook-v02.zoKyao --oss --local-provider ollama --model qwen3.5:9b -c 'model_reasoning_effort="none"' --disable apps --disable multi_agent --disable shell_tool -c 'web_search="disabled"'
 ```
 
 The interactive CLI reads your existing user settings. Don't add `--ignore-user-config` here; it only works with `exec`. The command selects the local provider explicitly and turns off shell, apps, web search and subagents for this pilot. User-level hooks or MCP configuration you already have may still load, so check them in the normal client UI.
@@ -81,10 +81,10 @@ From the kernel checkout, inspect the projection traces or get the latest projec
 Correct the fictional approver with the owner CLI, start a fresh CLI conversation and ask again. Then forget that fixture explicitly and ask once more in another fresh conversation. Forgetting does not erase host history that already received the fact.
 
 ```sh
-python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot list
-python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot traces --limit 5
-python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot correct STATEMENT_ID '"Orin Keel"' --evidence 'Fictional pilot: the current approver is Orin Keel.'
-python3 -m context_kernel --db /Users/gaston/Documents/Codex/2026-10-04/te-x20/outputs/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot why PROJECTION_ID
+python3 -m context_kernel --db /path/to/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot list
+python3 -m context_kernel --db /path/to/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot traces --limit 5
+python3 -m context_kernel --db /path/to/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot correct STATEMENT_ID '"Orin Keel"' --evidence 'Fictional pilot: the current approver is Orin Keel.'
+python3 -m context_kernel --db /path/to/context-kernel/work/codex-hook-v02.zoKyao/memory.sqlite --scope pilot why PROJECTION_ID
 ```
 
 Check the replacement ID the CLI returns before running an explicit `forget`. Keep the old fixture only for history tests, and don't use it as current evidence.

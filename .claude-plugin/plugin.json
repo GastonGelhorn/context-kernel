@@ -9,6 +9,7 @@
   },
   "homepage": "https://github.com/GastonGelhorn/context-kernel",
   "repository": "https://github.com/GastonGelhorn/context-kernel",
+  "license": "MIT",
   "keywords": [
     "memory",
     "context",

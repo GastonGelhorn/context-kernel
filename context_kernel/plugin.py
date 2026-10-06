@@ -104,6 +104,12 @@ def main(argv=None):
         print(USAGE)
         return 0
     command, rest = argv[0], argv[1:]
+    if os.environ.get("CONTEXT_KERNEL_OFF") == "1" and command in {"hook", "serve"}:
+        # Set by the native test runners: their pilot wires its own kernel to a throwaway database,
+        # and an installed plugin must not also write their fictional prompts into real memory.
+        if command == "hook":
+            print("{}")
+        return 0
     config, _ = settings()
     jev = find_jev(config["jev_command"])
     base, judge = kernel_args(config, jev)

@@ -7,6 +7,7 @@ name = "context-kernel"
 version = "0.5.0"
 description = "Memory for coding agents that you keep up to date by talking"
 requires-python = ">=3.9"
+license = {text = "MIT"}
 authors = [{name = "Gaston Gelhorn", email = "gastongelhorn@gmail.com"}]
 dependencies = []
 
