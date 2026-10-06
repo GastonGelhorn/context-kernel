@@ -178,6 +178,18 @@ How it works:
 
 "Answer in one sentence." raised P(none) from 0.033 to 0.068 on the first message, so instructions about how to answer are removed before the gate. A real-process smoke with the real jev reproduced the run's first message and Codex's exact reply. The first Stop returned the nudge, a capture with the original token was saved, and the continuation's Stop reported the save and linked the recommendation.
 
+**Fourth native Claude Code run (commit 8fcc677, before the nudge existed): 10 of 10 of the stricter checks.**
+
+| Session | Result |
+| --- | --- |
+| 1 | Captured `checkout_project.delivery_timeline = three months`. The reply was linked to it. |
+| 2 | The change became a second version of the same pair, and the recommendation was flagged. |
+| 3 | `review_required`. The answer: "My earlier advice to skip a full rewrite… assumed a three-month deadline, and I have the timeline as three weeks now (please confirm that), which makes the case against a rewrite even stronger…" |
+| 4 | The forget removed both versions and the two recommendations derived from them. |
+| 5 | The generic question carried no claims. |
+
+No memory command was typed, and each session's prompt hook took 0.4 to 0.5 s. This is one fictional scenario passing once, not a reliability rate.
+
 **Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 
 ## Historical checks (v0.1 to v0.3)
