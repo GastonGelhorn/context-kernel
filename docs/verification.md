@@ -156,7 +156,7 @@ Now:
 
 Replayed with the real jev and the run's exact wording, the link was made, the drifted key resolved, the question raised no capture request, and the fresh session got `review_required` with only "three weeks". Native reruns are pending.
 
-**Second Codex run (gpt-5.6-sol via the subscription; it ran at 02:02 local, before the fixes saved at 02:03, so it tested commit d475614).**
+**Second Codex run (gpt-5.6-sol via the subscription; it ran at 02:02 local, before the fixes saved at 02:03, so it tested commit a378cb6).**
 
 Results:
 - Codex now captured in conversation: the deadline change in session 2 went through the bound server.
@@ -178,7 +178,7 @@ How it works:
 
 "Answer in one sentence." raised P(none) from 0.033 to 0.068 on the first message, so instructions about how to answer are removed before the gate. A real-process smoke with the real jev reproduced the run's first message and Codex's exact reply. The first Stop returned the nudge, a capture with the original token was saved, and the continuation's Stop reported the save and linked the recommendation.
 
-**Fourth native Claude Code run (commit 8fcc677, before the nudge existed): 10 of 10 of the stricter checks.**
+**Fourth native Claude Code run (commit 969675d, before the nudge existed): 10 of 10 of the stricter checks.**
 
 | Session | Result |
 | --- | --- |
@@ -190,7 +190,7 @@ How it works:
 
 No memory command was typed, and each session's prompt hook took 0.4 to 0.5 s. This is one fictional scenario passing once, not a reliability rate.
 
-**Third Codex run (Codex CLI 0.160.0, the model configured in the CLI, ChatGPT subscription, commit 15b7272): 10 of 10 of the stricter checks.**
+**Third Codex run (Codex CLI 0.160.0, the model configured in the CLI, ChatGPT subscription, commit 4224cc0): 10 of 10 of the stricter checks.**
 
 | Session | Result |
 | --- | --- |
