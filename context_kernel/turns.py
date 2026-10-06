@@ -26,9 +26,13 @@ _SECRETS = [
 _DO_NOT_REMEMBER = re.compile(
     r"\b(no (lo |la |me )?(recuerdes|guardes|memorices|anotes)|sin guardar|no quiero que (lo )?(recuerdes|guardes)|"
     r"don'?t (remember|save|store|memori[sz]e)|do not (remember|save|store|memori[sz]e)|off the record)\b")
+# A request to forget: the verb opens a sentence or follows a polite lead-in ("please", "can you").
+# "Don't forget my salary" asks the opposite and is excluded.
 _FORGET = re.compile(
-    r"^\s*(olvida|olvidate de|borra|elimina|forget|delete|remove|revoca|revoke|deshaz|undo)\b|"
+    r"(^|[.!?;,]\s*|\b(please|por favor|can you|could you|would you|puedes|podrias|quiero que)\s+)"
+    r"(olvida|olvidate de|borra|elimina|forget|delete|remove|erase|revoca|revoke|deshaz|undo)\b|"
     r"\b(olvida|forget|deshaz|undo) (eso|esto|lo que|that|this|what)\b")
+_KEEP = re.compile(r"\b(don'?t|do not|never|no te|no|nunca) (forget|olvides|te olvides|olvidar)\b")
 # Taking back the last thing saved, without naming anything else. "Forget the checkout deadline"
 # is not an undo: it names a fact, and goes through memory_forget with that fact's id.
 _UNDO = re.compile(
@@ -54,7 +58,8 @@ def do_not_remember(prompt):
 
 
 def forget_request(prompt):
-    return bool(_FORGET.search(fold(prompt)))
+    folded = fold(prompt)
+    return bool(_FORGET.search(folded)) and not _KEEP.search(folded)
 
 
 def undo_request(prompt):

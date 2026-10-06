@@ -78,7 +78,7 @@ Critical claims must fit whole within the byte budget. The packet carries reader
 
 ## Dependencies
 
-Declared links (owner CLI, `memory_depend`) and inferred links behave the same way. The inferred candidates for a recommendation are exactly the premises available in that turn: claims delivered by the kernel and facts captured from the same message. Recommendations are stored with `assertion_kind: inference` and never become evidence. Staleness is computed when queried. `reaffirm` follows a premise's full correction chain to its current version.
+Declared links (owner CLI, `memory_depend`) and inferred links behave the same way. An inferred link needs the reply to be judged a recommendation (0.70). Then each premise must score 0.85 on "rests on", or 0.50 when the reply names that premise's value. The inferred candidates for a recommendation are exactly the premises available in that turn: claims delivered by the kernel and facts captured from the same message. Recommendations are stored with `assertion_kind: inference` and never become evidence. Staleness is computed when queried. `reaffirm` follows a premise's full correction chain to its current version.
 
 ## Trust boundaries
 

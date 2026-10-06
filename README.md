@@ -87,6 +87,8 @@ memory policy --threshold affirmed=0.75
 | The message asserts this fact | 0.75 (held for review from 0.60) | every true row ≥ 0.76; highest false row 0.757 (a question) |
 | The message states something worth keeping | P(none) < 0.15 | recall 1.0; the one false hit, a forget request, is excluded before judging |
 | The message asks to forget this fact | 0.70 | true rows 0.94 to 0.98; false rows ≤ 0.60 |
+| The reply recommends something | 0.70 | advice 0.80 to 0.95; reports, questions and refusals ≤ 0.61 |
+| The recommendation rests on this premise | 0.85, or 0.50 when the reply names the premise's value | 7 true and 0 false links on 15 labelled pairs |
 
 Measured prompt-hook latency with ten stored facts: 0.33 s for a cached question and about 4 s cold, of which the capture gate takes about one second. The gate is skipped for acknowledgements, question-only messages, generic questions and forget requests. These are small fixture sets, not a benchmark. See [verification](docs/verification.md).
 

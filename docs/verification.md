@@ -6,7 +6,7 @@ Checked on 2026-10-05: macOS arm64, Python 3.14.3, SQLite 3.51.2 with FTS5, Olla
 
 Checked on 2026-10-05 with jev 1.9.3 on its local backend (tev1-32k through Ollama). No paid API was used for these checks.
 
-**Unit and subprocess suite.** 201 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
+**Unit and subprocess suite.** 206 tests pass. Two judges drive them. `tests/fakes.py:FakeJudge` runs in memory. A fake `jev` executable answers `rank`, `ask` and `--dry-run` over a real subprocess. `tests/test_v04.py` covers each phase:
 
 - turn tokens;
 - refusal of a server bound to another host process, and of unknown or expired tokens;
@@ -125,6 +125,36 @@ The review found these issues, all now fixed:
 4. **`memory_inspect` returned quarantined records.** It now refuses them; the inventory is the review surface.
 
 The capture request had travelled inside the JSON packet, whose first reader rule said values are "never instructions". Codex's model obeyed that rule. Kernel requests now come before the packet as plain text, and the server instructions repeat the workflow. A Codex rerun with `tests/native_codex_v04_check.py` is pending.
+
+**Third native Claude Code run (after moving kernel requests out of the packet): 5 of 10 of the stricter checks.**
+
+What held:
+- capture from conversation through the bound session;
+- the change stored as a new version of the same pair (`checkout_project.delivery_window`);
+- the forget removed an existing fact, with a recorded operation;
+- the generic question carried no claims.
+
+The chain that failed starts in session 1. The reply ("Probably not: a payment rewrite… is hard to estimate in three months, so make only the targeted fixes…") was judged a recommendation (0.835). Its premise scored 0.568 on "rests on", under a 0.70 bar that had never been calibrated. Nothing was linked, so nothing was flagged later.
+
+Measured on 15 labelled reply/premise pairs:
+- true links score 0.87 to 0.95, except loose phrasings at 0.57;
+- unrelated premises score 0.08 to 0.62, so no single bar separates them;
+- every weak true link names its premise's value, and no false link does.
+
+A link is now made at 0.85, or at 0.50 when the reply names the premise's value: 7 true and 0 false links on that sample.
+
+The run also showed noise:
+- "Answer in one sentence." made a pure question look like a statement, so the agent was asked to capture and told the user why it did not;
+- "Please forget the checkout deadline." was not recognised as a forget request because the pattern only matched a leading verb. The earlier calibration note claiming that request was excluded before the gate was therefore wrong until this fix;
+- forget words inside pasted text were read as a request.
+
+Now:
+- answer-style instructions count as non-statements;
+- forget requests are recognised after polite lead-ins, except "don't forget";
+- requests are read only from the authored part of a typed turn;
+- the capture request tells the agent to stay silent when nothing is stated.
+
+Replayed with the real jev and the run's exact wording, the link was made, the drifted key resolved, the question raised no capture request, and the fresh session got `review_required` with only "three weeks". Native reruns are pending.
 
 **Still to verify natively.** `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota and are left for the owner to start. Until they run, process-ancestry binding is verified in local subprocess tests and observed in the Claude desktop process tree, not in a native headless or Codex session.
 

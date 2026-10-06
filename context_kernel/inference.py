@@ -11,7 +11,8 @@ saying it is wrong.
 
 import re
 
-from .common import KernelError
+from .common import KernelError, canonical
+from .language import query_terms
 from .judge import JudgeError
 from .turns import mask_secrets
 
@@ -22,8 +23,20 @@ RECOMMENDATION = ("Does `reply` recommend, advise, or decide a course of action 
 RECOMMENDATION_BAR = 0.7
 RESTS_ON = ("Does the recommendation or decision in `query` rest on `candidate` being true, so that if "
             "`candidate` changed the recommendation might need to change?")
-THRESHOLD = 0.7
+# Measured on 15 labelled reply/premise pairs with the local model: advice that rests on a premise
+# scored 0.87-0.95, or 0.57 when phrased loosely ("hard to estimate in three months"); unrelated
+# premises scored 0.08-0.62. No single bar separates them, but every weak true link names the
+# premise's value and no false one does. So: link at STRONG, or at WEAK when the reply names it.
+STRONG = 0.85
+WEAK = 0.5
 REPLY_LIMIT = 4000
+
+
+def mentions(reply, value):
+    """The reply names the premise's value: every word of a short value, or two of a longer one."""
+    terms = [t for t in query_terms(value if isinstance(value, str) else canonical(value)) if len(t) > 1]
+    words = set(query_terms(reply))
+    return bool(terms) and (all(t in words for t in terms) if len(terms) <= 3 else len(set(terms) & words) >= 2)
 
 
 def first_sentence(reply):
@@ -55,7 +68,8 @@ def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
                                    timeout=timeout, question=RESTS_ON)
     except JudgeError as exc:
         return {"calls": 1, "linked": 0, "failure": str(exc)}
-    premises = [(scores.get(n, 0.0), i) for n, i in enumerate(premise_ids) if scores.get(n, 0.0) >= THRESHOLD]
+    premises = [(scores.get(n, 0.0), i) for n, i in enumerate(premise_ids)
+                if scores.get(n, 0.0) >= STRONG or (scores.get(n, 0.0) >= WEAK and mentions(query, current[i]["value"]))]
     if not premises:
         return {"calls": 1, "linked": 0, "scores": {current[i]["entity_key"] + "." + current[i]["predicate"]: round(scores.get(n, 0.0), 3)
                                                      for n, i in enumerate(premise_ids)}}

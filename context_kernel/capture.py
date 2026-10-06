@@ -112,11 +112,16 @@ def related_facts(store, prompt, limit=6):
              "value": (r["value"] if isinstance(r["value"], str) else canonical(r["value"]))[:60]} for _, _, r in scored[:limit]]
 
 
+_ANSWER_STYLE = re.compile(r"^(please\s+)?(answer|reply|respond|explain|keep it|be (brief|short|concise)|in one sentence|"
+                           r"responde|contesta|explica|se breve|en una frase|resumelo|resume)\b", re.I)
+
+
 def only_questions(prompt):
-    """Every authored sentence is a question: nothing is being stated, so the gate is skipped."""
+    """Every authored sentence is a question, or an instruction about how to answer ("Answer in one
+    sentence."): nothing is being stated, so the gate is skipped."""
     authored, _ = segments(prompt)
     sentences = [s.strip() for s in re.split(r"(?<=[.!?\n])\s+", authored) if s.strip()]
-    return bool(sentences) and all(s.endswith("?") for s in sentences)
+    return bool(sentences) and all(s.endswith("?") or _ANSWER_STYLE.match(fold(s)) for s in sentences)
 
 
 def fact_line(entity, predicate, value):

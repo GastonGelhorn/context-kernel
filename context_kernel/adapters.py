@@ -8,7 +8,7 @@ import shutil
 import sys
 
 from .binding import ancestors
-from .capture import describe_results, gate, only_questions, policy as capture_policy, related_facts
+from .capture import describe_results, gate, only_questions, policy as capture_policy, related_facts, segments
 from .common import KernelError, canonical, digest, text, timestamp_offset
 from .inference import infer
 from .language import fold
@@ -95,12 +95,15 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
     turn = open_turn(store, event, client, prompt)
     marker = {"token": turn["token"]}
     flags, messages, notice = [], [], None
+    # Requests are read from what the user typed in this turn: pasted text or tool output that
+    # mentions "forget" is not a request, and only a typed turn can ask for a deletion at all.
+    authored = segments(prompt)[0]
     if do_not_remember(prompt):
         flags.append("do_not_remember")
         marker["capture"] = "off: the user asked not to keep this message"
-    if forget_request(prompt) or undo_request(prompt):
+    if turn["origin"] == "interactive" and (forget_request(authored) or undo_request(authored)):
         flags.append("forget_requested")
-        if undo_request(prompt):
+        if undo_request(authored):
             flags.append("undo_requested")
         marker["privacy"] = ("The user asked to forget something. If they named a fact, call memory_forget with that fact's id "
                              "(from the claims or memory_inventory); memory_undo only takes back the last thing saved. "
@@ -167,9 +170,11 @@ def kernel_requests(marker):
     if isinstance(capture, dict):
         related = " If one of them changes a fact listed in turn.capture.related, pass that fact's id as replaces." \
             if capture.get("related") else ""
-        requests.append(f"The user's message states {capture['facts_stated']} fact(s) worth remembering. Before answering, call "
-                        f"the memory_capture tool with token \"{token}\" and one item per fact (entity, predicate, value)."
-                        + related + " Then answer normally and mention the tool's receipt in one line.")
+        requests.append(f"The user's message appears to state {capture['facts_stated']} fact(s) worth remembering. If it does, "
+                        f"call the memory_capture tool with token \"{token}\" before answering, one item per fact (entity, "
+                        f"predicate, value), using only what the user said." + related +
+                        " If it states nothing worth keeping, do nothing and do not mention this request. When something "
+                        "is saved, add the tool's receipt in one line.")
     if marker.get("pending"):
         requests.append("Facts from an earlier message were not saved yet; memory_capture accepts that message's token "
                         "from turn.pending.")

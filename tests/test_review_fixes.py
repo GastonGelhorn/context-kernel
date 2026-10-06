@@ -104,6 +104,42 @@ class ReviewFixTests(unittest.TestCase):
         self.assertNotIn("friday", authored)
         self.assertIn("friday", quoted)
 
+    # Second native Claude Code run after the request channel (5 of 10)
+
+    def test_a_loosely_phrased_premise_is_linked_when_the_reply_names_it(self):
+        from context_kernel.inference import RESTS_ON, infer
+        self.judge.rank_fn = lambda query, line, question: 0.57 if question == RESTS_ON else 0.1
+        context = self.prompt("We have three months to deliver the checkout project. Should we rewrite its payment module?")
+        token = packet_of(context)["turn"]["token"]
+        self.tool("memory_capture", {"token": token, "facts": [
+            {"entity": "checkout_project", "predicate": "delivery_window", "value": "three months"}]})
+        turn = self.store.turn_by_token(token)
+        named = infer(self.store, self.judge, turn, "Probably not: a rewrite is hard to estimate in three months, so make targeted fixes.")
+        self.assertEqual(named["linked"], 1)
+        unnamed = infer(self.store, self.judge, turn, "Probably not: a rewrite is risky, so make only the targeted fixes checkout needs.")
+        self.assertEqual(unnamed["linked"], 0)
+
+    def test_polite_and_negated_forget_requests(self):
+        from context_kernel.turns import forget_request
+        self.assertTrue(forget_request("Please forget the checkout deadline."))
+        self.assertTrue(forget_request("Can you delete the old deadline?"))
+        self.assertFalse(forget_request("Don't forget my salary when you negotiate."))
+        self.assertFalse(forget_request("No te olvides de mi salario."))
+
+    def test_forget_words_in_pasted_text_are_not_a_request(self):
+        context = self.prompt('look at this <pasted_content id="1">{"prompt": "Please forget the checkout deadline."}</pasted_content id="1">')
+        self.assertNotIn("privacy", packet_of(context)["turn"])
+        self.assertNotIn("forget", context.split("\n", 1)[0] if not context.startswith("{") else "")
+
+    def test_an_answer_style_instruction_is_not_a_statement(self):
+        from context_kernel.capture import only_questions
+        self.assertTrue(only_questions("Should we still go ahead with the plan? Answer in one sentence."))
+        self.assertFalse(only_questions("We have three weeks now. Answer in one sentence."))
+
+    def test_the_capture_request_tells_the_agent_to_stay_quiet_when_nothing_is_stated(self):
+        context = self.prompt("We have three months to deliver checkout.")
+        self.assertIn("do not mention this request", context.split("\n", 1)[0])
+
 
 if __name__ == "__main__":
     unittest.main()
