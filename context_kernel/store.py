@@ -8,7 +8,7 @@ import sqlite3
 from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp, timestamp_offset
 
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS entities(
@@ -66,6 +66,7 @@ CREATE TABLE IF NOT EXISTS turns(
  prompt_digest TEXT NOT NULL, prompt_excerpt TEXT, projection_id TEXT,
  delivered_ids TEXT NOT NULL DEFAULT '[]', captured_ids TEXT NOT NULL DEFAULT '[]',
  gate_count INTEGER NOT NULL DEFAULT 0, flags TEXT NOT NULL DEFAULT '[]', reply_excerpt TEXT, opened_at TEXT NOT NULL, closed_at TEXT,
+ notes TEXT,
  expires_at TEXT NOT NULL, PRIMARY KEY(scope,session_id,turn_key));
 CREATE TABLE IF NOT EXISTS judgments(
  scope TEXT NOT NULL, kind TEXT NOT NULL, question TEXT NOT NULL, model TEXT NOT NULL,
@@ -73,7 +74,7 @@ CREATE TABLE IF NOT EXISTS judgments(
  PRIMARY KEY(scope,kind,question,model,state_digest,candidate_digest));
 CREATE TABLE IF NOT EXISTS captures_log(
  scope TEXT NOT NULL, session_id TEXT NOT NULL, turn_key TEXT, statement_id TEXT,
- outcome TEXT NOT NULL, reason TEXT, recorded_at TEXT NOT NULL);
+ outcome TEXT NOT NULL, reason TEXT, recorded_at TEXT NOT NULL, label TEXT);
 CREATE TABLE IF NOT EXISTS tombstones(
  scope TEXT NOT NULL, entity_key TEXT NOT NULL, predicate TEXT NOT NULL, at TEXT NOT NULL,
  PRIMARY KEY(scope,entity_key,predicate));
@@ -91,6 +92,8 @@ ADDED_COLUMNS = (
     ("relations", "provenance", "TEXT NOT NULL DEFAULT 'declared' CHECK(provenance IN ('declared','inferred'))"),
     ("relations", "recorded_at", "TEXT"),
     ("turns", "reply_excerpt", "TEXT"),
+    ("turns", "notes", "TEXT"),
+    ("captures_log", "label", "TEXT"),
 )
 RELATION_COLUMNS = "id,scope,kind,from_statement,to_statement,from_entity,to_entity"
 
@@ -123,7 +126,7 @@ class Store:
             if os.name == "posix":
                 self.path.chmod(0o600)
         version = self.db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
-        if version and version[0] in {"1", "2", "3"}:
+        if version and version[0] in {"1", "2", "3", "4"}:
             self._migrate(version[0])
             version = (SCHEMA_VERSION,)
         if not version or version[0] != SCHEMA_VERSION:
@@ -673,7 +676,7 @@ class Store:
 
     def update_turn(self, session_id, turn_key, **fields):
         allowed = {"projection_id", "delivered_ids", "captured_ids", "gate_count", "flags", "closed_at", "prompt_excerpt",
-                   "expires_at", "reply_excerpt"}
+                   "expires_at", "reply_excerpt", "notes"}
         if set(fields) - allowed:
             raise KernelError("Unsupported turn fields.")
         assignments = ",".join(f"{name}=?" for name in fields)
@@ -715,7 +718,7 @@ class Store:
                                           AND origin='interactive' AND gate_count > json_array_length(captured_ids)""",
                                        (self.scope, now)).fetchall():
                 for _ in range(row[2]):
-                    self.db.execute("INSERT INTO captures_log VALUES(?,?,?,?,?,?,?)",
+                    self.db.execute("INSERT INTO captures_log(scope,session_id,turn_key,statement_id,outcome,reason,recorded_at) VALUES(?,?,?,?,?,?,?)",
                                     (self.scope, row[0], row[1], None, "missed", "excerpt_expired", now))
             self.db.execute("UPDATE turns SET prompt_excerpt=NULL WHERE scope=? AND expires_at<=?", (self.scope, now))
             self.db.execute("DELETE FROM turns WHERE scope=? AND expires_at<=? AND opened_at<=?",
@@ -739,10 +742,11 @@ class Store:
                 self.db.execute("""DELETE FROM judgments WHERE rowid IN (SELECT rowid FROM judgments WHERE scope=?
                                    ORDER BY judged_at LIMIT ?)""", (self.scope, count - 20000))
 
-    def log_capture(self, session_id, turn_key, outcome, statement_id=None, reason=None):
+    def log_capture(self, session_id, turn_key, outcome, statement_id=None, reason=None, label=None):
         with self.db:
-            self.db.execute("INSERT INTO captures_log VALUES(?,?,?,?,?,?,?)",
-                            (self.scope, session_id, turn_key, statement_id, outcome, reason, self.clock()))
+            self.db.execute("""INSERT INTO captures_log(scope,session_id,turn_key,statement_id,outcome,reason,recorded_at,label)
+                               VALUES(?,?,?,?,?,?,?,?)""",
+                            (self.scope, session_id, turn_key, statement_id, outcome, reason, self.clock(), label))
 
     def capture_counts(self, session_id, turn_key):
         def count(where, *args):
@@ -756,7 +760,7 @@ class Store:
         return self.db.execute("SELECT count(*) FROM proposals WHERE scope=? AND status='pending'", (self.scope,)).fetchone()[0]
 
     def captures_for_turn(self, session_id, turn_key):
-        return [dict(r) for r in self.db.execute("""SELECT statement_id, outcome, reason FROM captures_log
+        return [dict(r) for r in self.db.execute("""SELECT statement_id, outcome, reason, label FROM captures_log
                     WHERE scope=? AND session_id=? AND turn_key=? ORDER BY recorded_at""", (self.scope, session_id, turn_key))]
 
     def last_capture(self, session_id):

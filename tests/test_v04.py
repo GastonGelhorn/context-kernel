@@ -175,6 +175,22 @@ class AutonomyTests(unittest.TestCase):
         packet, _ = self.prompt("I remember Ana said the budget is 20k")
         self.assertEqual(self.capture(packet, ("project", "budget", "20k"))[0]["reason"], "not_affirmed")
 
+    def test_the_turn_says_what_was_not_saved_and_keeps_it_for_a_band(self):
+        from context_kernel.adapters import activity
+        self.judge.ask_fn = answers(affirmed=0.1)
+        packet, event = self.prompt("crea el repo y súbelo privado")
+        self.capture(packet, ("project", "visibility", "privado"))
+        line = self.stop(event).get("systemMessage", "")
+        self.assertIn("not saved project.visibility (not read as something you stated)", line)
+        self.assertNotIn("undo", line)
+        self.judge.ask_fn = answers()
+        packet, event = self.prompt("Mi manager es Ana")
+        saved = self.capture(packet, ("user", "manager", "Ana"))[0]
+        self.stop(event)
+        band = activity(self.store, "s1")
+        self.assertEqual((band["undo"], band["pending"]), ([saved["id"]], 0))
+        self.assertTrue(band["line"].startswith("Memory: saved user.manager."))
+
     def test_do_not_remember_stores_nothing_not_even_in_quarantine(self):
         packet, event = self.prompt("No lo guardes: mi salario es 50k")
         self.assertIn("off", packet["turn"]["capture"])

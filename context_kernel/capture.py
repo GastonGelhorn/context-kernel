@@ -344,7 +344,7 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
     resolved_from = None
 
     def done(status, reason=None, statement_id=None, **extra):
-        store.log_capture(session, turn_key, status, statement_id, reason)
+        store.log_capture(session, turn_key, status, statement_id, reason, label=f"{entity}.{predicate}")
         result = {"status": status, "reason": reason, "id": statement_id, "entity": entity, "predicate": predicate}
         return result | ({"resolved_from": resolved_from} if resolved_from else {}) | extra
 
@@ -420,8 +420,13 @@ def describe_results(results):
     """One line for the user: what was stored, what is waiting, what was set aside."""
     saved = [f"{r['entity']}.{r['predicate']}" + (f" (was {_short(r['previous'])})" if "previous" in r else "")
              for r in results if r["status"] == "captured"]
-    held = [f"{r['entity']}.{r['predicate']}" for r in results if r["status"] == "quarantined"]
+    held = [f"{r['entity']}.{r['predicate']}" + (f" ({WHY[r.get('reason')]})" if r.get("reason") in WHY else "")
+            for r in results if r["status"] == "quarantined"]
     asks = [f"{r['entity']}.{r['predicate']}" for r in results if r["status"] == "needs_confirmation"]
+    # What was set aside is said too: a fact the user stated that silently goes nowhere looks like
+    # memory that does not work. Reasons the user chose (do not remember) are not repeated back.
+    dropped = [f"{r['entity']}.{r['predicate']}" + (f" ({WHY[r.get('reason')]})" if r.get("reason") in WHY else "")
+               for r in results if r["status"] == "rejected" and r.get("entity") and r.get("reason") != "do_not_remember"]
     parts = []
     if saved:
         parts.append("saved " + ", ".join(saved))
@@ -429,4 +434,17 @@ def describe_results(results):
         parts.append("held for review " + ", ".join(held))
     if asks:
         parts.append("differs from a confirmed value, needs a yes: " + ", ".join(asks))
-    return ("Memory: " + "; ".join(parts) + ". Say \"undo\" to take it back.") if parts else ""
+    if dropped:
+        parts.append("not saved " + ", ".join(dropped))
+    if not parts:
+        return ""
+    tail = " Say \"undo\" to take it back." if saved or held else ""
+    return "Memory: " + "; ".join(parts) + "." + tail
+
+
+# Why something was held or not saved, in words a person can act on.
+WHY = {"not_affirmed": "not read as something you stated", "uncertain": "sounded unsure",
+       "quoted_source": "came from pasted text", "origin_unverified": "not typed by you",
+       "category_disabled": "this kind is off for the scope", "forgotten": "you asked to forget it",
+       "judge_unavailable": "jev did not answer", "cap": "too many in one turn", "expired": "too late for that message",
+       "replaces_mismatch": "named the wrong fact to replace", "unknown_target": "named a fact that does not exist"}

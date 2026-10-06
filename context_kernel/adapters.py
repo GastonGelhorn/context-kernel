@@ -238,7 +238,9 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
         store.update_turn(session, turn["turn_key"], gate_count=0, prompt_excerpt=None, flags=turn["flags"] + ["no_tools"])
         turn = store.turn(session, turn["turn_key"])
         missing = 0
-    if tools and missing > 0 and not turn["captured_ids"] and turn["origin"] == "interactive" \
+    # A capture the kernel refused is an answer, not a miss: asking again would get the same refusal.
+    attempted = bool(store.captures_for_turn(session, turn["turn_key"]))
+    if tools and missing > 0 and not turn["captured_ids"] and not attempted and turn["origin"] == "interactive" \
             and "gate_confident" in turn["flags"] and "capture_nudged" not in turn["flags"]:
         store.update_turn(session, turn["turn_key"], flags=turn["flags"] + ["capture_nudged"],
                           reply_excerpt=mask_secrets(reply)[:4000])
@@ -252,14 +254,18 @@ def _report(store, judge, deadline, turn, reply, nudged=False):
     rows = {r["id"]: r for r in store.records(history=True)}
     described = [dict(status=r["outcome"], entity=rows[r["statement_id"]]["entity_key"], predicate=rows[r["statement_id"]]["predicate"])
                  for r in results if r["statement_id"] in rows]
+    # What was not saved, by the label it was proposed under (no statement exists for it).
+    described += [dict(status="rejected", reason=r["reason"], entity=r["label"].split(".", 1)[0], predicate=r["label"].split(".", 1)[1])
+                  for r in results if r["outcome"] == "rejected" and r.get("label") and "." in r["label"]]
     described += [dict(status="needs_confirmation", entity=p["payload"].get("entity") or "", predicate=p["payload"].get("predicate") or "a confirmed fact")
                   for p in store.proposals() if p["status"] == "pending" and p["recorded_at"] >= turn["opened_at"]]
     line = describe_results(described)
     if line:
         notes.append(line)
     missing = turn["gate_count"] - len(turn["captured_ids"])
-    if missing > 0 and not turn["captured_ids"] and turn["origin"] == "interactive":
-        # The gate's count is an estimate; the user hears about it only when nothing was saved.
+    if missing > 0 and not turn["captured_ids"] and not results and turn["origin"] == "interactive":
+        # The gate's count is an estimate; the user hears about it only when nothing was even tried
+        # (a refusal is already listed above, with its reason).
         notes.append("Memory: something in your message looked worth remembering but was not saved.")
     if missing <= 0 and turn["prompt_excerpt"]:
         # Nothing left to validate against this message: its excerpt goes now, not at expiry.
@@ -274,7 +280,24 @@ def _report(store, judge, deadline, turn, reply, nudged=False):
                          policy["allow_remote_judge"], deadline)
         if inferred.get("linked"):
             notes.append(f"Memory: linked the recommendation to {inferred['linked']} fact(s) it relied on.")
+    if notes:
+        # Kept on the turn so a surface the hook's message does not reach (the desktop app) can show it.
+        store.update_turn(turn["session_id"], turn["turn_key"], notes=" ".join(notes))
     return {"systemMessage": " ".join(notes)} if notes else {}
+
+
+def activity(store, session_id):
+    """What memory did in this session's latest closed turn, for a status band: the line the Stop
+    hook said, what that turn saved (so it can be undone), and what waits for the user."""
+    turn = next((t for t in store.recent_turns(session_id, 4) if t["closed_at"]), None)
+    saved = [r["statement_id"] for r in store.captures_for_turn(session_id, turn["turn_key"])
+             if r["outcome"] in {"captured", "quarantined"} and r["statement_id"]] if turn else []
+    current = {r["id"] for r in store.records(quarantined=True)}
+    return {"turn": turn["turn_key"] if turn else None, "closed_at": turn["closed_at"] if turn else None,
+            "line": (turn.get("notes") or "") if turn else "",
+            "undo": [i for i in saved if i in current],
+            "pending": sum(1 for p in store.proposals() if p["status"] == "pending"),
+            "held": sum(1 for r in store.records(quarantined=True) if r["trust"] == "quarantined")}
 
 
 def session_start_response(event, workspace, store, client="claude"):
