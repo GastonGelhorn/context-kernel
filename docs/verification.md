@@ -281,6 +281,12 @@ The unit tests cover each period in both languages, the exclusions (starts, habi
 
 The two facts in the owner's memory were closed with `memory close ID --outcome done`. The installed v0.8, reading the same database, lists the same two current facts as v0.9 (the manager and the release approver).
 
+v0.9.1 fixes what that close showed. Closing the next step returned `review_needed: []`, yet the next prompt's packet flagged an inferred recommendation that rested on it. The close listed dependents through `Store.dependents`, which returns evidence only and skips inferred recommendations, the kind that most often rests on a step. It now lists both. That recommendation was itself a misreading, recorded on 2026-10-06 before v0.8: a report ("Lo guardé en dos sitios…") taken for advice.
+
+### Unattended in the compatibility matrix
+
+The weekly task's first run stalled. Its Bash call asked for permission inside the task's own session, and the app shows permission banners only while it is in the background. Nobody saw it, and the request expired after 58 minutes without running anything. The project's local settings now allow exactly `python3.14 -m tests.compat_matrix …`, and the task runs that command as given, in the background. The next run started without a prompt and passed 10 of 10, 9 of 9 and 5 of 5 on Claude Code 2.1.287 with kernel 0.9.0.
+
 ## v0.8: trust and scale
 
 Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`), on macOS arm64 with 48 GB, with no paid API. An external review asked for five things: a public, reproducible benchmark; fewer false memories; less dependence on host behaviour, watched by a compatibility matrix; latency handled as part of the product; and a narrower story for jevmate. Cues, safe mode, warm-up and the metrics below answer it.

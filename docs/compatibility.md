@@ -4,6 +4,9 @@ End-to-end checks run against the real clients (`python3 -m tests.compat_matrix`
 
 | When (UTC) | Kernel | jev | Check | Client | Result | Failed |
 | --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-07 08:53 | 0.9.0 | jev 1.9.3 | claude-v04 | 2.1.287 (Claude Code) | pass 10/10 |  |
+| 2026-10-07 08:53 | 0.9.0 | jev 1.9.3 | claude-v06 | 2.1.287 (Claude Code) | pass 9/9 |  |
+| 2026-10-07 08:53 | 0.9.0 | jev 1.9.3 | claude-v09 | 2.1.287 (Claude Code) | pass 5/5 |  |
 | 2026-10-07 03:28 | 0.8.0 | jev 1.9.3 | claude-v04 | 2.1.287 (Claude Code) | pass 10/10 |  |
 | 2026-10-07 03:28 | 0.8.0 | jev 1.9.3 | claude-v06 | 2.1.287 (Claude Code) | pass 9/9 |  |
 | 2026-10-07 02:19 | 0.8.0 | jev 1.9.3 | claude-v04 | 2.1.287 (Claude Code) | pass 10/10 |  |

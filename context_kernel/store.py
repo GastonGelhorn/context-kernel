@@ -537,8 +537,11 @@ class Store:
                 raise KernelError("A close falls after the statement started and not in the future.")
             self.db.execute("UPDATE statements SET valid_until=? WHERE scope=? AND id=?", (end, self.scope, statement_id))
             self._event("close", {"statement_id": statement_id, "outcome": outcome, "at": end, "until": row["valid_until"]})
+        # Inferred recommendations count too: they are what most often rests on a step (`dependents` lists evidence only).
+        review = [r["id"] for r in self.records(history=True) if r["effective_state"] == "active"
+                  and any(a["id"] == statement_id for a in r["assumptions"])]
         return {"status": "closed", "id": statement_id, "entity": row["entity_key"], "predicate": row["predicate"],
-                "outcome": outcome, "closed_at": end, "review_needed": [r["id"] for r in self.dependents(statement_id)]}
+                "outcome": outcome, "closed_at": end, "review_needed": review}
 
     def reopen(self, statement_id):
         """Take back a close: the statement is current again, with the end it had before (if any)."""

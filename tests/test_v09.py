@@ -132,10 +132,15 @@ class Close(Base):
         freeze = self.remember("team", "constraint", "Hiring freeze until further notice")
         plan = self.remember("team", "plan", "Cover the launch with the current team")
         self.store.depend(plan, freeze)
+        advice = self.store.remember("team", "recommendation", "Do not hire for the launch", "Do not hire for the launch",
+                                     assertion_kind="inference")["id"]
+        self.store.depend(advice, freeze, provenance="inferred")
         self.now = timestamp_offset(self.now, 60)
         closed = self.store.conclude(freeze, "ended")
-        self.assertEqual(closed["review_needed"], [plan])
+        # An inferred recommendation is listed too: in real use it is what most often rests on a step.
+        self.assertEqual(sorted(closed["review_needed"]), sorted([plan, advice]))
         self.assertTrue(self.store.inspect(plan)["stale"])
+        self.assertTrue(self.store.inspect(advice)["stale"])
 
     def test_only_a_current_fact_closes_and_never_in_the_future(self):
         fact = self.remember("billing", "next_step", "Migrate billing to Stripe")
