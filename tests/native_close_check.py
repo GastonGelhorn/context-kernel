@@ -14,12 +14,12 @@ from pathlib import Path
 import shutil
 import subprocess
 
-from context_kernel.adapters import configuration
-from context_kernel.common import KernelError, canonical
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.store import Store
 from tests.native_claude_check import MEMORY_TOOLS, invoke
 
-TOOLS = MEMORY_TOOLS + ",mcp__context-kernel__memory_close"
+TOOLS = MEMORY_TOOLS + ",mcp__shelflife-context__memory_close"
 PHASES = [
     ("plan_stated", "Our next step for the billing service is migrating it to Stripe."),
     ("period_stated", "Decidimos publicar la v0.3 del portal esta semana."),

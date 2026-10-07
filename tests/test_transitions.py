@@ -2,11 +2,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from context_kernel.adapters import propose_command
-from context_kernel.common import KernelError, canonical
-from context_kernel.compiler import Compiler
-from context_kernel.demo import histories
-from context_kernel.store import Store
+from shelflife_context.adapters import propose_command
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.compiler import Compiler
+from shelflife_context.demo import histories
+from shelflife_context.store import Store
 
 
 class TransitionTests(unittest.TestCase):

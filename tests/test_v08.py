@@ -8,18 +8,18 @@ import os
 import tempfile
 import unittest
 
-from context_kernel.adapters import hook_response, packet_of, session_start_response, stop_response
-from context_kernel.budget import Budget
-from context_kernel.calibration import CANARY, check, judge_state
-from context_kernel.capture import clean_cues, locate_quote, task_clause
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.inference import stale_recommendations
-from context_kernel.judge import model_key
-from context_kernel.mcp import Server
-from context_kernel.planner import RESERVE_SECONDS, affordable_pairs, select
-from context_kernel.repository import learn
-from context_kernel.store import Store
+from shelflife_context.adapters import hook_response, packet_of, session_start_response, stop_response
+from shelflife_context.budget import Budget
+from shelflife_context.calibration import CANARY, check, judge_state
+from shelflife_context.capture import clean_cues, locate_quote, task_clause
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.inference import stale_recommendations
+from shelflife_context.judge import model_key
+from shelflife_context.mcp import Server
+from shelflife_context.planner import RESERVE_SECONDS, affordable_pairs, select
+from shelflife_context.repository import learn
+from shelflife_context.store import Store
 from tests.fakes import FakeJudge, answers
 
 
@@ -436,7 +436,7 @@ class OwnerCommands(unittest.TestCase):
     def run_cli(self, *argv):
         import contextlib
         import io
-        from context_kernel import cli
+        from shelflife_context import cli
         out, err = io.StringIO(), io.StringIO()
         with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
             code = cli.main(["--db", self.db, "--scope", "work", *argv])

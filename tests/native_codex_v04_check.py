@@ -22,9 +22,9 @@ import shutil
 import subprocess
 import time
 
-from context_kernel.adapters import configuration
-from context_kernel.common import KernelError, canonical
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.store import Store
 from tests.native_claude_check import PHASES, evaluate, snapshot
 
 
@@ -51,7 +51,7 @@ def prepare(workspace, jev_command):
     (workspace / ".codex" / "config.toml").write_text(server["content"])
     Store(database, scope="pilot", create=True).close()
     return {"prepared": str(workspace), "next": f"Open Codex in {workspace}, trust the folder, review and trust the three "
-                                                "context-kernel hooks in its prompt or /hooks, then quit and run --workspace."}
+                                                "shelflife-context hooks in its prompt or /hooks, then quit and run --workspace."}
 
 
 def trust_state(workspace, home=None):
@@ -75,7 +75,7 @@ def invoke(codex, workspace, prompt, model=None, disable=()):
     if model:
         command.extend(["--model", model])
     for name in APPROVED:
-        command.extend(["-c", f'mcp_servers.context-kernel.tools.{name}.approval_mode="approve"'])
+        command.extend(["-c", f'mcp_servers.shelflife-context.tools.{name}.approval_mode="approve"'])
     for name in disable:
         command.extend(["-c", f"mcp_servers.{name}.enabled=false"])
     command.append(prompt)
@@ -109,7 +109,7 @@ def run(codex, workspace, model=None, disable=()):
     trust = trust_state(workspace)
     if not trust["folder_trusted"] or not all(trust["hooks_reviewed"].values()):
         raise KernelError(f"Codex has not recorded trust for this pilot yet ({canonical(trust)}). Open Codex once in "
-                          f"{workspace}, choose to trust the folder, review and trust the three context-kernel hooks, "
+                          f"{workspace}, choose to trust the folder, review and trust the three shelflife-context hooks, "
                           "quit, and run again.")
     status = subprocess.run([codex, "login", "status"], capture_output=True, text=True, timeout=15, env=environment())
     if status.returncode or "ChatGPT" not in status.stdout + status.stderr:

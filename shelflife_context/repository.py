@@ -595,7 +595,7 @@ def learn(store, judge, root, deadline=None, session=None, if_changed=False):
 def learn_command(db, scope, workspace, session=None, jev=None):
     """The repository pass alone, as a command line and environment for `start_background`."""
     package = str(Path(__file__).resolve().parent.parent)
-    argv = [sys.executable, "-m", "context_kernel", "--db", str(db), "--scope", scope, "learn", "--workspace", str(workspace),
+    argv = [sys.executable, "-m", "shelflife_context", "--db", str(db), "--scope", scope, "learn", "--workspace", str(workspace),
             "--if-changed"]
     argv += (["--session", session] if session else []) + (["--jev-command", jev] if jev else [])
     path = os.environ.get("PYTHONPATH")
@@ -606,7 +606,7 @@ def warm_command(db, scope, workspace=None, session=None, jev=None, learn_reposi
     """The session-start background pass (`memory warm`): load the local model, check the judge's
     calibration when needed, and read the repository's decisions when `learn_repository`."""
     package = str(Path(__file__).resolve().parent.parent)
-    argv = [sys.executable, "-m", "context_kernel", "--db", str(db), "--scope", scope, "warm"]
+    argv = [sys.executable, "-m", "shelflife_context", "--db", str(db), "--scope", scope, "warm"]
     argv += (["--workspace", str(workspace)] if workspace else []) + (["--learn"] if learn_repository else [])
     argv += (["--session", session] if session else []) + (["--jev-command", jev] if jev else [])
     path = os.environ.get("PYTHONPATH")

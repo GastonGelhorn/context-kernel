@@ -4,18 +4,18 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from context_kernel.adapters import packet_of
+from shelflife_context.adapters import packet_of
 from unittest.mock import patch
 
-from context_kernel.adapters import hook_response, propose_command
-from context_kernel.cli import main
-from context_kernel.common import KernelError, canonical, quantity
-from context_kernel.compiler import Compiler
-from context_kernel.mcp import Server
-from context_kernel.planner import jev_plan
+from shelflife_context.adapters import hook_response, propose_command
+from shelflife_context.cli import main
+from shelflife_context.common import KernelError, canonical, quantity
+from shelflife_context.compiler import Compiler
+from shelflife_context.mcp import Server
+from shelflife_context.planner import jev_plan
 from tests.fakes import FakeJudge
-from context_kernel.store import Store
-from context_kernel.grounding import currency_review
+from shelflife_context.store import Store
+from shelflife_context.grounding import currency_review
 
 
 class ContextV02Tests(unittest.TestCase):
@@ -154,7 +154,7 @@ class ContextV02Tests(unittest.TestCase):
         self.assertEqual({r["value"] for r in self.store.records() if r["predicate"] == "ownership_status"}, {"owned"})
 
     def test_spanish_privacy_request_is_never_falsely_acknowledged(self):
-        from context_kernel.adapters import stop_response
+        from shelflife_context.adapters import stop_response
         event = {"cwd": str(self.workspace), "prompt": "Olvida: user.salary", "session_id": "s1", "prompt_id": "p1"}
         response, _ = hook_response(event, self.workspace, self.store, self.compiler)
         self.assertIn("memory_forget", packet_of(response["hookSpecificOutput"]["additionalContext"])["turn"]["privacy"])
@@ -286,7 +286,7 @@ class ContextV02Tests(unittest.TestCase):
 
     def test_generic_guard_does_not_build_an_unused_fts_index(self):
         self.add("user", "salary", 42000)
-        with patch("context_kernel.compiler.lexical_scores", side_effect=AssertionError("No index needed")):
+        with patch("shelflife_context.compiler.lexical_scores", side_effect=AssertionError("No index needed")):
             self.assertEqual(self.compiler.project("Explica SQLite").content, "")
 
     def test_work_on_a_named_project_does_not_select_personal_salary(self):

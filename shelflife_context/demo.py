@@ -42,7 +42,7 @@ def stale_reader_check(answer):
 
 
 def run():
-    with tempfile.TemporaryDirectory(prefix="context-kernel-demo-") as directory:
+    with tempfile.TemporaryDirectory(prefix="shelflife-context-demo-") as directory:
         store = Store(Path(directory) / "memory.sqlite", create=True, clock=lambda: timestamp("2026-10-05T12:00:00Z"))
         try:
             compiler = Compiler(store)

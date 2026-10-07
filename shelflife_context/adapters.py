@@ -271,7 +271,7 @@ def with_requests(content, marker):
     requests = kernel_requests(marker)
     if not requests:
         return content
-    return "Context Kernel, the memory system the user installed, asks: " + " ".join(requests) + "\n" + content
+    return "Shelflife, the memory system the user installed, asks: " + " ".join(requests) + "\n" + content
 
 
 def packet_of(context):
@@ -306,7 +306,7 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
             return {}
         store.update_turn(session, turn["turn_key"], flags=turn["flags"] + ["nudge_done"])
         turn = store.turn(session, turn["turn_key"])
-        return _report(store, judge, deadline, turn, turn["reply_excerpt"] or reply, nudged=True)
+        return _keep_brief(store, workspace, _report(store, judge, deadline, turn, turn["reply_excerpt"] or reply, nudged=True))
     turn = close_turn(store, event)
     if not turn or turn.get("already_closed"):
         return {}  # nothing open, or another install of the hooks already reported this turn
@@ -324,7 +324,18 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
         store.update_turn(session, turn["turn_key"], flags=turn["flags"] + ["capture_nudged"],
                           reply_excerpt=mask_secrets(reply)[:4000])
         return {"decision": "block", "reason": nudge_reason(turn)}
-    return _report(store, judge, deadline, turn, reply)
+    return _keep_brief(store, workspace, _report(store, judge, deadline, turn, reply))
+
+
+def _keep_brief(store, workspace, response):
+    """Agents without hooks read AGENTS.md: after a turn, the repository's brief follows memory. By path, no
+    git, and written only when its text changed; a failure never costs the turn its report."""
+    try:
+        from .brief import refresh
+        refresh(store, workspace)
+    except Exception:
+        pass
+    return response
 
 
 def _report(store, judge, deadline, turn, reply, nudged=False):
@@ -433,7 +444,7 @@ def configuration(client, workspace, db, scope, python=None, mode="hook", propos
     root = str(Path(workspace).resolve())
     checkout = str(Path(__file__).resolve().parent.parent)
     executable = python or sys.executable
-    args = ["-m", "context_kernel", "--db", str(Path(db).resolve()), "--scope", scope]
+    args = ["-m", "shelflife_context", "--db", str(Path(db).resolve()), "--scope", scope]
     judge_options = []
     if strategy == "jev" or mode == "hook":
         try:
@@ -442,14 +453,21 @@ def configuration(client, workspace, db, scope, python=None, mode="hook", propos
             if strategy == "jev":
                 raise
     strategy_options = (["--strategy", strategy] if strategy != "rules" else []) + judge_options
+    if client == "generic":
+        # Any MCP client without hooks: reads, captures held for review, and the repository's AGENTS.md brief.
+        server = {"command": executable, "args": args + ["serve", "--hookless", "--workspace", root, "--client", "generic"]
+                  + strategy_options, "env": {"PYTHONPATH": checkout}}
+        return {"destination": "the agent's MCP settings (most take this mcpServers JSON)",
+                "config": {"mcpServers": {"shelflife-context": server}},
+                "next": f"memory --db {Path(db).resolve()} --scope {scope} brief --workspace {root} --on"}
     if mode == "mcp" or client == "antigravity":
         server = {"command": executable, "args": args + ["serve"] + strategy_options, "env": {"PYTHONPATH": checkout}}
         if client == "codex":
-            toml = "[mcp_servers.context-kernel]\ncommand = " + json.dumps(executable) + "\nargs = " + json.dumps(server["args"]) + "\n"
-            toml += "\n[mcp_servers.context-kernel.env]\nPYTHONPATH = " + json.dumps(checkout) + "\n"
+            toml = "[mcp_servers.shelflife-context]\ncommand = " + json.dumps(executable) + "\nargs = " + json.dumps(server["args"]) + "\n"
+            toml += "\n[mcp_servers.shelflife-context.env]\nPYTHONPATH = " + json.dumps(checkout) + "\n"
             return {"destination": ".codex/config.toml", "content": toml}
         return {"destination": ".mcp.json" if client == "claude" else ".agents/mcp_config.json",
-                "config": {"mcpServers": {"context-kernel": server}}}
+                "config": {"mcpServers": {"shelflife-context": server}}}
 
     def command(event, extra=()):
         return shlex.join(["env", "PYTHONPATH=" + checkout, executable] + args +

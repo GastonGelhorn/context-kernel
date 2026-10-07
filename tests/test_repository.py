@@ -6,13 +6,13 @@ import subprocess
 import tempfile
 import unittest
 
-from context_kernel.adapters import session_start_response, stop_response
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.inference import stale_recommendations
-from context_kernel.repository import (COMMIT_BAR, DECISION_COMMIT, REPLACES, decision_language, inside_repository,
+from shelflife_context.adapters import session_start_response, stop_response
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.inference import stale_recommendations
+from shelflife_context.repository import (COMMIT_BAR, DECISION_COMMIT, REPLACES, decision_language, inside_repository,
                                        learn, parse_record, record_files, root_of, routine, signature)
-from context_kernel.store import Store
+from shelflife_context.store import Store
 from tests.fakes import FakeJudge
 
 
@@ -257,7 +257,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertTrue(history[advice]["stale"])
 
     def test_an_older_decision_learned_late_is_ended_by_the_later_one(self):
-        from context_kernel import repository
+        from shelflife_context import repository
         self.commit("Use SQLite for the job queue")
         self.commit("Use Redis for the job queue", date="2026-10-02T10:00:00+00:00")
         limit, repository.JUDGED_PER_PASS = repository.JUDGED_PER_PASS, 1
@@ -303,7 +303,7 @@ class RepositoryTests(unittest.TestCase):
         self.assertEqual(self.facts(), {})
 
     def test_chat_captures_do_not_drift_onto_a_repository_record(self):
-        from context_kernel.capture import _resolve
+        from shelflife_context.capture import _resolve
         self.record(1, "Use SQLite for the queue")
         self.commit("Initial")
         self.learn()
@@ -347,7 +347,7 @@ class RepositoryTests(unittest.TestCase):
         self.session_start(calls=[])
         learn(self.store, self.judge, str(self.root), session="s1")
         stop = {"cwd": str(self.root), "hook_event_name": "Stop", "session_id": "s1", "last_assistant_message": ""}
-        from context_kernel.adapters import hook_response
+        from shelflife_context.adapters import hook_response
         hook_response({"cwd": str(self.root), "prompt": "Explain SQLite", "session_id": "s1", "prompt_id": "p1"},
                       self.root, self.store, Compiler(self.store))
         self.assertIn("learned 1 decision(s) from the repository", stop_response(stop, self.root, self.store)["systemMessage"])

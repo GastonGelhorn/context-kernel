@@ -2,11 +2,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from context_kernel.common import KernelError, canonical, timestamp
-from context_kernel.compiler import Compiler
-from context_kernel.demo import run
-from context_kernel.planner import Need, NeedPlan
-from context_kernel.store import Store
+from shelflife_context.common import KernelError, canonical, timestamp
+from shelflife_context.compiler import Compiler
+from shelflife_context.demo import run
+from shelflife_context.planner import Need, NeedPlan
+from shelflife_context.store import Store
 
 
 class RegressionTests(unittest.TestCase):

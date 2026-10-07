@@ -1,8 +1,8 @@
-# Context Kernel
+# Shelflife
 
 Durable context for coding agents that tracks when earlier advice goes stale. You keep it up to date just by talking: it remembers what you tell the agent and what your repository's decision records say, notices when you change your mind or finish something, and when a fact a recommendation rested on changes, it tells the agent that recommendation needs another look. The memory is the mechanism; not building on assumptions that no longer hold is the point.
 
-The Python core uses only the standard library (SQLite with FTS5). It plugs into Claude Code and Codex through their own hooks and a local MCP server. Automatic capture needs two things besides your agent: [jev](https://github.com/GastonGelhorn/jevmate) and a backend for it. Your agent does the extraction; jev makes the small classification judgments (is this worth keeping, is it relevant to this question, did that recommendation depend on it) on a local model by default. No additional generative model is involved. Without jev, reading memory keeps working and nothing new is saved.
+The Python core uses only the standard library (SQLite with FTS5). It plugs into Claude Code and Codex through their own hooks and a local MCP server, and into agents without hooks through `AGENTS.md` and MCP ([how](#agents-without-hooks)). Automatic capture needs two things besides your agent: [jev](https://github.com/GastonGelhorn/jevmate) and a backend for it. Your agent does the extraction; jev makes the small classification judgments (is this worth keeping, is it relevant to this question, did that recommendation depend on it) on a local model by default. No additional generative model is involved. Without jev, reading memory keeps working and nothing new is saved.
 
 ## An example
 
@@ -51,6 +51,15 @@ Ask "you don't need to keep that in mind every time" to take one off the list, a
 Plans finish. When you say a stored step is done ("we shipped the billing migration"), cancelled ("al final no vamos a Lisboa") or over ("the hiring freeze is over"), the kernel asks the agent to close it with `memory_close`, and the line after the turn says so ("Memory: closed billing_service.next_step (done)."). A closed fact stays in the history but is no longer handed to the agent, and anything that rested on it is flagged for review. Unlike a forget, it isn't counted as a memory mistake, because it was right. jev checks your words against that fact first: on 35 labelled messages it accepted 16 of 19 real closes (17 in a second run) and none of the 16 that weren't ("we're halfway through the migration", "¿ya está publicada la v0.3?"). `memory close ID` and `memory reopen ID` do the same by hand.
 
 A fact stated with a relative period ends with that period on its own. "Decidimos publicar la v0.3 esta semana" is kept until Sunday, and the receipt says so ("Memory: saved portal.release_v0_3 until 2026-10-11."). The period has to be in the fact and in your own words. Dates are values and never end a fact, and a start ("desde mañana"), a habit ("los viernes") or an idiom ("hoy en día") isn't a period. Today, tomorrow, this or next week, month and year, and a named weekday are understood in English and Spanish; "next Friday" is read as the later of the two Fridays it can mean, so nothing ends early.
+
+## Agents without hooks
+
+Hooks are what let Shelflife put memory into every prompt and check what the agent saves against your own words, and not every agent has them. Many editors and agents only read instruction files (`AGENTS.md`) and talk to MCP servers. Cloud and CI agents work on a clone of the repository, far from your memory. An organization can turn hooks off, and a subagent gets its task from the main agent, not from you. Two things cover them, and you can use either or both:
+
+- **The brief.** `memory brief --workspace . --on` keeps a section of the repository's `AGENTS.md`, the file most agents read on their own, with what memory holds about the project: the current facts with their source and end date, what changed lately, the advice that rested on something that changed (never the old advice itself), and what was closed. It's rewritten only when that changes, so it adds no commits of its own, and it stays under about 3 KB. Only facts about the project and its parts go in: nothing about people, and nothing held for review. It's opt-in per repository because `AGENTS.md` is usually committed and shared; `--off` removes the section, and the file too if Shelflife created it.
+- **A server for agents without hooks.** `memory adapter generic --workspace .` prints an MCP server configuration that any MCP client takes. The agent can read memory and save what you tell it, but since nothing records your message, what it saves is held for your review until you confirm it (`memory confirm ID`, or in an agent with hooks). Forgetting, closing and changing facts stay with you. Its reads also keep the brief current.
+
+In a native check, Claude Code with no hooks at all, reading only `AGENTS.md` and this server, answered "Who signs off releases here, and how long do we have for checkout?" with the current approver and "three weeks, down from three months, so any advice from earlier today that assumed three months needs another look", and held "our staging database is Postgres 16" for review instead of saving it.
 
 ## Does it help? Measured
 
@@ -108,11 +117,11 @@ Install jevmate and the kernel from the same marketplace, then run the setup com
 ```text
 /plugin marketplace add GastonGelhorn/jevmate
 /plugin install jevmate@gastongelhorn
-/plugin install context-kernel@gastongelhorn
-/context-kernel:setup
+/plugin install shelflife-context@gastongelhorn
+/shelflife-context:setup
 ```
 
-The plugin brings its own hooks and MCP server, so there's nothing to copy into your projects. It asks for a scope, a database and a selection mode when you install it, and you can change those later in the plugin's settings. `/context-kernel:setup` checks the install and lets you pick the judge: jev on a local Ollama model, which is free and keeps everything on your machine, or jev's paid hosted service, which is faster but sends your memory text out, so the scope has to allow it.
+The plugin brings its own hooks and MCP server, so there's nothing to copy into your projects. It asks for a scope, a database and a selection mode when you install it, and you can change those later in the plugin's settings. `/shelflife-context:setup` checks the install and lets you pick the judge: jev on a local Ollama model, which is free and keeps everything on your machine, or jev's paid hosted service, which is faster but sends your memory text out, so the scope has to allow it.
 
 After each turn, a line above the prompt tells you what memory saved, held for review or didn't save, with an undo button. It's meant to show up in the desktop app too, which doesn't display hook messages. Its configuration is validated, but nobody has watched it in an interactive session yet; until then, the receipt in the agent's reply ("Memory: saved …") is the dependable signal.
 
@@ -124,19 +133,27 @@ From a checkout:
 ./install.sh
 ```
 
-The script finds a Python that works (or uses one managed by `uv`), installs `~/.local/bin/context-kernel`, and starts `context-kernel setup`. The setup asks about the judge, the scope and the database (saved to `~/.context-kernel/config.json`), offers to install the Claude Code plugin, and can wire Codex for a project. It shows you the Codex files before writing them, and Codex will ask you to review the hooks the next time it opens that folder. Run `context-kernel doctor` any time to check the install. It also warns you if a project still wires the kernel by hand, which would make every hook run twice.
+The script finds a Python that works (or uses one managed by `uv`), installs `~/.local/bin/shelflife-context`, and starts `shelflife-context setup`. The setup asks about the judge, the scope and the database (saved to `~/.shelflife-context/config.json`), offers to install the Claude Code plugin, and can wire Codex for a project. It shows you the Codex files before writing them, and Codex will ask you to review the hooks the next time it opens that folder. Run `shelflife-context doctor` any time to check the install. It also warns you if a project still wires the kernel by hand, which would make every hook run twice.
 
 ### By hand
 
 If you'd rather wire a single project yourself, the generator prints the configuration:
 
 ```sh
-python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work init
-python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work adapter claude --workspace /path/to/project --strategy jev
-python3 -m context_kernel --db ~/.context-kernel/memory.sqlite --scope work adapter claude --workspace /path/to/project --strategy jev --mode mcp
+python3 -m shelflife_context --db ~/.shelflife-context/memory.sqlite --scope work init
+python3 -m shelflife_context --db ~/.shelflife-context/memory.sqlite --scope work adapter claude --workspace /path/to/project --strategy jev
+python3 -m shelflife_context --db ~/.shelflife-context/memory.sqlite --scope work adapter claude --workspace /path/to/project --strategy jev --mode mcp
 ```
 
 The first `adapter` command prints the hooks (prompt, stop, session start) for `.claude/settings.local.json` and the second prints the MCP server for `.mcp.json`. `adapter codex` does the same for `.codex/hooks.json` and `.codex/config.toml`. The generator doesn't write anything; you review and merge the output yourself. It pins absolute paths, because hosts run hooks with a minimal PATH, and it doesn't skip any of the host's trust or approval steps. Codex asks you to review hooks again whenever they change.
+
+### Other agents
+
+Any agent that speaks MCP or reads `AGENTS.md` can use Shelflife without hooks: `adapter generic` prints its MCP server, and `brief --on` keeps the project's memory in `AGENTS.md`. See [Agents without hooks](#agents-without-hooks).
+
+### Upgrading from the earlier name
+
+Shelflife was published as Context Kernel up to v0.9. To keep your memory, move `~/.context-kernel` to `~/.shelflife-context`, uninstall the old plugin, and install `shelflife-context@gastongelhorn`.
 
 ## Looking under the hood
 
@@ -153,6 +170,8 @@ memory forget STATEMENT_ID
 memory close STATEMENT_ID --outcome done   # it was right and it is over (done, cancelled, ended); `reopen` takes it back
 memory learn --workspace .         # read the repository's decisions now instead of at the next session start
 memory standing STATEMENT_ID off   # stop handing a fact to every session
+memory brief --workspace . --on    # keep the project's memory in AGENTS.md, for agents without hooks
+memory confirm STATEMENT_ID        # use a fact an agent without hooks saved for your review
 ```
 
 `remember`, `correct`, `depend`, `reaffirm`, `revoke` and `confirm` are still around for scripting and for confirmed facts. `forget` removes every version of a property in that scope, along with its orphaned evidence, derived plans, traces, turn excerpts and cached judgments. It can't erase host transcripts, backups, or anything a model has already seen.
@@ -202,8 +221,8 @@ With ten stored facts, the prompt hook took 0.33 s for a cached question and abo
 - Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
 - Paraphrases are still the weak spot. On the labelled set's 45 paraphrased questions (no word in common with the facts that matter), 21 of the relevant facts reach the agent within the hook's time on the local judge, 29 with time for twice as many pairs; on direct questions, 14 of 15. The local judge alone cannot order a busy inventory ("Is there room to squeeze the payments refactor in before we ship?" put the deadline 23rd of 41), which is why the agent's cues and the keyword match carry so much weight.
 - The local judge is slow per pair: about 0.3 s, so the 8 s hook judges 12 to 19 facts per new question (cached questions are free). Memory larger than that relies on the order of judging: what the question matches in words, then constraints and decisions, then the most recent, and the rest only while 3 s would still be left. With 200 to 1,000 unrelated facts in memory, a prompt took 4.5 to 5.8 s at the median and up to the full 8 s. A hosted jev is much faster but sends memory text out, so the scope has to allow it.
-- A close needs your words to name the fact. Of the 19 labelled closes, "La release de la v0.3 salió el lunes" and "Close the security review item" were refused in both runs (0.51 to 0.69 against the 0.70 bar), and in one run so was "ya hicimos la prueba conjunta" against a step with two parts ("tras reiniciar…: probar jevmate junto con context kernel y medir…"). Saying it plainly again, or `memory close`, works. Facts saved before v0.9 have no end date even when they say "this week"; close them when they're done.
+- A close needs your words to name the fact. Of the 19 labelled closes, "La release de la v0.3 salió el lunes" and "Close the security review item" were refused in both runs (0.51 to 0.69 against the 0.70 bar), and in one run so was "ya hicimos la prueba conjunta" against a step with two parts ("tras reiniciar…: probar jevmate junto con … y medir…"). Saying it plainly again, or `memory close`, works. Facts saved before v0.9 have no end date even when they say "this week"; close them when they're done.
 - Commits are a narrow channel and are off by default. With them on, the filters and jev keep only clear choices for the whole project; in this repository three subjects still became "decisions" no one had made for the whole project. Decision records are the dependable source.
-- Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute. Python reads the kernel's own modules the same way, so a hook running from such a folder can be cancelled; `context-kernel doctor` warns when that can happen.
+- Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute. Python reads the kernel's own modules the same way, so a hook running from such a folder can be cancelled; `shelflife-context doctor` warns when that can happen.
 
 More detail in [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md), [verification](docs/verification.md), [measuring it yourself](docs/benchmark.md) and [compatibility](docs/compatibility.md).

@@ -6,12 +6,13 @@ each client release can change one of them. This runs the end-to-end checks in f
   claude-v04   tests/native_claude_check.py: capture, change, review flag, forget, generic question
   claude-v06   tests/native_v06_check.py --client claude: decision records, standing facts, supersession
   claude-v09   tests/native_close_check.py: a fact that ends with its week, a step closed when it is done
-  codex-v06   tests/native_v06_check.py --client codex, only with --codex-pilot (a folder whose hooks the
+  claude-hookless  tests/native_hookless_check.py: no hooks at all; AGENTS.md brief and the hookless MCP server
+  codex-v06  tests/native_v06_check.py --client codex, only with --codex-pilot (a folder whose hooks the
                owner already trusted in Codex; see tests/native_codex_v04_check.py --prepare)
 
 Each run appends one entry to docs/compatibility.json and rewrites the table in docs/compatibility.md.
 It uses the owner's sign-ins and quota with fictional prompts; the installed plugin is switched off for the
-runs (CONTEXT_KERNEL_OFF), so nothing reaches the owner's real memory. Exit status 1 when a check failed.
+runs (SHELFLIFE_CONTEXT_OFF), so nothing reaches the owner's real memory. Exit status 1 when a check failed.
 
     python3 -m tests.compat_matrix
     python3 -m tests.compat_matrix --codex-pilot ~/pilots/codex-ck
@@ -29,13 +30,14 @@ import subprocess
 import sys
 import tempfile
 
-from context_kernel import __version__
+from shelflife_context import __version__
 
 ROOT = Path(__file__).resolve().parent.parent
 HISTORY = ROOT / "docs" / "compatibility.json"
 TABLE = ROOT / "docs" / "compatibility.md"
 CHECKS = {"claude-v04": ["tests.native_claude_check"], "claude-v06": ["tests.native_v06_check", "--client", "claude"],
-          "claude-v09": ["tests.native_close_check"], "codex-v06": ["tests.native_v06_check", "--client", "codex"]}
+          "claude-v09": ["tests.native_close_check"], "claude-hookless": ["tests.native_hookless_check"],
+          "codex-v06": ["tests.native_v06_check", "--client", "codex"]}
 
 
 def version(command):
@@ -48,12 +50,12 @@ def version(command):
     return (done.stdout or done.stderr).strip().splitlines()[0] if (done.stdout or done.stderr).strip() else None
 
 
-REPORTS = Path.home() / ".context-kernel" / "compat-runs"   # full reports, for diagnosis; not part of the repository
+REPORTS = Path.home() / ".shelflife-context" / "compat-runs"   # full reports, for diagnosis; not part of the repository
 
 
 def attempt(name, workspace, jev):
     argv = [sys.executable, "-m", *CHECKS[name], "--workspace", str(workspace)] + (["--jev-command", jev] if jev else [])
-    env = dict(os.environ, CONTEXT_KERNEL_OFF="1", PYTHONPATH=str(ROOT))
+    env = dict(os.environ, SHELFLIFE_CONTEXT_OFF="1", PYTHONPATH=str(ROOT))
     started = datetime.now(timezone.utc)
     try:
         done = subprocess.run(argv, cwd=ROOT, capture_output=True, text=True, timeout=1800, env=env)
@@ -70,7 +72,7 @@ def attempt(name, workspace, jev):
     return {"passed": bool(report.get("passed")), "checks": f"{sum(map(bool, checks.values()))}/{len(checks)}",
             "failed": [k for k, v in checks.items() if not v], "client": report.get("version"),
             "minutes": round((datetime.now(timezone.utc) - started).total_seconds() / 60, 1),
-            "error": report.get("error") or report.get("aborted"), "report": "~/.context-kernel/compat-runs/" + saved.name}
+            "error": report.get("error") or report.get("aborted"), "report": "~/.shelflife-context/compat-runs/" + saved.name}
 
 
 def run_check(name, workspace_factory, jev):
@@ -102,7 +104,7 @@ def render(history):
             lines.append(f"| {entry['at'][:16].replace('T', ' ')} | {entry['kernel']} | {entry['jev'] or '–'} | {name} | "
                          f"{result.get('client') or entry['clients'].get(name.split('-')[0]) or '–'} | {outcome.strip()} | {failed} |")
     lines += ["", "A failed check is run once more, since the agent writes a new answer each time: `flaky` means it passed on the "
-              "second attempt, and the first attempt's failures are listed. Full reports are kept in ~/.context-kernel/compat-runs. "
+              "second attempt, and the first attempt's failures are listed. Full reports are kept in ~/.shelflife-context/compat-runs. "
               "Codex rows need a pilot folder whose hooks were trusted in Codex once by hand; without one the run skips Codex.", ""]
     return "\n".join(lines)
 

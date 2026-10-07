@@ -568,6 +568,15 @@ class Store:
             counts[outcome] = counts.get(outcome, 0) + 1
         return counts
 
+    def closes(self):
+        """The latest close of each statement, by id: its outcome, when, and the end it replaced."""
+        found = {}
+        for (metadata,) in self.db.execute("SELECT metadata FROM operations WHERE scope=? AND operation='close' "
+                                           "ORDER BY recorded_at, rowid", (self.scope,)):
+            event = json.loads(metadata)
+            found[event.get("statement_id")] = event
+        return found
+
     def _log_regret(self, statement_ids, outcome):
         """Inside the caller's transaction: a capture the user took back. `soon` when it happened within
         REGRET_SECONDS of the capture, which is what the precision estimate counts."""

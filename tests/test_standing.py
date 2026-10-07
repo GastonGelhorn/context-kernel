@@ -6,12 +6,12 @@ import sqlite3
 import tempfile
 import unittest
 
-from context_kernel.adapters import hook_response, packet_of, session_start_response
-from context_kernel.capture import STANDING_SESSIONS, standing_cue
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.mcp import Server
-from context_kernel.store import SCHEMA_VERSION, Store
+from shelflife_context.adapters import hook_response, packet_of, session_start_response
+from shelflife_context.capture import STANDING_SESSIONS, standing_cue
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.mcp import Server
+from shelflife_context.store import SCHEMA_VERSION, Store
 from tests.fakes import FakeJudge, answers
 
 
@@ -164,7 +164,7 @@ class StandingTests(unittest.TestCase):
         self.assertTrue(inventory["entities"]["user"][0]["standing"])
 
     def test_picking_among_listed_options_is_not_judged_as_a_statement(self):
-        from context_kernel.turns import choice_reply
+        from shelflife_context.turns import choice_reply
         for message in ("haz 1 y 2", "la 3", "ambas", "sí, el 2", "go with option 2", "do both", "1, 2 y 3", "las dos"):
             self.assertTrue(choice_reply(message), message)
         for message in ("si", "dos semanas para el checkout", "usa la opción 2: Redis", "haz 1 y luego push", "Mi manager es Dani"):

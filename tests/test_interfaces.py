@@ -8,16 +8,16 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 
-from context_kernel.adapters import packet_of
+from shelflife_context.adapters import packet_of
 from unittest.mock import patch
 
-from context_kernel.adapters import configuration, hook_response, propose_command
-from context_kernel.common import KernelError, canonical
-from context_kernel.compiler import Compiler
-from context_kernel.cli import main
-from context_kernel.mcp import Server, serve
-from context_kernel.protocol import parse_json, read_event
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration, hook_response, propose_command
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.compiler import Compiler
+from shelflife_context.cli import main
+from shelflife_context.mcp import Server, serve
+from shelflife_context.protocol import parse_json, read_event
+from shelflife_context.store import Store
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -189,7 +189,7 @@ class InterfaceTests(unittest.TestCase):
         self.assertEqual(responses[1]["id"], 4)
 
     def run_cli(self, *args, stdin=None, scope="personal"):
-        process = subprocess.run([sys.executable, "-m", "context_kernel", "--db", str(self.store.path), "--scope", scope, *args],
+        process = subprocess.run([sys.executable, "-m", "shelflife_context", "--db", str(self.store.path), "--scope", scope, *args],
                                  input=stdin, text=True, capture_output=True, cwd=ROOT, timeout=10)
         return process
 
@@ -233,14 +233,14 @@ class InterfaceTests(unittest.TestCase):
         self.assertIn("Never say it is done", packet["turn"]["privacy"])
 
     def test_block_output_speaks_both_hosts(self):
-        from context_kernel.adapters import block
+        from shelflife_context.adapters import block
         output = block("stop")
         self.assertEqual((output["decision"], output["continue"]), ("block", False))
 
     def test_post_output_log_failure_never_writes_second_json_envelope(self):
         event = canonical({"prompt": "Explain SQLite", "cwd": str(self.workspace)})
         stdout, stderr = io.StringIO(), io.StringIO()
-        with patch("context_kernel.cli.Store", return_value=self.store), patch.object(self.store, "mark_emitted", side_effect=sqlite3.OperationalError()), \
+        with patch("shelflife_context.cli.Store", return_value=self.store), patch.object(self.store, "mark_emitted", side_effect=sqlite3.OperationalError()), \
                 patch("sys.stdin", SimpleNamespace(buffer=io.BytesIO(event.encode()))), patch("sys.stdout", stdout), patch("sys.stderr", stderr):
             code = main(["hook", "--client", "codex", "--workspace", str(self.workspace)])
         self.assertEqual(code, 2)

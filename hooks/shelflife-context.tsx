@@ -1,9 +1,9 @@
-// The Context Kernel mod: what memory did, where the person can see it.
+// The Shelflife mod: what memory did, where the person can see it.
 //
 // The command hooks (hooks.json) do the work: they deliver context, close the turn and write one
 // line about what was saved, held or not saved. Claude Code shows that line in the terminal, but the
 // desktop app does not, so a fact the person stated could go nowhere without a word. This module
-// reads the same line after each turn (`context-kernel activity`) and draws it above the prompt, with
+// reads the same line after each turn (`shelflife-context activity`) and draws it above the prompt, with
 // a button that takes back what that turn saved. Undo runs the owner's command: a click is the
 // person's own act, never the model's.
 //
@@ -16,8 +16,8 @@ import type { Activity } from '../types'
 
 type Api = EngineInterface
 
-const activity = atom({ plugin: 'context-kernel', key: 'activity' } as const, null)
-const isHidden = atom({ plugin: 'context-kernel', key: 'isHidden' } as const, false)
+const activity = atom({ plugin: 'shelflife-context', key: 'activity' } as const, null)
+const isHidden = atom({ plugin: 'shelflife-context', key: 'isHidden' } as const, false)
 
 const ACCENT = 'suggestion'
 
@@ -30,7 +30,7 @@ async function kernel($: Api, args: string[], timeoutMs = 15_000) {
   const path = await $.env.get('PATH')
   if (path) env.PATH = path
   try {
-    return await $.process.run(['python3', `${$.plugin.root}/bin/context-kernel`, ...args], { env, timeoutMs })
+    return await $.process.run(['python3', `${$.plugin.root}/bin/shelflife-context`, ...args], { env, timeoutMs })
   } catch {
     return null
   }

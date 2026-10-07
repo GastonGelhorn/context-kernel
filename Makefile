@@ -6,7 +6,7 @@ test:
 	$(PYTHON) -W error::ResourceWarning -m unittest discover -v
 
 demo:
-	$(PYTHON) -m context_kernel.demo
+	$(PYTHON) -m shelflife_context.demo
 
 live:
-	$(PYTHON) -m context_kernel.demo --live --repetitions 3
+	$(PYTHON) -m shelflife_context.demo --live --repetitions 3

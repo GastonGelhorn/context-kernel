@@ -9,8 +9,8 @@ from pathlib import Path
 import sys
 import tempfile
 
-from context_kernel.common import canonical
-from context_kernel.store import Store
+from shelflife_context.common import canonical
+from shelflife_context.store import Store
 
 
 async def check():
@@ -19,7 +19,7 @@ async def check():
     from mcp.client.stdio import StdioServerParameters
 
     root = Path(__file__).resolve().parent.parent
-    with tempfile.TemporaryDirectory(prefix="context-kernel-sdk-") as directory:
+    with tempfile.TemporaryDirectory(prefix="shelflife-context-sdk-") as directory:
         path = Path(directory) / "memory.sqlite"
         store = Store(path, create=True)
         private = Store(path, scope="private")
@@ -27,7 +27,7 @@ async def check():
             public = store.remember("user", "salary", 42000, "Annual salary is 42000.")
             private.remember("user", "salary", "PRIVATE_CANARY", "PRIVATE_CANARY")
             params = StdioServerParameters(command=sys.executable,
-                args=["-m", "context_kernel", "--db", str(path), "--scope", "personal", "serve"], cwd=root)
+                args=["-m", "shelflife_context", "--db", str(path), "--scope", "personal", "serve"], cwd=root)
             async with Client(params, read_timeout_seconds=10) as client:
                 tools = await client.list_tools()
                 assert len(tools.tools) == 16

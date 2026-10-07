@@ -9,11 +9,11 @@ import sys
 import tempfile
 import unittest
 
-from context_kernel.adapters import configuration, hook_response
-from context_kernel.common import KernelError, canonical
-from context_kernel.compiler import Compiler
-from context_kernel.planner import Jev, jev_candidate, jev_plan
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration, hook_response
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.compiler import Compiler
+from shelflife_context.planner import Jev, jev_candidate, jev_plan
+from shelflife_context.store import Store
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -119,7 +119,7 @@ class JevTests(unittest.TestCase):
                 self.assertNotIn(secret, argv)
         self.assertEqual(calls[1]["query"], "@/etc/hosts canary-7781 gift for my friend")
         self.assertEqual(calls[2]["query"], reply)
-        leftovers = [p for p in Path(tempfile.gettempdir()).glob("context-kernel-*")]
+        leftovers = [p for p in Path(tempfile.gettempdir()).glob("shelflife-context-*")]
         self.assertEqual(leftovers, [])
 
     def test_trace_never_copies_values_only_pair_scores(self):
@@ -236,7 +236,7 @@ class JevTests(unittest.TestCase):
 
     def test_cli_project_and_adapter_use_the_strategy(self):
         self.add("allergy", "My friend cannot eat nuts")
-        process = subprocess.run([sys.executable, "-m", "context_kernel", "--db", str(self.store.path), "project",
+        process = subprocess.run([sys.executable, "-m", "shelflife_context", "--db", str(self.store.path), "project",
                                   "A gift for my friend", "--strategy", "jev", "--jev-command", str(self.fake)],
                                  capture_output=True, text=True, cwd=ROOT, timeout=20)
         self.assertEqual(process.returncode, 0, process.stderr)
@@ -247,12 +247,12 @@ class JevTests(unittest.TestCase):
             self.assertIn("--jev-command " + str(self.fake.resolve()), command)
             self.assertNotIn("--fail-closed", command)
         server = configuration("claude", self.workspace, self.store.path, "personal", mode="mcp", strategy="jev", jev_command=str(self.fake))
-        self.assertIn("--jev-command", server["config"]["mcpServers"]["context-kernel"]["args"])
+        self.assertIn("--jev-command", server["config"]["mcpServers"]["shelflife-context"]["args"])
         with self.assertRaisesRegex(KernelError, "not found"):
             configuration("claude", self.workspace, self.store.path, "personal", strategy="jev", jev_command="definitely-missing-jev")
 
     def test_mcp_server_uses_the_configured_strategy(self):
-        from context_kernel.mcp import Server
+        from shelflife_context.mcp import Server
         allergy = self.add("allergy", "My friend cannot eat nuts")
         server = Server(self.store, self.compiler, "jev")
         server.dispatch({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {}}})

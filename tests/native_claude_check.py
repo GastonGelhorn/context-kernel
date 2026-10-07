@@ -18,14 +18,14 @@ import subprocess
 import time
 from pathlib import Path
 
-from context_kernel.adapters import configuration
-from context_kernel.common import KernelError, canonical
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.store import Store
 
 
 ROOT = Path(__file__).resolve().parent.parent
 TOOLS_OFF = "Bash,Read,Glob,Grep,Edit,Write,MultiEdit,NotebookEdit,WebFetch,WebSearch,Agent,Task"
-MEMORY_TOOLS = ",".join("mcp__context-kernel__" + name for name in (
+MEMORY_TOOLS = ",".join("mcp__shelflife-context__" + name for name in (
     "memory_context", "memory_capture", "memory_undo", "memory_inventory", "memory_history", "memory_dependents",
     "memory_forget", "memory_revoke", "memory_confirm", "memory_reaffirm", "memory_depend", "memory_policy"))
 PHASES = [
@@ -49,8 +49,8 @@ def invoke(claude, workspace, prompt, mcp_config, model=None, tools=MEMORY_TOOLS
         command.extend(["--model", model])
     started = time.perf_counter()
     try:
-        # An installed Context Kernel plugin would also run here, against the owner's real memory.
-        env = dict(os.environ, CONTEXT_KERNEL_OFF="1")
+        # An installed Shelflife plugin would also run here, against the owner's real memory.
+        env = dict(os.environ, SHELFLIFE_CONTEXT_OFF="1")
         result = subprocess.run(command, cwd=workspace, input="", text=True, capture_output=True, timeout=240, env=env)
     except subprocess.TimeoutExpired as exc:
         return {"exit_code": 124, "answer": None, "stderr": str(exc), "duration_seconds": 240.0}

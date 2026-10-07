@@ -20,9 +20,9 @@ import shutil
 import subprocess
 import time
 
-from context_kernel.adapters import configuration
-from context_kernel.common import KernelError, canonical
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.store import Store
 from tests.native_claude_check import invoke
 
 

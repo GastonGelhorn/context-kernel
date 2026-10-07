@@ -1,9 +1,9 @@
-"""`context-kernel doctor` and `context-kernel setup`: what is installed, and an interactive way to choose.
+"""`shelflife-context doctor` and `shelflife-context setup`: what is installed, and an interactive way to choose.
 
 The wizard asks, in order: which judge (jev on a local Ollama model, or jev's paid hosted service),
 which scope and database, and which clients to wire (the Claude Code plugin, Codex hooks for a
 project). Every change it makes is shown first and needs a yes; `--yes` with flags runs it unattended,
-which is how the plugin's /context-kernel:setup command drives it.
+which is how the plugin's /shelflife-context:setup command drives it.
 """
 
 import argparse
@@ -23,7 +23,7 @@ from .judge import JevCommand, JudgeError, loaded
 from .plugin import CONFIG, DEFAULTS, ensure_database, find_jev, fts5_available, settings, workspace
 
 MARKETPLACE = "GastonGelhorn/jevmate"
-PLUGIN = "context-kernel@gastongelhorn"
+PLUGIN = "shelflife-context@gastongelhorn"
 
 
 def _line(state, label, detail):
@@ -53,7 +53,7 @@ def _wired_by_hand(root):
     for name in (".claude/settings.local.json", ".claude/settings.json", ".mcp.json"):
         path = Path(root) / name
         try:
-            if "context_kernel" in path.read_text(encoding="utf-8") or '"context-kernel"' in path.read_text(encoding="utf-8"):
+            if "shelflife_context" in path.read_text(encoding="utf-8") or '"shelflife-context"' in path.read_text(encoding="utf-8"):
                 found.append(name)
         except OSError:
             pass
@@ -93,11 +93,11 @@ def _calibration_line(config, backend):
     if record and record["status"] == "failed":
         wrong = len(record["detail"].get("wrong", []))
         return "warn", "calibration", (f"this judge got {wrong} canary row(s) wrong: captures are held for review. Tune the "
-                                       "thresholds (`context-kernel memory calibrate affirmed --score`), then "
-                                       "`context-kernel memory calibrate --check`")
+                                       "thresholds (`shelflife-context memory calibrate affirmed --score`), then "
+                                       "`shelflife-context memory calibrate --check`")
     if others:
         return "warn", "calibration", "the judge changed since the last check: captures are held for review until the next " \
-                                      "session start checks it (or run `context-kernel memory calibrate --check`)"
+                                      "session start checks it (or run `shelflife-context memory calibrate --check`)"
     return "ok", "calibration", "not checked yet; the next session start runs the canary in the background"
 
 
@@ -173,12 +173,12 @@ def doctor(config, jev, json_output=False):
             allowed = bool(rules and rules.get("allow_remote_judge"))
             add("ok" if allowed else "warn", "jev",
                 f"{jev} · hosted · {backend['url']}" + ("" if allowed else
-                    " · this scope does not allow a hosted judge, so nothing is saved: run `context-kernel setup`"))
+                    " · this scope does not allow a hosted judge, so nothing is saved: run `shelflife-context setup`"))
         if "error" not in backend and Path(config["db"]).exists():
             add(*_calibration_line(config, backend))
     if rules is not None:
         add("ok", "repository", "decision records" + (" and decision commits" if rules.get("repository_commits") else
-                                                      " (commit messages off; `context-kernel memory policy --repository-commits on`)")
+                                                      " (commit messages off; `shelflife-context memory policy --repository-commits on`)")
             if rules.get("repository", True) else "off for this scope")
         regret = _regret(config)
         if regret and regret["captured"]:
@@ -191,7 +191,7 @@ def doctor(config, jev, json_output=False):
         if place["evicted"]:
             add("warn", "icloud", f"{place['evicted']} file(s) under {where} are evicted to iCloud. A hook that reads one waits for "
                                   "the download and can be cancelled. In Finder choose Keep Downloaded for that folder, or keep "
-                                  "the kernel outside Documents and Desktop (install.sh copies it to ~/.local/share/context-kernel).")
+                                  "the kernel outside Documents and Desktop (install.sh copies it to ~/.local/share/shelflife-context).")
         else:
             add("warn", "icloud", f"{where} is in a folder iCloud syncs: macOS can evict its files later, and hooks would then wait "
                                   "for downloads. Choose Keep Downloaded for it in Finder, or keep it outside Documents and Desktop.")
@@ -281,9 +281,9 @@ def _write_config(config):
 
 def _launcher():
     here = Path(sys.argv[0]).resolve()
-    if here.name == "context-kernel":
+    if here.name == "shelflife-context":
         return str(here)
-    installed = Path.home() / ".local" / "bin" / "context-kernel"
+    installed = Path.home() / ".local" / "bin" / "shelflife-context"
     return str(installed) if installed.exists() else None
 
 
@@ -295,7 +295,7 @@ def codex_files(root, python, launcher):
                                               "additionalContextLimit": 3072}]}],
              "Stop": [{"hooks": [{"type": "command", "command": command("stop"), "timeout": 20}]}],
              "SessionStart": [{"hooks": [{"type": "command", "command": command("session-start"), "timeout": 10}]}]}
-    toml = (f"[mcp_servers.context-kernel]\ncommand = {json.dumps(python)}\nargs = {json.dumps([launcher, 'serve'])}\n")
+    toml = (f"[mcp_servers.shelflife-context]\ncommand = {json.dumps(python)}\nargs = {json.dumps([launcher, 'serve'])}\n")
     return Path(root) / ".codex" / "hooks.json", hooks, Path(root) / ".codex" / "config.toml", toml
 
 
@@ -314,12 +314,12 @@ def _wire_codex(args):
     merged = dict(existing)
     merged.setdefault("hooks", {})
     for event, entries in hooks.items():
-        kept = [e for e in merged["hooks"].get(event, []) if "context-kernel" not in json.dumps(e) and "context_kernel" not in json.dumps(e)]
+        kept = [e for e in merged["hooks"].get(event, []) if "shelflife-context" not in json.dumps(e) and "shelflife_context" not in json.dumps(e)]
         merged["hooks"][event] = kept + entries
     toml_text = toml_path.read_text(encoding="utf-8") if toml_path.exists() else ""
     print(f"\n  {hooks_path}:\n" + "\n".join("    " + l for l in json.dumps(merged, indent=2).splitlines()))
-    if "[mcp_servers.context-kernel]" in toml_text:
-        print(f"  {toml_path} already has [mcp_servers.context-kernel]; left as it is.")
+    if "[mcp_servers.shelflife-context]" in toml_text:
+        print(f"  {toml_path} already has [mcp_servers.shelflife-context]; left as it is.")
         toml = None
     else:
         print(f"  {toml_path} (appended):\n" + "\n".join("    " + l for l in toml.splitlines()))
@@ -348,7 +348,7 @@ def _wire_claude(args):
 
 
 def wizard(argv):
-    parser = argparse.ArgumentParser(prog="context-kernel setup")
+    parser = argparse.ArgumentParser(prog="shelflife-context setup")
     parser.add_argument("--judge", choices=("local", "hosted", "keep"))
     parser.add_argument("--allow-hosted", action="store_true", help="with --yes: allow a hosted judge for the scope")
     parser.add_argument("--scope")
@@ -358,7 +358,7 @@ def wizard(argv):
     parser.add_argument("--yes", action="store_true", help="accept the defaults and the flags without asking")
     args = parser.parse_args(argv)
     config, _ = settings()
-    print("Context Kernel setup: memory for coding agents, maintained by talking.\n")
+    print("Shelflife setup: memory for coding agents, maintained by talking.\n")
     if sys.version_info < (3, 9) or not fts5_available():
         print("This Python is too old or its SQLite lacks FTS5. Install Python 3.9+ (python.org, Homebrew or uv) and run again.")
         return 1

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Installs Context Kernel from this checkout for the terminal and Codex: the package to
-# ~/.local/share/context-kernel, the launcher to ~/.local/bin/context-kernel, then the setup wizard
+# Installs Shelflife from this checkout for the terminal and Codex: the package to
+# ~/.local/share/shelflife-context, the launcher to ~/.local/bin/shelflife-context, then the setup wizard
 # (judge, scope, clients). Claude Code users can instead install the plugin:
-#   /plugin marketplace add GastonGelhorn/jevmate   then   /plugin install context-kernel@gastongelhorn
+#   /plugin marketplace add GastonGelhorn/jevmate   then   /plugin install shelflife-context@gastongelhorn
 # Usage: ./install.sh [--no-setup] [setup flags...]
 set -euo pipefail
 SRC="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,29 +17,29 @@ if [ -z "$PY" ] || ! usable "$PY"; then
   fi
 fi
 if [ -z "$PY" ] || ! usable "$PY"; then
-  echo "Context Kernel needs Python 3.9+ with SQLite FTS5. Install one (python.org, Homebrew, or uv:" >&2
+  echo "Shelflife needs Python 3.9+ with SQLite FTS5. Install one (python.org, Homebrew, or uv:" >&2
   echo "  curl -LsSf https://astral.sh/uv/install.sh | sh ) and run this again." >&2
   exit 1
 fi
 
-BIN="${HOME}/.local/bin"; LIB="${HOME}/.local/share/context-kernel"
+BIN="${HOME}/.local/bin"; LIB="${HOME}/.local/share/shelflife-context"
 mkdir -p "$BIN" "$LIB"
-rm -rf "$LIB/context_kernel"
-cp -R "$SRC/context_kernel" "$LIB/context_kernel"
-find "$LIB/context_kernel" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
+rm -rf "$LIB/shelflife_context"
+cp -R "$SRC/shelflife_context" "$LIB/shelflife_context"
+find "$LIB/shelflife_context" -name '__pycache__' -type d -prune -exec rm -rf {} + 2>/dev/null || true
 # The launcher runs with the Python checked above, whatever python3 a host finds on its PATH.
-{ echo "#!${PY}"; tail -n +2 "$SRC/bin/context-kernel"; } > "$BIN/context-kernel"
-chmod 755 "$BIN/context-kernel"
-"$PY" -m compileall -q "$LIB/context_kernel" || true
-echo "installed  $BIN/context-kernel  (Python $("$PY" -c 'import platform; print(platform.python_version())'))"
-echo "package    $LIB/context_kernel"
+{ echo "#!${PY}"; tail -n +2 "$SRC/bin/shelflife-context"; } > "$BIN/shelflife-context"
+chmod 755 "$BIN/shelflife-context"
+"$PY" -m compileall -q "$LIB/shelflife_context" || true
+echo "installed  $BIN/shelflife-context  (Python $("$PY" -c 'import platform; print(platform.python_version())'))"
+echo "package    $LIB/shelflife_context"
 case ":$PATH:" in *":$BIN:"*) ;; *) echo "add $BIN to your PATH";; esac
 
 if [ "${1:-}" = "--no-setup" ]; then
-  echo "next       context-kernel setup"
+  echo "next       shelflife-context setup"
   exit 0
 fi
 if [ -t 0 ]; then
-  exec "$BIN/context-kernel" setup "$@"
+  exec "$BIN/shelflife-context" setup "$@"
 fi
-echo "next       context-kernel setup   (no terminal to ask in)"
+echo "next       shelflife-context setup   (no terminal to ask in)"

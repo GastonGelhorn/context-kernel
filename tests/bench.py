@@ -26,15 +26,15 @@ import subprocess
 import tempfile
 import time
 
-from context_kernel.adapters import hook_response, packet_of, session_start_response, stop_response
-from context_kernel.budget import Budget
-from context_kernel.common import canonical, digest, timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.judge import JevCommand, JudgeError
-from context_kernel.language import fold
-from context_kernel.mcp import Server
-from context_kernel.repository import learn
-from context_kernel.store import Store
+from shelflife_context.adapters import hook_response, packet_of, session_start_response, stop_response
+from shelflife_context.budget import Budget
+from shelflife_context.common import canonical, digest, timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.judge import JevCommand, JudgeError
+from shelflife_context.language import fold
+from shelflife_context.mcp import Server
+from shelflife_context.repository import learn
+from shelflife_context.store import Store
 
 
 HOST = [4242, "Mon Oct  5 12:00:00 2026"]

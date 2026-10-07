@@ -15,12 +15,12 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from context_kernel.adapters import hook_response, packet_of
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.judge import JevCommand
-from context_kernel.mcp import Server
-from context_kernel.store import Store
+from shelflife_context.adapters import hook_response, packet_of
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.judge import JevCommand
+from shelflife_context.mcp import Server
+from shelflife_context.store import Store
 
 
 HOST = [4242, "holdout"]

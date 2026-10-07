@@ -7,10 +7,10 @@ import sqlite3
 import tempfile
 import unittest
 
-from context_kernel.common import KernelError, canonical, timestamp
-from context_kernel.compiler import Compiler
-from context_kernel.planner import Need, NeedPlan
-from context_kernel.store import SCHEMA_VERSION, Store
+from shelflife_context.common import KernelError, canonical, timestamp
+from shelflife_context.compiler import Compiler
+from shelflife_context.planner import Need, NeedPlan
+from shelflife_context.store import SCHEMA_VERSION, Store
 
 
 class DependencyTests(unittest.TestCase):

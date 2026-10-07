@@ -1,6 +1,6 @@
 {
   "modules": [
-    "./context-kernel.tsx"
+    "./shelflife-context.tsx"
   ],
   "hooks": {
     "SessionStart": [
@@ -8,7 +8,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook session-start 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook session-start",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/shelflife-context\" hook session-start 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/shelflife-context\" hook session-start",
             "timeout": 10
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook prompt 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook prompt",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/shelflife-context\" hook prompt 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/shelflife-context\" hook prompt",
             "timeout": 15
           }
         ]
@@ -30,7 +30,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook stop 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/context-kernel\" hook stop",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/bin/shelflife-context\" hook stop 2>/dev/null || py -3 \"${CLAUDE_PLUGIN_ROOT}/bin/shelflife-context\" hook stop",
             "timeout": 20
           }
         ]

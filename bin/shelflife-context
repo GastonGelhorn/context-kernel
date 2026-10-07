@@ -1,0 +1,18 @@
+#!/usr/bin/env python3
+"""shelflife-context launcher: puts the package beside it on sys.path and hands over.
+
+The plugin's own copy first (a checkout, or Claude Code's plugin cache), so its hooks never run an
+older install; then the one install.sh puts under ~/.local/share/shelflife-context.
+"""
+import os
+import sys
+
+HERE = os.path.dirname(os.path.realpath(__file__))
+for candidate in (os.path.dirname(HERE), os.path.join(os.path.expanduser("~"), ".local", "share", "shelflife-context")):
+    if os.path.isfile(os.path.join(candidate, "shelflife_context", "__init__.py")):
+        sys.path.insert(0, candidate)
+        break
+
+from shelflife_context.plugin import main  # noqa: E402
+
+sys.exit(main())

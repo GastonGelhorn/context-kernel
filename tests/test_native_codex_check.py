@@ -6,7 +6,7 @@ import subprocess
 import unittest
 from unittest.mock import patch
 
-from context_kernel.common import KernelError
+from shelflife_context.common import KernelError
 from tests.native_codex_check import child_environment, invoke, preflight, summary
 
 
@@ -54,7 +54,7 @@ class NativeConfigurationTests(unittest.TestCase):
 
     def test_failed_tool_call_is_not_successful_retrieval(self):
         result = {"exit_code": 0, "answer": "UNKNOWN", "duration_seconds": 1,
-                  "tool_calls": [{"server": "context-kernel", "tool": "memory_context", "status": "failed",
+                  "tool_calls": [{"server": "shelflife-context", "tool": "memory_context", "status": "failed",
                                   "result": {"structured_content": None}}], "events": []}
         measured = summary(result, "UNKNOWN")
         self.assertFalse(measured["passed"])

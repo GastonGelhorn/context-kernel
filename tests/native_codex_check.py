@@ -15,9 +15,9 @@ import subprocess
 import sys
 import time
 
-from context_kernel.common import KernelError, canonical
-from context_kernel.store import Store
-from context_kernel.grounding import currency_review
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.store import Store
+from shelflife_context.grounding import currency_review
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -68,9 +68,9 @@ def invoke(codex, workspace, database, prompt, mcp=True, hook=None, provider="ol
         raise KernelError("Unsupported native provider.")
     if mcp:
         settings = {
-            "mcp_servers.context-kernel.command": sys.executable,
-            "mcp_servers.context-kernel.args": ["-m", "context_kernel", "--db", str(database), "--scope", "pilot", "serve"],
-            "mcp_servers.context-kernel.env": {"PYTHONPATH": str(ROOT)},
+            "mcp_servers.shelflife-context.command": sys.executable,
+            "mcp_servers.shelflife-context.args": ["-m", "shelflife_context", "--db", str(database), "--scope", "pilot", "serve"],
+            "mcp_servers.shelflife-context.env": {"PYTHONPATH": str(ROOT)},
         }
         for name, value in settings.items():
             # JSON scalar/array literals are also valid TOML; inline tables use TOML syntax.
@@ -105,7 +105,7 @@ def invoke(codex, workspace, database, prompt, mcp=True, hook=None, provider="ol
 
 
 def summary(result, expected=None):
-    allowed = [c for c in result["tool_calls"] if c.get("server") == "context-kernel" and c.get("tool") == "memory_context"]
+    allowed = [c for c in result["tool_calls"] if c.get("server") == "shelflife-context" and c.get("tool") == "memory_context"]
     successful = [c for c in allowed if c.get("status") == "completed"
                   and isinstance(c.get("result", {}).get("structured_content"), dict)]
     return {"exit_code": result["exit_code"], "answer": result["answer"], "duration_seconds": result["duration_seconds"],

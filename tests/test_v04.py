@@ -7,15 +7,15 @@ import sqlite3
 import tempfile
 import unittest
 
-from context_kernel.adapters import packet_of
+from shelflife_context.adapters import packet_of
 
-from context_kernel.adapters import configuration, hook_response, session_start_response, stop_response
-from context_kernel.capture import segments
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.inference import RESTS_ON
-from context_kernel.mcp import Server
-from context_kernel.store import SCHEMA_VERSION, Store
+from shelflife_context.adapters import configuration, hook_response, session_start_response, stop_response
+from shelflife_context.capture import segments
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.inference import RESTS_ON
+from shelflife_context.mcp import Server
+from shelflife_context.store import SCHEMA_VERSION, Store
 from tests.fakes import FakeJudge, answers
 
 
@@ -178,7 +178,7 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(self.capture(packet, ("project", "budget", "20k"))[0]["reason"], "not_affirmed")
 
     def test_the_turn_says_what_was_not_saved_and_keeps_it_for_a_band(self):
-        from context_kernel.adapters import activity
+        from shelflife_context.adapters import activity
         self.judge.ask_fn = answers(affirmed=0.1)
         packet, event = self.prompt("crea el repo y súbelo privado")
         self.capture(packet, ("project", "visibility", "privado"))
@@ -234,7 +234,7 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(len(self.current("user", "manager")), 1)  # still in memory, visible in the inventory
 
     def test_calibration_exports_rows_jev_tune_reads(self):
-        from context_kernel.calibration import export
+        from shelflife_context.calibration import export
         rows = [json.loads(line) for line in export("affirmed", Path(__file__).resolve().parent.parent / "fixtures" / "calibration.jsonl").splitlines()]
         self.assertTrue(rows and all(set(r) == {"text", "label"} and r["label"] in {"yes", "no"} for r in rows))
 
@@ -252,12 +252,12 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual((result["status"], result["previous"]), ("captured", "Gaston"))
         self.assertEqual([r["value"] for r in self.current("user", "approver")], ["Mallory"])
         self.assertEqual(self.store.pending_proposal_count(), 0)
-        from context_kernel.capture import describe_results
+        from shelflife_context.capture import describe_results
         self.assertIn('user.approver (was "Gaston")', describe_results([result]))
         self.assertIn(confirmed["id"], [r["id"] for r in self.store.records(history=True)])  # the old version stays
 
     def test_a_drifted_key_still_asks_before_overriding_a_confirmed_fact(self):
-        from context_kernel.capture import SAME_ATTRIBUTE
+        from shelflife_context.capture import SAME_ATTRIBUTE
         self.judge.rank_fn = lambda query, line, question: 0.85 if question == SAME_ATTRIBUTE else 0.1
         confirmed = self.store.remember("checkout", "deadline", "three months", "Owner CLI")
         packet, _ = self.prompt("The checkout delivery timeline is now three weeks.")
@@ -266,15 +266,15 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual(self.current("checkout", "deadline")[0]["id"], confirmed["id"])
 
     def test_a_new_decision_never_replaces_an_earlier_one_by_resolution(self):
-        from context_kernel.capture import SAME_ATTRIBUTE
+        from shelflife_context.capture import SAME_ATTRIBUTE
         self.judge.rank_fn = lambda query, line, question: 0.85 if question == SAME_ATTRIBUTE else 0.1
-        self.store.remember("context_kernel", "decision", "Publicar v0.3 en GitHub esta semana", "Owner CLI")
+        self.store.remember("shelflife_context", "decision", "Publicar v0.3 en GitHub esta semana", "Owner CLI")
         packet, _ = self.prompt("Lo distribuimos como plugin propio en el marketplace de jevmate.")
-        result = self.capture(packet, ("context_kernel", "distribution", "plugin propio en el marketplace de jevmate"))[0]
+        result = self.capture(packet, ("shelflife_context", "distribution", "plugin propio en el marketplace de jevmate"))[0]
         self.assertEqual(result["status"], "captured")
         self.assertNotIn("resolved_from", result)
-        self.assertEqual(len(self.current("context_kernel", "decision")), 1)
-        self.assertEqual(len(self.current("context_kernel", "distribution")), 1)
+        self.assertEqual(len(self.current("shelflife_context", "decision")), 1)
+        self.assertEqual(len(self.current("shelflife_context", "distribution")), 1)
 
     def test_undo_restores_the_previous_value_only_when_the_user_asks(self):
         packet, _ = self.prompt("Mi manager es Ana")
@@ -424,7 +424,7 @@ class AutonomyTests(unittest.TestCase):
         self.assertEqual([r for r in self.store.records(history=True) if r["predicate"] == "recommendation"], [])
 
     def test_the_kernels_receipt_repeated_by_the_agent_is_not_advice(self):
-        from context_kernel.inference import infer
+        from shelflife_context.inference import infer
         packet, event = self.prompt("Mi manager es Dani")
         self.capture(packet, ("user", "manager", "Dani"))
         turn = self.store.turn("s1", event["prompt_id"])
@@ -433,7 +433,7 @@ class AutonomyTests(unittest.TestCase):
     # Keys the agent invents in different sessions
 
     def test_a_change_under_different_keys_updates_the_same_fact(self):
-        from context_kernel.capture import SAME_ATTRIBUTE
+        from shelflife_context.capture import SAME_ATTRIBUTE
         self.judge.ask_fn = answers(category="constraints")
         self.judge.rank_fn = lambda query, line, question: 0.85 if question == SAME_ATTRIBUTE else 0.1
         packet, _ = self.prompt("We have three months to deliver the checkout project.")
@@ -482,7 +482,7 @@ class AutonomyTests(unittest.TestCase):
         self.assertLessEqual(len(query), 1500)
 
     def test_a_definition_question_naming_a_stored_key_is_not_generic(self):
-        from context_kernel.planner import generic_question
+        from shelflife_context.planner import generic_question
         self.store.remember("checkout_project", "delivery_timeline", "three weeks", "Owner CLI")
         self.assertFalse(generic_question("What is the checkout deadline?", self.store.records()))
         self.assertTrue(generic_question("What is a SQLite primary key?", self.store.records()))

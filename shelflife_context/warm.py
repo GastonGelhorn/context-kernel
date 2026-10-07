@@ -54,4 +54,8 @@ def warm(store, judge, workspace=None, session=None, learn_repository=False):
         root = root_of(workspace)
         if root:
             result["repository"] = learn(store, judge, root, Budget(90), session, if_changed=True)
+    if workspace:
+        # After what was learned, and after facts whose period ended overnight: agents without hooks read this.
+        from .brief import refresh
+        result["brief"] = refresh(store, workspace)
     return result

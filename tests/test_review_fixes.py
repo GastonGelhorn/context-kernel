@@ -4,11 +4,11 @@ import tempfile
 from pathlib import Path
 import unittest
 
-from context_kernel.adapters import hook_response, packet_of
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.mcp import INSTRUCTIONS, Server
-from context_kernel.store import Store
+from shelflife_context.adapters import hook_response, packet_of
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.mcp import INSTRUCTIONS, Server
+from shelflife_context.store import Store
 from tests.fakes import FakeJudge, answers
 
 
@@ -53,17 +53,17 @@ class ReviewFixTests(unittest.TestCase):
 
     def test_undo_never_deletes_a_different_fact_than_the_one_named(self):
         self.capture("The checkout deadline is three weeks.", "checkout", "deadline", "three weeks")
-        self.capture("The release approver is Gaston.", "context_kernel", "release_approver", "Gaston")
+        self.capture("The release approver is Gaston.", "shelflife_context", "release_approver", "Gaston")
         self.judge.fail = "judge down"  # the guard must not depend on the judge
         token = packet_of(self.prompt("Forget the checkout deadline."))["turn"]["token"]
         result, error = self.tool("memory_undo", {"token": token})
         self.assertTrue(error)
         values = {(r["entity_key"], r["predicate"]): r["value"] for r in self.store.records()}
-        self.assertEqual(values[("context_kernel", "release_approver")], "Gaston")
+        self.assertEqual(values[("shelflife_context", "release_approver")], "Gaston")
         self.assertEqual(values[("checkout", "deadline")], "three weeks")
 
     def test_undo_takes_back_the_last_save_when_asked_without_naming_anything(self):
-        self.capture("The release approver is Gaston.", "context_kernel", "release_approver", "Gaston")
+        self.capture("The release approver is Gaston.", "shelflife_context", "release_approver", "Gaston")
         token = packet_of(self.prompt("No, undo that."))["turn"]["token"]
         result, error = self.tool("memory_undo", {"token": token})
         self.assertFalse(error, result)
@@ -76,7 +76,7 @@ class ReviewFixTests(unittest.TestCase):
 
     def test_the_kernels_requests_travel_outside_the_data_packet(self):
         context = self.prompt("We have three months to deliver checkout.")
-        self.assertTrue(context.startswith("Context Kernel, the memory system the user installed, asks:"))
+        self.assertTrue(context.startswith("Shelflife, the memory system the user installed, asks:"))
         packet = packet_of(context)
         self.assertIn(packet["turn"]["token"], context.split("\n", 1)[0])
         self.assertIn("memory_capture", context.split("\n", 1)[0])
@@ -99,7 +99,7 @@ class ReviewFixTests(unittest.TestCase):
         self.assertIn("held for review", result["error"]["message"])
 
     def test_pasted_content_blocks_are_not_authored_text(self):
-        from context_kernel.capture import segments
+        from shelflife_context.capture import segments
         authored, quoted = segments('mira esto <pasted_content id="1">the deadline is friday</pasted_content id="1"> ¿qué opinas?')
         self.assertNotIn("friday", authored)
         self.assertIn("friday", quoted)
@@ -107,7 +107,7 @@ class ReviewFixTests(unittest.TestCase):
     # Second native Claude Code run after the request channel (5 of 10)
 
     def test_a_loosely_phrased_premise_is_linked_when_the_reply_names_it(self):
-        from context_kernel.inference import RESTS_ON, infer
+        from shelflife_context.inference import RESTS_ON, infer
         self.judge.rank_fn = lambda query, line, question: 0.57 if question == RESTS_ON else 0.1
         context = self.prompt("We have three months to deliver the checkout project. Should we rewrite its payment module?")
         token = packet_of(context)["turn"]["token"]
@@ -120,7 +120,7 @@ class ReviewFixTests(unittest.TestCase):
         self.assertEqual(unnamed["linked"], 0)
 
     def test_polite_and_negated_forget_requests(self):
-        from context_kernel.turns import forget_request
+        from shelflife_context.turns import forget_request
         self.assertTrue(forget_request("Please forget the checkout deadline."))
         self.assertTrue(forget_request("Can you delete the old deadline?"))
         self.assertFalse(forget_request("Don't forget my salary when you negotiate."))
@@ -132,7 +132,7 @@ class ReviewFixTests(unittest.TestCase):
         self.assertNotIn("forget", context.split("\n", 1)[0] if not context.startswith("{") else "")
 
     def test_an_answer_style_instruction_is_not_a_statement(self):
-        from context_kernel.capture import only_questions
+        from shelflife_context.capture import only_questions
         self.assertTrue(only_questions("Should we still go ahead with the plan? Answer in one sentence."))
         self.assertFalse(only_questions("We have three weeks now. Answer in one sentence."))
 
@@ -143,13 +143,13 @@ class ReviewFixTests(unittest.TestCase):
     # Codex answered the first message without saving: the Stop hook hands the turn back once
 
     def stop(self, reply, **event):
-        from context_kernel.adapters import stop_response
+        from shelflife_context.adapters import stop_response
         self.now = timestamp_offset(self.now, 2)
         return stop_response({"cwd": str(self.workspace), "hook_event_name": "Stop", "session_id": "s1",
                               "last_assistant_message": reply} | event, self.workspace, self.store, self.judge)
 
     def test_an_unsaved_fact_is_handed_back_once_with_the_original_token(self):
-        from context_kernel.inference import RESTS_ON
+        from shelflife_context.inference import RESTS_ON
         self.judge.ask_fn = answers(category="constraints")
         self.judge.rank_fn = lambda query, line, question: 0.9 if question == RESTS_ON else 0.1
         self.tool("memory_status", {})  # a memory server is running under this host

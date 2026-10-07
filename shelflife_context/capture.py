@@ -89,8 +89,8 @@ SAME_ATTRIBUTE = "Do `query` and `candidate` name the same attribute of the same
 SAME_BAR = 0.7
 REPLACES_FLOOR = 0.3
 # Predicates that hold many values side by side rather than one attribute: a new decision is not a
-# change to an earlier one. jev read "context_kernel.distribution" as the same attribute as
-# "context_kernel.decision" (>= 0.70), so these never take part in drift resolution.
+# change to an earlier one. jev read "shelflife_context.distribution" as the same attribute as
+# "shelflife_context.decision" (>= 0.70), so these never take part in drift resolution.
 COLLECTIONS = {"decision", "decisions", "note", "notes", "preference", "preferences", "fact", "facts",
                "info", "idea", "ideas", "todo", "todos"}
 COUNTS = {"none": "states nothing worth remembering later", "one": "exactly one", "two": "two", "several": "three or more"}
@@ -389,7 +389,8 @@ def _decide(store, judge, turn, triple, rules, deadline, quote=None):
     if affirmed:
         source = cited or authored
         if turn["origin"] != "interactive":
-            return "quarantined", "origin_unverified", category, source
+            # An agent without hooks reports the user's words; nothing recorded them (mcp.Server._hookless_turn).
+            return "quarantined", "hookless" if "hookless" in turn["flags"] else "origin_unverified", category, source
         # Held, not refused: the user can still say it was meant.
         marked = bool(_JOKE_MARKS.search(fold(authored)))
         if answers["sarcasm"] >= thresholds.get("sarcasm", SARCASM_BAR) or (marked and answers["sarcasm"] >= JOKE_MARKED_BAR):
@@ -689,6 +690,7 @@ def describe_results(results):
 # Why something was held or not saved, in words a person can act on.
 WHY = {"not_affirmed": "not read as something you stated", "uncertain": "sounded unsure",
        "quoted_source": "came from pasted text", "origin_unverified": "not typed by you",
+       "hookless": "reported by an agent without hooks; confirm it to use it",
        "category_disabled": "this kind is off for the scope", "forgotten": "you asked to forget it",
        "judge_unavailable": "jev did not answer", "question_only": "the message only asked", "cap": "too many in one turn", "expired": "too late for that message",
        "replaces_mismatch": "named the wrong fact to replace", "unknown_target": "named a fact that does not exist",

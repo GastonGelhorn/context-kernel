@@ -1,6 +1,6 @@
 """An in-memory judge with the JevCommand interface, for tests that should not spawn processes."""
 
-from context_kernel.judge import JevCommand, JudgeError, JudgeRemote
+from shelflife_context.judge import JevCommand, JudgeError, JudgeRemote
 
 
 def answers(affirmed=0.9, category="roles_and_relations", count="one", instruction=0.05, asked=0.9, quoted=None, recommends=0.9):

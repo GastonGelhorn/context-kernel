@@ -3,11 +3,11 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from context_kernel.common import KernelError, canonical, timestamp
-from context_kernel.compiler import Compiler, lexical_scores
-from context_kernel.planner import Need, NeedPlan, jev_plan
+from shelflife_context.common import KernelError, canonical, timestamp
+from shelflife_context.compiler import Compiler, lexical_scores
+from shelflife_context.planner import Need, NeedPlan, jev_plan
 from tests.fakes import FakeJudge
-from context_kernel.store import Store
+from shelflife_context.store import Store
 
 
 class CompilerTests(unittest.TestCase):

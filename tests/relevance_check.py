@@ -19,12 +19,12 @@ from pathlib import Path
 import shutil
 import tempfile
 
-from context_kernel import planner
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.judge import JevCommand
-from context_kernel.planner import jev_candidate
-from context_kernel.store import Store
+from shelflife_context import planner
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.judge import JevCommand
+from shelflife_context.planner import jev_candidate
+from shelflife_context.store import Store
 
 ROOT = Path(__file__).resolve().parent.parent
 TUNE, HELD_OUT = ("saas", "freelance"), ("platform", "personal")
@@ -93,7 +93,7 @@ def evaluate(data, scores, variant, workspaces, max_pairs, use_cues, rule, strat
                 clock["now"] = NOW
                 if not use_cues:
                     # No cues at all, not even the kind defaults: what v0.7 matched on.
-                    import context_kernel.compiler as compiler_module
+                    import shelflife_context.compiler as compiler_module
                     saved, compiler_module.concept_cues = compiler_module.concept_cues, lambda predicate: []
                 try:
                     for query in workspace["queries"]:

@@ -24,6 +24,7 @@ The project started from a public hypothesis about continuity across conversatio
 | 6 What is already written down | Restating decision records and commit decisions; repeating the same rule in every session | Done in v0.6; decision records parsed, commits filtered and judged one by one, standing facts after three sessions or a rule. v0.8 reads commits only when turned on |
 | 7 Trustworthy at scale | Checking what memory saved; waiting for the judge; re-measuring after a model change | v0.8: cited quotes, holds for jokes and requests for work, safe mode with a canary per model, cues and a time-fitted selection, warm-up and keep-alive, precision measured from real use, a public benchmark and a compatibility matrix |
 | 8 Facts that end | Forgetting a plan once it is done; cleaning out "this week" after the week | v0.9: `memory_close` (done, cancelled, ended; kept in history, not regret) checked against the user's words, `reopen`, a request when a message says something is over, and facts that end with the relative period they name |
+| 9 Agents without hooks | Repeating to every other agent what the project decided, and what changed | v0.10: the AGENTS.md brief (current facts, changes, advice to review, closes; opt-in per repository, rewritten only on change) and `serve --hookless` (reads, and captures held for review); the product is renamed Shelflife |
 
 ## Acceptance
 
@@ -46,13 +47,13 @@ Capture widens from the `work` scope to personal scopes only after a must-have g
 
 ## Phase 5: one experience, two components
 
-Context Kernel stays a separate component. It depends on a judgment client, `jev`, and on nothing else from jevmate.
+Shelflife stays a separate component. It depends on a judgment client, `jev`, and on nothing else from jevmate.
 
 The first step shipped in v0.5. The kernel is its own Claude Code plugin, listed in jevmate's marketplace next to jevmate, so both install from the same place:
 
 ```text
 /plugin marketplace add GastonGelhorn/jevmate
-/plugin install context-kernel@gastongelhorn
+/plugin install shelflife-context@gastongelhorn
 ```
 
 Whether to merge the two into one plugin was left until jevmate alone, the kernel alone and both together had been compared on the same continuity tasks. The rule was to merge them only if the combination won without adding wait or work.
@@ -72,7 +73,7 @@ So the combination wins on continuity, but not without adding wait. The decision
 
 A shared repository is a maintenance question for later.
 
-v0.8 confirmed the split after an external review, and changed how the two are presented. Context Kernel is the product: what users see is memory that notices when advice goes stale. jev is the engine underneath, and the jevmate plugin is a separate tool for decisions inside a session (sift, tests and diff, triage), whose surface is frozen until its three main uses have external users. What shipped instead of a merge is one install: the kernel is in jevmate's marketplace, and the session-start warm-up loads jev's model so the first prompt does not pay for it.
+v0.8 confirmed the split after an external review, and changed how the two are presented. Shelflife is the product: what users see is memory that notices when advice goes stale. jev is the engine underneath, and the jevmate plugin is a separate tool for decisions inside a session (sift, tests and diff, triage), whose surface is frozen until its three main uses have external users. What shipped instead of a merge is one install: the kernel is in jevmate's marketplace, and the session-start warm-up loads jev's model so the first prompt does not pay for it.
 
 ## Before widening capture
 

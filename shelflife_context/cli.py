@@ -27,7 +27,7 @@ class DeliveryError(KernelError):
 
 def parser():
     root = argparse.ArgumentParser(prog="memory", description="Local, scoped, correctable context.")
-    root.add_argument("--db", default=".context-kernel/memory.sqlite", help="SQLite path (default: workspace-local)")
+    root.add_argument("--db", default=".shelflife-context/memory.sqlite", help="SQLite path (default: workspace-local)")
     root.add_argument("--scope", default="personal", help="Owner-selected scope; not supplied by an agent tool")
     root.add_argument("--pretty", action="store_true", help="Print readable JSON for owner commands")
     commands = root.add_subparsers(dest="command", required=True)
@@ -55,6 +55,14 @@ def parser():
     calibrate.add_argument("--jev-command", default="jev")
     calibrate.add_argument("--jev-timeout", type=float, default=60, help="A ranked fixture set is one long request")
     serve = commands.add_parser("serve", help="Stdio MCP server with a fixed scope")
+    serve.add_argument("--hookless", action="store_true",
+                       help="For an agent without hooks: reading, and saving held for the user's review")
+    serve.add_argument("--workspace", help="With --hookless: the repository whose AGENTS.md brief its reads keep current")
+    serve.add_argument("--client", default="agent", help="With --hookless: the agent's name, for the record of what it saved")
+    brief = commands.add_parser("brief", help="Keep what memory holds about a repository in its AGENTS.md, for agents without hooks")
+    brief.add_argument("--workspace", required=True, help="A directory inside the git repository")
+    brief.add_argument("--on", action="store_true", help="Turn the brief on for this repository and write it")
+    brief.add_argument("--off", action="store_true", help="Turn it off and remove the section from AGENTS.md")
     warm = commands.add_parser("warm", help="Load the local judge, check its calibration if needed, read the repository (background)")
     warm.add_argument("--workspace", help="A directory inside the session's git repository")
     warm.add_argument("--session", help="Session that receives the one-line note of what was learned")
@@ -143,7 +151,8 @@ def parser():
         item.add_argument("--jev-max-pairs", type=int, default=48, help="Pairs judged per call; beyond it, mentioned and most recent pairs first")
         item.add_argument("--jev-question", help="Override the relevance question (name `candidate` and `query`)")
     adapter = commands.add_parser("adapter")
-    adapter.add_argument("client", choices=("codex", "claude", "antigravity"))
+    adapter.add_argument("client", choices=("codex", "claude", "antigravity", "generic"),
+                         help="generic: any MCP client without hooks (an MCP server in hookless mode)")
     adapter.add_argument("--workspace", required=True)
     adapter.add_argument("--mode", choices=("hook", "mcp"), default="hook")
     adapter.add_argument("--proposals", action="store_true")
@@ -182,6 +191,21 @@ def execute(args, store):
         return store.conclude(args.id, args.outcome, args.at)
     if command == "reopen":
         return store.reopen(args.id)
+    if command == "brief":
+        from . import brief
+        from .repository import entity_for, root_of
+        if args.on and args.off:
+            raise KernelError("Choose --on or --off.")
+        root = root_of(args.workspace)
+        if not root:
+            raise KernelError("The brief lives in a git repository's AGENTS.md; this directory is not in one.")
+        if args.on or args.off:
+            brief.set_enabled(store, root, args.on)
+        if root in brief.roots(store) or args.off:
+            return brief.write(store, root) | {"on": root in brief.roots(store)}
+        # Off: show what it would write, and touch nothing.
+        return {"on": False, "root": root, "preview": brief.render(store, entity_for(store, root)),
+                "hint": "memory brief --workspace . --on writes it into AGENTS.md"}
     if command == "undo":
         return store.undo_capture(args.id)
     if command == "inventory":
@@ -282,7 +306,8 @@ def execute(args, store):
                         deadline=budget, allow_remote=rules["allow_remote_judge"])
     if command == "serve":
         from .mcp import serve
-        serve(store, sys.stdin.buffer, sys.stdout, compiler, args.strategy, judge)
+        serve(store, sys.stdin.buffer, sys.stdout, compiler, args.strategy, judge, hookless=args.hookless,
+              workspace=args.workspace, client=args.client)
         return None
     if command == "project":
         plan = NeedPlan.from_dict(store.load_plan(args.plan_id)) if args.plan_id else None
@@ -381,12 +406,12 @@ def main(argv=None):
                 pass  # The visible response below does not depend on a working log.
         if args.command == "hook":
             if args.event != "prompt":
-                print(canonical({"systemMessage": "Context Kernel: " + message}), flush=True)
+                print(canonical({"systemMessage": "Shelflife: " + message}), flush=True)
             elif isinstance(exc, HookBlock) or args.fail_closed:
-                print(canonical(block("Context Kernel: " + message)), flush=True)
+                print(canonical(block("Shelflife: " + message)), flush=True)
             else:
                 # Fail open: a memory add-on must not stop the prompt; the host hears why there is no context.
-                print(canonical(envelope("", ["Context Kernel unavailable: " + message])), flush=True)
+                print(canonical(envelope("", ["Shelflife unavailable: " + message])), flush=True)
             return 0
         print(canonical({"error": message}), file=sys.stderr)
         return 1

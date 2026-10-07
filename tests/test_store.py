@@ -3,8 +3,8 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from context_kernel.common import KernelError, timestamp
-from context_kernel.store import Store
+from shelflife_context.common import KernelError, timestamp
+from shelflife_context.store import Store
 
 
 class StoreTests(unittest.TestCase):

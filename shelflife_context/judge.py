@@ -136,7 +136,7 @@ class JevCommand:
             if query is not None:
                 # `--query @file`: the text never reaches argv, and a prompt such as "@src/app.py fix
                 # this" is sent as written instead of making jev read that file.
-                folder = tempfile.mkdtemp(prefix="context-kernel-")  # 0700, readable by this user only
+                folder = tempfile.mkdtemp(prefix="shelflife-context-")  # 0700, readable by this user only
                 path = os.path.join(folder, "query.txt")
                 with open(path, "w", encoding="utf-8") as handle:
                     handle.write(query)

@@ -15,10 +15,10 @@ import statistics
 import tempfile
 from pathlib import Path
 
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.judge import JevCommand
-from context_kernel.store import Store
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.judge import JevCommand
+from shelflife_context.store import Store
 
 
 OLD = [  # (entity, predicate, value, kind, paraphrased question that shares none of its words)

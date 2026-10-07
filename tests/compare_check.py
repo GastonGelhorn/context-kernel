@@ -32,9 +32,9 @@ import sys
 import time
 from pathlib import Path
 
-from context_kernel.adapters import configuration
-from context_kernel.common import KernelError, canonical
-from context_kernel.store import Store
+from shelflife_context.adapters import configuration
+from shelflife_context.common import KernelError, canonical
+from shelflife_context.store import Store
 from tests.native_claude_check import MEMORY_TOOLS
 from tests.native_v06_check import git, record, wait_for_pass
 
@@ -133,7 +133,7 @@ def invoke(claude, root, prompt, mcp_path, allowed, model):
     if model:
         command += ["--model", model]
     # The pilot wires its own kernel; an installed plugin must not write fictional prompts into real memory.
-    env = dict(os.environ, CONTEXT_KERNEL_OFF="1", ENABLE_CLAUDEAI_MCP_SERVERS="false")
+    env = dict(os.environ, SHELFLIFE_CONTEXT_OFF="1", ENABLE_CLAUDEAI_MCP_SERVERS="false")
     started = time.perf_counter()
     try:
         done = subprocess.run(command, cwd=root, stdin=subprocess.DEVNULL, text=True, capture_output=True, timeout=300, env=env)
@@ -242,7 +242,7 @@ def summarize(runs):
             "cost_usd": round(sum(s.get("cost_usd") or 0 for s in steps), 4),
             "input_tokens": sum(s.get("input_tokens") or 0 for s in steps),
             "tool_calls": sum(len(s.get("tools", [])) for s in steps),
-            "memory_tool_calls": sum(sum(t.startswith("mcp__context-kernel") for t in s.get("tools", [])) for s in steps),
+            "memory_tool_calls": sum(sum(t.startswith("mcp__shelflife-context") for t in s.get("tools", [])) for s in steps),
             "jev_tool_calls": sum(sum(t.startswith("mcp__plugin_jevmate") for t in s.get("tools", [])) for s in steps),
             "errors": sum(bool(s["exit_code"]) for s in steps),
             "left_for_owner": [{k: r["kernel"][k] for k in ("held_for_review", "waiting_for_a_yes")} for r in mine if r["kernel"]],

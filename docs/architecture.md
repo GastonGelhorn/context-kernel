@@ -1,12 +1,12 @@
 # Architecture and safety
 
-Context Kernel has three parts, each with its own job.
+Shelflife has three parts, each with its own job.
 
 | Component | Responsibility |
 | --- | --- |
 | Kernel (`store`, `compiler`, `capture`, `inference`, `turns`, `binding`, `repository`) | State, evidence, validity, corrections, trust, consent policy, dependencies, the decisions a repository records, and what may be delivered |
 | Judgment client (`judge.py`) | Asks the configured jev backend for probabilities within a time budget, and does nothing else |
-| Host integration (`adapters.py`, `mcp.py`, `plugin.py`, `setup.py`, `hooks/context-kernel.tsx`) | Hooks for Claude Code and Codex, the stdio MCP server, the plugin launcher with its doctor and setup wizard, generated configuration, and the band above the prompt |
+| Host integration (`adapters.py`, `mcp.py`, `plugin.py`, `setup.py`, `hooks/shelflife-context.tsx`) | Hooks for Claude Code and Codex, the stdio MCP server, the plugin launcher with its doctor and setup wizard, generated configuration, and the band above the prompt |
 
 The kernel imports nothing from jevmate. `judge.JevCommand` runs the `jev` executable and passes it text on stdin. The kernel sets the failure policy and the privacy rules for each use.
 
@@ -114,6 +114,13 @@ A fact can be right and still be over. Two things end one, and neither changes t
 - **Closing** (`store.conclude`, `memory_close`, `memory close`). The outcome is done, cancelled or ended. It is logged as a `close` operation with the end it replaced, which is what `reopen` restores; a newer value of the same property blocks a reopen. A close is not regret: `regret_metrics` counts only undo, forget, revoke and quick corrections, and `metrics` lists closes apart. What depended on the fact becomes stale, as when a premise changes, and `memory_close` returns those ids. A close through the MCP tool is also logged with its turn (`captures_log`, outcome `closed`), so the Stop hook's line reports it and the turn is not handed back for a capture it did not need. The MCP tool checks the user's words with two questions, has the fact already been done, and was it cancelled, dropped or ended, and acts when the higher reaches 0.70 (`fixtures/calibration.jsonl`, `close_asked`). When the user's message uses words of completion (`turns.done_statement`) and the packet holds claims, the plain-text requests ask the agent to close what the message says is over; the request is a hint, and the check decides.
 - **A relative period** (`language.period_end`). At capture, a value that names a period the user's own message also names (today, tomorrow, this or next week, month and year, a weekday; English or Spanish) ends at local midnight after that period, counted from the turn. Starts ("desde mañana"), habits ("cada semana", "los viernes"), idioms ("hoy en día") and dates are not periods. "Next Friday" takes the later of its two readings, so a fact never ends early. A capture whose period ended before it was stored is refused as `expired`.
 
+## Agents without hooks
+
+Without hooks no turn is recorded: nothing puts memory into the prompt, and nothing the agent saves can be checked against the user's message. Two parts cover such agents.
+
+- **The brief** (`brief.py`). A section of the repository's `AGENTS.md` between `shelflife-context:begin` and `:end` markers, which most agents read on their own. It holds what memory knows about the repository's entity (`repository.entity_for`) and its parts two levels down: current facts with source, start and end dates, standing facts first, then decisions and constraints; versions replaced in the last 30 days, as "was … changed …"; inferred recommendations whose premises changed, named by the premise only, never by the old advice; and facts closed or expired in the last 30 days, with the close's outcome. People, inferences as facts, and anything quarantined stay out. Values are flattened to one line and cannot open or close a comment. The section is dated by the newest change it shows, not by the time it was written, so rewriting it with nothing new produces the same bytes and no write; it stays under 3,000 bytes, with a pointer to `memory inventory` for the rest. A repository opts in (`memory brief --on`, a list of roots in the scope's policy) because `AGENTS.md` is usually committed. It is refreshed by the background pass at session start, by the Stop hook after every turn (found by path, no git), by `memory brief`, and by the hookless server's reads, at most once a minute. Text outside the markers is never touched; turning it off removes the section, and the file if nothing else is left.
+- **The hookless server** (`serve --hookless`, `adapter generic`). It offers the read tools and `memory_capture` with `token` optional. A capture there opens a turn from the quotes the agent reports, with origin `unknown` and the flag `hookless`; the capture path then judges those words as usual (a question, a joke or a request for work is still refused or held), and whatever it would save is held for review with the reason `hookless`. Caps per session and day apply to the `hookless:<client>` session. Forget, revoke, close, confirm, standing and policy are not offered, because the user's own recorded words are what authorize them; calling one returns that explanation and changes nothing. The user promotes a held fact with `memory confirm`, or in an agent with hooks.
+
 ## Handing the turn back once
 
 The Stop hook answers `decision: block` when the gate was confident (P(none) ≤ 0.05, and the message did not read as a request for work: "Implementa todos los puntos" scored P(none) 0.04 and work 0.91), the turn was typed, a memory server is registered under the session's host process, and the agent neither captured anything nor tried to. A capture the kernel refused already has its answer, and asking again would only get the same refusal, so a refused attempt is never nudged. The block reason asks the agent to call `memory_capture` with the original turn's token. Codex turns that reason into a new prompt, and Claude Code continues the turn. The original reply is stored masked, and the inference runs on it at the continuation's Stop, after the capture. A continuation never nudges again.
@@ -150,7 +157,7 @@ Declared links (from the owner CLI or `memory_depend`) and inferred links behave
 
 ## Two installs, one memory
 
-A project can wire the kernel by hand while the plugin is also on (a checkout under development, an old setup). Both answer the same hook events against the same database. The second prompt hook to open a turn for the same prompt within 30 seconds finds it opened (one upsert statement decides, so two processes cannot both win) and delivers nothing; the second Stop hook finds the turn closed and does nothing. `context-kernel doctor` names the project files that also run the kernel.
+A project can wire the kernel by hand while the plugin is also on (a checkout under development, an old setup). Both answer the same hook events against the same database. The second prompt hook to open a turn for the same prompt within 30 seconds finds it opened (one upsert statement decides, so two processes cannot both win) and delivers nothing; the second Stop hook finds the turn closed and does nothing. `shelflife-context doctor` names the project files that also run the kernel.
 
 ## Observability
 

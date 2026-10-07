@@ -1,8 +1,8 @@
 """One executable for everything an installed kernel runs: hooks, the MCP server, the band, the owner.
 
-Claude Code runs it as `python3 <plugin>/bin/context-kernel <command>` and hands the plugin's options
-to it as CLAUDE_PLUGIN_OPTION_<KEY>; a terminal install reads ~/.context-kernel/config.json, which
-`context-kernel setup` writes. Either way it becomes the kernel CLI's own arguments, so nothing has to
+Claude Code runs it as `python3 <plugin>/bin/shelflife-context <command>` and hands the plugin's options
+to it as CLAUDE_PLUGIN_OPTION_<KEY>; a terminal install reads ~/.shelflife-context/config.json, which
+`shelflife-context setup` writes. Either way it becomes the kernel CLI's own arguments, so nothing has to
 be copied into a project's settings. The plugin's options win over the file, the file over defaults.
 """
 
@@ -17,9 +17,9 @@ from pathlib import Path
 from . import cli
 
 HOME = Path(os.path.expanduser("~"))
-CONFIG = HOME / ".context-kernel" / "config.json"
-DEFAULTS = {"scope": "work", "db": str(HOME / ".context-kernel" / "memory.sqlite"), "strategy": "jev", "jev_command": ""}
-USAGE = """usage: context-kernel <command>
+CONFIG = HOME / ".shelflife-context" / "config.json"
+DEFAULTS = {"scope": "work", "db": str(HOME / ".shelflife-context" / "memory.sqlite"), "strategy": "jev", "jev_command": ""}
+USAGE = """usage: shelflife-context <command>
 
   hook prompt|stop|session-start [--client claude|codex]   what the host's hooks run
   serve                                                    the MCP server
@@ -104,7 +104,7 @@ def main(argv=None):
         print(USAGE)
         return 0
     command, rest = argv[0], argv[1:]
-    if os.environ.get("CONTEXT_KERNEL_OFF") == "1" and command in {"hook", "serve"}:
+    if os.environ.get("SHELFLIFE_CONTEXT_OFF") == "1" and command in {"hook", "serve"}:
         # Set by the native test runners: their pilot wires its own kernel to a throwaway database,
         # and an installed plugin must not also write their fictional prompts into real memory.
         if command == "hook":

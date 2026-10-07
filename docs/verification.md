@@ -238,11 +238,33 @@ Both clients have now passed the same pre-registered scenario once each, with no
 
 We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
+## v0.10: Shelflife, and agents without hooks
+
+Checked on 2026-10-07 with jev 1.9.3 on its local backend (tev1-32k through Ollama) and Claude Code 2.1.287, on macOS arm64.
+
+The product is now Shelflife (`shelflife-context`): the package, the launcher, the plugin, the MCP server, the commands, the environment variables (`SHELFLIFE_CONTEXT_OFF`) and the default memory folder (`~/.shelflife-context`). Measured inputs keep their recorded text: the calibration rows and the benchmark's recorded judge answers are keyed by it.
+
+### Agents without hooks
+
+Two parts, both new: a brief in `AGENTS.md` (`brief.py`) and a server mode for agents without hooks (`serve --hookless`). `tests/test_v10.py` covers what the brief shows and leaves out (people, held facts, the old text of advice), that it changes only its own section and only when memory does, that a value cannot break out of it, its size bound, its refresh from the Stop hook and by path without git, the `memory brief` command in a real git repository, and the hookless server's tools, held captures, refusals and configuration. 345 tests pass on Python 3.14.3 and 3.9.6.
+
+`python3 -m tests.native_hookless_check` stands Claude Code in for an agent without hooks: the pilot folder has no hook configuration, its CLAUDE.md only imports AGENTS.md, and memory is reachable only through the hookless server. The seeded project had a deadline changed from three months to three weeks, advice that rested on the old deadline, and a step closed as done. It is now part of the compatibility matrix (`claude-hookless`).
+
+| Check | Result |
+| --- | --- |
+| The brief shows the change, the advice to review and the close | pass |
+| "Who signs off releases here, and how long do we have for checkout?" is answered from current facts | pass: "Irene signs off releases, and … the checkout deadline is now three weeks, down from three months, so any advice from earlier today that assumed three months needs another look." |
+| "Keep this in mind for later: our staging database is Postgres 16." is held for review | pass (reason `hookless`) |
+| Nothing from that agent became evidence | pass |
+| No hook ran | pass (no recorded turns besides the hookless session) |
+
+5 of 5 on the first run, in 30 s; Claude Code reported $0.54 for the two sessions. That run also showed one wrong word: the receipt ended in "Say undo to take it back", and there is no undo without hooks. A hookless receipt now says the user confirms the fact with `memory confirm`.
+
 ## v0.9: facts that end
 
 Checked on 2026-10-07 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`) and Claude Code 2.1.287, on macOS arm64.
 
-The owner's own memory showed the gap. A day after the joint jevmate and kernel test was run, the kernel still delivered "next step: after restarting Claude Code, test jevmate together with Context Kernel…", and with v0.8 out, "decision: publish v0.3 on GitHub this week". Both had been right. Forgetting them would have counted as captures the user took back (the regret window is a week), and nothing else could end them.
+The owner's own memory showed the gap. A day after the joint jevmate and kernel test was run, the kernel still delivered "next step: after restarting Claude Code, test jevmate together with Shelflife…", and with v0.8 out, "decision: publish v0.3 on GitHub this week". Both had been right. Forgetting them would have counted as captures the user took back (the regret window is a week), and nothing else could end them.
 
 ### The question that checks a close
 
@@ -587,7 +609,7 @@ The previous turn of this session, "haz 1 y 2", reached the gate and was read as
 
 ### A cancelled prompt hook
 
-In this session, one prompt hook was cancelled at its 15 s timeout before it opened a turn. Replayed by hand with the same command, it took under a second. At that moment, 14 of the kernel's modules in this iCloud-synced checkout were evicted, and Python waits for a download when it reads one. `context-kernel doctor` now reports that: "10 file(s) under …/context_kernel are evicted to iCloud", with the two remedies.
+In this session, one prompt hook was cancelled at its 15 s timeout before it opened a turn. Replayed by hand with the same command, it took under a second. At that moment, 14 of the kernel's modules in this iCloud-synced checkout were evicted, and Python waits for a download when it reads one. `shelflife-context doctor` now reports that: "10 file(s) under …/shelflife_context are evicted to iCloud", with the two remedies.
 
 ### Native runs: 9 of 9 in Claude Code and 9 of 9 in Codex
 
@@ -619,11 +641,11 @@ Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Olla
 
 ### Installed as a Claude Code plugin
 
-`.claude-plugin/plugin.json` declares the MCP server and the options (scope, database, selection, jev path, band). `hooks/hooks.json` runs the three command hooks through `bin/context-kernel`, which turns the options into the kernel's arguments and finds jev by absolute path. `claude plugin validate .` passes.
+`.claude-plugin/plugin.json` declares the MCP server and the options (scope, database, selection, jev path, band). `hooks/hooks.json` runs the three command hooks through `bin/shelflife-context`, which turns the options into the kernel's arguments and finds jev by absolute path. `claude plugin validate .` passes.
 
-Two headless sessions ran with `--plugin-dir` and a throwaway database, with no project files and no memory commands. "Recuerda: el deploy de aurora es los viernes." was captured through the plugin's own MCP server (the session was bound), and the turn's line "Memory: saved aurora.deploy_day." was stored for the band. A fresh session answered "viernes". The first attempt saved nothing, because headless sessions do not grant the plugin's tools. Passing `--allowedTools "mcp__plugin_context-kernel_context-kernel__*"` fixed that. In an interactive session Claude Code asks once.
+Two headless sessions ran with `--plugin-dir` and a throwaway database, with no project files and no memory commands. "Recuerda: el deploy de aurora es los viernes." was captured through the plugin's own MCP server (the session was bound), and the turn's line "Memory: saved aurora.deploy_day." was stored for the band. A fresh session answered "viernes". The first attempt saved nothing, because headless sessions do not grant the plugin's tools. Passing `--allowedTools "mcp__plugin_shelflife-context_shelflife-context__*"` fixed that. In an interactive session Claude Code asks once.
 
-The launcher and the kernel run on the `python3` that ships with macOS (3.9.6, with SQLite FTS5), and the whole suite passes there just as it does on 3.14. Running `install.sh` and `context-kernel setup --yes` in a throwaway HOME installed the launcher with the checked Python pinned, wrote `~/.context-kernel/config.json`, and generated Codex's `.codex/hooks.json` and `config.toml` for a project. `claude plugin validate` accepts the band (`hooks/context-kernel.tsx`), but nobody has watched it in an interactive session yet.
+The launcher and the kernel run on the `python3` that ships with macOS (3.9.6, with SQLite FTS5), and the whole suite passes there just as it does on 3.14. Running `install.sh` and `shelflife-context setup --yes` in a throwaway HOME installed the launcher with the checked Python pinned, wrote `~/.shelflife-context/config.json`, and generated Codex's `.codex/hooks.json` and `config.toml` for a project. `claude plugin validate` accepts the band (`hooks/shelflife-context.tsx`), but nobody has watched it in an interactive session yet.
 
 ### Refusals are reported
 
@@ -635,7 +657,7 @@ In real use, three facts the owner asked to keep were refused as not affirmed. "
 
 ### Calibration drift
 
-The same run re-scored the v0.4 fixtures with the current local model. Three false rows now reach the 0.75 bar: "Who approves context-kernel releases?" (0.84), "What if we deployed only in the EU region?" (0.77) and "Remind me tomorrow to call Ana." (0.94). In v0.4 the highest false row was 0.757. Question-only messages skip the gate, which covers the first two in practice. The third would be captured if an agent proposed it. The threshold has to be re-measured with `memory calibrate affirmed --score` whenever jev's model changes, and tuned with `jev tune` once real labelled rows exist. There are none yet.
+The same run re-scored the v0.4 fixtures with the current local model. Three false rows now reach the 0.75 bar: "Who approves shelflife-context releases?" (0.84), "What if we deployed only in the EU region?" (0.77) and "Remind me tomorrow to call Ana." (0.94). In v0.4 the highest false row was 0.757. Question-only messages skip the gate, which covers the first two in practice. The third would be captured if an agent proposed it. The threshold has to be re-measured with `memory calibrate affirmed --score` whenever jev's model changes, and tuned with `jev tune` once real labelled rows exist. There are none yet.
 
 ## Historical checks (v0.1 to v0.3)
 
@@ -660,7 +682,7 @@ SDK 2.3.0 negotiated the supported 2025-06-18 fallback and listed all five tools
 ### Real local Qwen (removed in v0.4)
 
 ```sh
-python3 -m context_kernel.demo --live --repetitions 1
+python3 -m shelflife_context.demo --live --repetitions 1
 ```
 
 Across five development runs we attempted 65 local reader/planner calls. The first probes passed. Broader probes exposed invented entity keys, selection of irrelevant preferences, and evidence that was available but ignored. Constraining planning to pairs and separating unavailable needs explicitly improved some cases. Neither fixed every relevance failure.
@@ -714,7 +736,7 @@ We prepared a separate prompt-hook pilot with fictional data and no proposal cap
 
 ### v0.3 results
 
-The direct local demo (`python3 -m context_kernel.demo --live --repetitions 1`, qwen3.5:9b) passed every check. It covered three reader history conditions, the contamination probe, five selection probes (career and gift each still needed one rule supplement) and the new dependency fixture. [v0.3 local results](v03-local-results.json).
+The direct local demo (`python3 -m shelflife_context.demo --live --repetitions 1`, qwen3.5:9b) passed every check. It covered three reader history conditions, the contamination probe, five selection probes (career and gift each still needed one rule supplement) and the new dependency fixture. [v0.3 local results](v03-local-results.json).
 
 In the dependency fixture, a rewrite decision depends on a three-month deadline. The deadline is corrected to three weeks, and a fresh projection asks about the rewrite. The kernel delivered the decision with `stale_assumptions` and the new deadline alongside it, with no "three months" and status `review_required`. The local reader then answered that the rewrite "rests on a superseded assumption regarding its deadline" and should be reviewed. The check is a keyword test on one fictional answer. It shows the mechanism and says nothing about reliability. The reader's "you should not proceed" goes further than the reader rules ask (flag, do not decide), so answer quality still needs human review.
 
@@ -755,7 +777,7 @@ The kernel's trace now keeps jev's own error line, so the next fallback explains
 
 The third run had those two variables unset, so jev used its configured local backend (tev1-32k through Ollama). It passed 6/6 with `strategy_fallbacks: 0`, and jev judged the inventory on all four non-generic prompts. [Native Claude Code jev results](v03-native-claude-jev-results.json). The rewrite answer again named the superseded deadline and asked for review "rather than treated as a settled yes". One difference from the rules run is telling. With jev, the question about the forgotten approver produced an `empty` projection: the two remaining checkout pairs scored 0.28 and 0.34, both under the 0.5 supporting bar. With rules, the family had dragged the unrelated stale rewrite decision into a `review_required` projection. Judged selection left out the irrelevant claim, and the family rule could not. Total wall time was 51.9 seconds, and jev's own call took about 0.7 seconds per prompt.
 
-The first real use outside the pilot was the owner's `work` scope: two facts, the hook in this checkout's `.claude/settings.local.json`, and the jev strategy. Every prompt in the desktop session produced an emitted projection. On an approver question jev scored `context_kernel.release_approver` 0.95-0.97 and `user.manager` 0.47. On manager statements it was the reverse (0.11-0.15 against 0.87-0.92). There was one miss. A second session asked "quien es mi manager?", and jev scored the manager pair 0.467, under the 0.5 supporting bar. The projection was empty, so that session answered from the owner CLI instead. The kernel now settles the uncertain band (0.35-0.5) by lexical match, and replaying the same question selects the pair as supporting with `lexical_rescues: ["user.manager"]`.
+The first real use outside the pilot was the owner's `work` scope: two facts, the hook in this checkout's `.claude/settings.local.json`, and the jev strategy. Every prompt in the desktop session produced an emitted projection. On an approver question jev scored `shelflife_context.release_approver` 0.95-0.97 and `user.manager` 0.47. On manager statements it was the reverse (0.11-0.15 against 0.87-0.92). There was one miss. A second session asked "quien es mi manager?", and jev scored the manager pair 0.467, under the 0.5 supporting bar. The projection was empty, so that session answered from the owner CLI instead. The kernel now settles the uncertain band (0.35-0.5) by lexical match, and replaying the same question selects the pair as supporting with `lexical_rescues: ["user.manager"]`.
 
 Local jev latency, measured with synthetic pairs and `--no-cache` on a warm Ollama: 2 pairs 0.21 s, 4 pairs 0.30 s, 32 pairs 1.7 s, 48 pairs 2.6 s, 64 pairs 3.5-4.8 s, 96 pairs 13 s. The first call after the model loaded took 6.1 s for 32 pairs. On this Ollama, setting jev's `--concurrency` anywhere from 1 to 8 made no difference. The kernel caps each call at `--jev-max-pairs` (48) and records how many pairs went unjudged.
 

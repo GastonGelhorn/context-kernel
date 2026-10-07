@@ -5,13 +5,13 @@ import json
 from pathlib import Path
 import sqlite3
 
-from context_kernel.calibration import QUESTIONS
-from context_kernel.capture import describe_results, last_day
-from context_kernel.common import KernelError, timestamp, timestamp_offset
-from context_kernel.language import period_end, periods
-from context_kernel.mcp import ASKS, INSTRUCTIONS, TOOLS
-from context_kernel.store import SCHEMA_VERSION
-from context_kernel.turns import done_statement
+from shelflife_context.calibration import QUESTIONS
+from shelflife_context.capture import describe_results, last_day
+from shelflife_context.common import KernelError, timestamp, timestamp_offset
+from shelflife_context.language import period_end, periods
+from shelflife_context.mcp import ASKS, INSTRUCTIONS, TOOLS
+from shelflife_context.store import SCHEMA_VERSION
+from shelflife_context.turns import done_statement
 from tests.fakes import answers
 from tests.test_v08 import Base, judged
 
@@ -77,7 +77,7 @@ class Periods(unittest.TestCase):
 class PeriodCapture(Base):
     def test_a_fact_said_for_this_week_ends_with_the_week(self):
         packet, _, _ = self.prompt("Decidimos publicar la v0.3 esta semana.")
-        result = self.capture(packet, {"entity": "context_kernel", "predicate": "decision", "value": "Publicar v0.3 esta semana",
+        result = self.capture(packet, {"entity": "shelflife_context", "predicate": "decision", "value": "Publicar v0.3 esta semana",
                                        "quote": "Decidimos publicar la v0.3 esta semana"})[0]
         self.assertEqual(result["status"], "captured")
         statement = self.store.inspect(result["id"])
@@ -98,7 +98,7 @@ class PeriodCapture(Base):
 
     def test_a_start_is_not_an_end(self):
         packet, _, _ = self.prompt("Desde mañana el approver de releases es Irene.")
-        result = self.capture(packet, {"entity": "context_kernel", "predicate": "release_approver", "value": "Irene desde mañana"})[0]
+        result = self.capture(packet, {"entity": "shelflife_context", "predicate": "release_approver", "value": "Irene desde mañana"})[0]
         self.assertEqual(result["status"], "captured")
         self.assertIsNone(self.store.inspect(result["id"])["valid_until"])
 
@@ -155,7 +155,7 @@ class Close(Base):
 
     def test_reopen_restores_the_end_it_had(self):
         packet, _, _ = self.prompt("Decidimos publicar la v0.3 esta semana.")
-        fact = self.capture(packet, {"entity": "context_kernel", "predicate": "decision", "value": "Publicar v0.3 esta semana"})[0]["id"]
+        fact = self.capture(packet, {"entity": "shelflife_context", "predicate": "decision", "value": "Publicar v0.3 esta semana"})[0]["id"]
         until = self.store.inspect(fact)["valid_until"]
         self.now = timestamp_offset(self.now, 60)
         self.store.conclude(fact, "cancelled")

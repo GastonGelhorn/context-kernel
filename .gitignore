@@ -4,7 +4,7 @@ __pycache__/
 *.egg-info/
 build/
 dist/
-.context-kernel/
+.shelflife-context/
 *.sqlite*
 work/
 .DS_Store

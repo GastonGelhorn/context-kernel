@@ -7,13 +7,13 @@ import tempfile
 import threading
 import unittest
 
-from context_kernel.adapters import hook_response, packet_of, stop_response
-from context_kernel.common import timestamp, timestamp_offset
-from context_kernel.compiler import Compiler
-from context_kernel.inference import RESTS_ON
-from context_kernel.judge import weights
-from context_kernel.mcp import Server
-from context_kernel.store import Store
+from shelflife_context.adapters import hook_response, packet_of, stop_response
+from shelflife_context.common import timestamp, timestamp_offset
+from shelflife_context.compiler import Compiler
+from shelflife_context.inference import RESTS_ON
+from shelflife_context.judge import weights
+from shelflife_context.mcp import Server
+from shelflife_context.store import Store
 from tests.fakes import FakeJudge, answers
 
 
@@ -119,7 +119,7 @@ class ComparisonFixes(unittest.TestCase):
         return recommendation, current
 
     def test_a_bare_yes_is_not_stored_as_the_recommendation(self):
-        from context_kernel.inference import first_sentence
+        from shelflife_context.inference import first_sentence
         self.assertEqual(first_sentence("Sí. Mejor refactorizar por partes con tests. Luego reescribir."),
                          "Sí. Mejor refactorizar por partes con tests.")
 
