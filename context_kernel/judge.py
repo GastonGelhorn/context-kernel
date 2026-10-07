@@ -14,9 +14,9 @@ import subprocess
 import tempfile
 import time
 from urllib.parse import urlsplit
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 
-from .common import KernelError, canonical, text
+from .common import KernelError, canonical, digest, text
 from .protocol import parse_json
 
 
@@ -58,6 +58,48 @@ def weights(url, model):
         if isinstance(item, dict) and item.get("name") in names and isinstance(item.get("digest"), str):
             return item["digest"][:16]
     return None
+
+
+def model_key(description):
+    """Which judge answered: backend, model name and weights. Thresholds are measured per key."""
+    return digest({k: description.get(k) for k in ("url", "model", "weights")})[:24]
+
+
+def _ollama(url, path, body=None, timeout=1.0):
+    parts = urlsplit(url)
+    request = Request(f"{parts.scheme}://{parts.netloc}{path}", data=None if body is None else json.dumps(body).encode(),
+                      headers={"Content-Type": "application/json"}, method="GET" if body is None else "POST")
+    with urlopen(request, timeout=timeout) as response:
+        return json.load(response)
+
+
+def loaded(description, timeout=0.3):
+    """Whether a local Ollama backend has the judge's model in memory: True, False, or None when that
+    cannot be told (a hosted backend, another server, no answer in time). A cold model takes several
+    seconds to load, longer than a prompt hook should wait."""
+    url, model = description.get("url"), description.get("model")
+    if not model or not is_local(url):
+        return None
+    try:
+        running = _ollama(url, "/api/ps", timeout=timeout).get("models", [])
+    except (OSError, ValueError, AttributeError):
+        return None
+    names = {model, model + ":latest"} if ":" not in model else {model}
+    return any(isinstance(m, dict) and (m.get("name") in names or m.get("model") in names) for m in running or ())
+
+
+def keep_alive(description, duration, timeout=1.0):
+    """Ask a local Ollama backend to load the judge's model (if needed) and keep it for `duration`
+    ("30m"). An empty generate request only loads the model; jev's own requests reset the timer to
+    Ollama's default, so this is repeated after each turn. Returns whether the backend accepted it."""
+    url, model = description.get("url"), description.get("model")
+    if not model or not is_local(url) or not duration:
+        return False
+    try:
+        _ollama(url, "/api/generate", {"model": model, "keep_alive": duration}, timeout=timeout)
+        return True
+    except (OSError, ValueError, AttributeError):
+        return False
 
 
 class JevCommand:
@@ -131,6 +173,14 @@ class JevCommand:
     def require_local(self, allow_remote=False):
         if not allow_remote and not self.describe()["local"]:
             raise JudgeRemote("jev points to a hosted backend; memory text stays on this machine unless the scope allows it.")
+
+    def loaded(self):
+        """Whether the local model is in memory (see `loaded` above); None when that cannot be told."""
+        return loaded(self.describe())
+
+    def keep_alive(self, duration, timeout=1.0):
+        """Load the local model if needed and keep it for `duration` (see `keep_alive` above)."""
+        return keep_alive(self.describe(), duration, timeout=timeout)
 
     def rank(self, query, candidates, no_cache=False, timeout=None, question=None):
         """P(yes) per candidate line under `question` (default: relevance); the index is positional."""

@@ -99,15 +99,49 @@ def standing_due(store, session):
     return ([], mark) if store.session_field(session, "standing_sent") == mark else ([r["id"] for r in rows], mark)
 
 
+GATE_TASK_BAR = 0.85
+KEEP_ALIVE_DEFAULT = "30m"
+
+
+def judge_cold(judge):
+    """A local model that is not in memory yet (JevCommand.loaded); a judge that cannot tell counts as warm."""
+    probe = getattr(judge, "loaded", None)
+    try:
+        return callable(probe) and probe() is False
+    except KernelError:
+        return False
+
+
+def keep_alive_duration(store):
+    duration = str(capture_policy(store).get("keep_alive") or KEEP_ALIVE_DEFAULT)
+    return None if duration.lower() in {"off", "0", "no", "false"} else duration
+
+
+def refresh_keep_alive(judge, store):
+    """Keep the local model loaded between turns (`keep_alive` in the scope's policy; "off" disables it).
+    Ollama keeps a model five minutes by default, and a reload costs the next prompt seconds."""
+    duration, extend = keep_alive_duration(store), getattr(judge, "keep_alive", None)
+    if not duration or not callable(extend):
+        return False
+    try:
+        return extend(duration, timeout=0.3)
+    except KernelError:
+        return False
+
+
 def hook_response(event, workspace, store, compiler, strategy="rules", proposals=False, fail_closed=False,
-                  client="claude", judge=None, deadline=None):
+                  client="claude", judge=None, deadline=None, warm=None):
     """UserPromptSubmit: open the turn, judge whether the message states facts, deliver context.
 
     The delivered packet always carries the turn token: write and delete tools accept only tokens
-    the hook issued, in sessions bound to the same host process."""
+    the hook issued, in sessions bound to the same host process. `warm` starts the background warm-up
+    when the local model is not loaded."""
     _check_event(event, workspace, "UserPromptSubmit")
     prompt = text(event.get("prompt") or event.get("prompt_text"), 16384)
     turn = open_turn(store, event, client, prompt)
+    if turn.get("duplicate"):
+        # Another install of the hooks is answering this prompt with the same memory: one packet is enough.
+        return {}, None
     marker = {"token": turn["token"]}
     flags, messages, notice = [], [], None
     # Requests are read from what the user typed in this turn: pasted text or tool output that
@@ -132,17 +166,28 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         if not store.db.execute("SELECT 1 FROM processed_events WHERE scope=? AND event_id=?", (store.scope, event_id)).fetchone():
             notice = propose_command(store, prompt, event_id)
     gate_count = 0
-    if judge and turn["origin"] == "interactive" and not flags and not trivial_continuation(prompt) and not choice_reply(prompt) \
-            and not generic_question(prompt, store.records()) and not only_questions(prompt) \
+    cold = judge is not None and judge_cold(judge)
+    if cold:
+        # Loading the model takes seconds the prompt should not wait for: this prompt is answered from keyword
+        # matches, and a background warm-up loads the model for the next one.
+        flags.append("judge_cold")
+        if warm is not None:
+            warm()
+    if judge and not cold and turn["origin"] == "interactive" and not flags and not trivial_continuation(prompt) \
+            and not choice_reply(prompt) and not generic_question(prompt, store.records()) and not only_questions(prompt) \
             and capture_policy(store)["auto_capture"] \
             and (deadline is None or deadline.allows(4)):
         try:
             judge.require_local(capture_policy(store)["allow_remote_judge"])
             result = gate(judge, prompt, deadline, capture_policy(store)["thresholds"].get("none_bar"))
             # A message often states a fact and asks something; the instruction score is not a veto.
+            if not result["facts"] and result["calls"]:
+                flags.append("gate_none")  # a capture the agent proposes anyway needs a near-certain reading
             if result["facts"]:
                 gate_count = result["facts"]
-                if result["p_none"] <= CONFIDENT_NONE:
+                # "Implementa todos los puntos" read as one fact at P(none) 0.04; as a request for work (task
+                # 0.91) it gets the capture hint but never hands the turn back.
+                if result["p_none"] <= CONFIDENT_NONE and result.get("task", 0.0) < GATE_TASK_BAR:
                     flags.append("gate_confident")
                 marker["capture"] = {"facts_stated": gate_count, "call": "memory_capture",
                                      "how": "Extract each as entity.predicate = value. If one changes a fact in related, pass its id as replaces."}
@@ -152,19 +197,26 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         except KernelError:
             flags.append("gate_unavailable")
     # Pending captures ride along in the marker; they do not justify judging an "ok" for relevance.
-    quiet = (trivial_continuation(prompt) or choice_reply(prompt)) and not flags and not store.pending_proposal_count()
+    quiet = (trivial_continuation(prompt) or choice_reply(prompt)) and not [f for f in flags if f != "judge_cold"] \
+        and not store.pending_proposal_count()
     pinned, mark = standing_due(store, turn["session_id"])
+    selection = "rules" if cold and strategy == "jev" else strategy
     if quiet:
-        projection = compiler.project(prompt, plan=NeedPlan(strategy=strategy), extra={"turn": marker}, pinned=pinned)
+        projection = compiler.project(prompt, plan=NeedPlan(strategy=selection), extra={"turn": marker}, pinned=pinned)
     else:
-        projection = compiler.prepare(prompt, strategy=strategy, extra={"turn": marker}, pinned=pinned)
+        projection = compiler.prepare(prompt, strategy=selection, extra={"turn": marker}, pinned=pinned)
     store.update_turn(turn["session_id"], turn["turn_key"], projection_id=projection.id,
                       delivered_ids=projection.trace["selected"], gate_count=gate_count, flags=flags)
+    if judge is not None and not cold:
+        refresh_keep_alive(judge, store)
     if pinned and set(pinned) <= set(projection.trace["selected"]):
         store.set_session_field(turn["session_id"], "standing_sent", mark)
     if notice:
         messages.append(f"Memory proposal {notice['id']} awaits owner approval; it is not a remembered fact.")
-    if projection.trace["status"] in {"unavailable", "insufficient_context"}:
+    # A packet that holds the best claims that fit is delivered even when critical ones were left out
+    # (status insufficient_context, warning critical_budget_overflow); only an empty one is a failure.
+    if projection.trace["status"] == "unavailable" or (projection.trace["status"] == "insufficient_context"
+                                                        and not projection.trace["selected"]):
         store.mark_failed(projection.id)
         message = ("Memory context is unavailable (" + projection.trace["status"] +
                    "). This is not evidence that a fact does not exist; inspect the trace before retrying.")
@@ -192,7 +244,8 @@ def kernel_requests(marker):
             if capture.get("related") else ""
         requests.append(f"The user's message appears to state {capture['facts_stated']} fact(s) worth remembering. If it does, "
                         f"call the memory_capture tool with token \"{token}\" before answering, one item per fact (entity, "
-                        f"predicate, value), using only what the user said." + related +
+                        f"predicate, value, quote: the user's exact words that state it, cues: a few words a later "
+                        f"question would use when it matters), using only what the user said." + related +
                         " If it states nothing worth keeping, do nothing and do not mention this request. When something "
                         "is saved, add the tool's receipt in one line.")
     if marker.get("pending"):
@@ -246,8 +299,8 @@ def stop_response(event, workspace, store, judge=None, deadline=None):
         turn = store.turn(session, turn["turn_key"])
         return _report(store, judge, deadline, turn, turn["reply_excerpt"] or reply, nudged=True)
     turn = close_turn(store, event)
-    if not turn:
-        return {}
+    if not turn or turn.get("already_closed"):
+        return {}  # nothing open, or another install of the hooks already reported this turn
     tools = store.tools_available(session)
     missing = turn["gate_count"] - len(turn["captured_ids"])
     if not tools and turn["gate_count"]:
@@ -319,11 +372,12 @@ def activity(store, session_id):
             "held": sum(1 for r in store.records(quarantined=True) if r["trust"] == "quarantined")}
 
 
-def session_start_response(event, workspace, store, client="claude", learn=None):
+def session_start_response(event, workspace, store, client="claude", learn=None, warm=None):
     """SessionStart: bind this session to its host process, make the next prompt carry the standing
-    facts, surface captures nobody confirmed, and in a git repository start the background pass that
-    reads its decisions (`learn(cwd, session)`). The pass runs git and returns at once when nothing
-    changed; this hook neither runs git nor waits."""
+    facts, surface captures nobody confirmed, and start one background pass (`warm(cwd, session, repo)`)
+    that loads the local model, checks the judge's calibration when it changed, and in a git repository
+    reads its decisions. The pass runs git and returns at once when nothing changed; this hook neither
+    runs git nor waits. `learn(cwd, session)` is the older repository-only callback."""
     _check_event(event, workspace, "SessionStart")
     session = str(event.get("session_id") or "unknown-session")
     store.register_session(session, client, ancestors(depth=2))
@@ -333,7 +387,10 @@ def session_start_response(event, workspace, store, client="claude", learn=None)
     old = [r for r in store.records(quarantined=True) if r["trust"] != "confirmed" and r["source_kind"] != "repository"
            and (r["entity_key"], r["predicate"]) not in standing
            and (r.get("last_confirmed_at") or r["recorded_at"]) <= timestamp_offset(store.clock(), -90 * 86400)]
-    if learn is not None and capture_policy(store).get("repository", True) and repository.inside_repository(event["cwd"]):
+    in_repository = capture_policy(store).get("repository", True) and repository.inside_repository(event["cwd"])
+    if warm is not None:
+        warm(event["cwd"], session, in_repository)
+    elif learn is not None and in_repository:
         learn(event["cwd"], session)
     if old:
         return {"systemMessage": f"Memory: {len(old)} remembered fact(s) were captured over 90 days ago and never confirmed. "

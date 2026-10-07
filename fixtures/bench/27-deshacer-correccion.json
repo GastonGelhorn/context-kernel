@@ -1,0 +1,100 @@
+{
+  "id": "27-deshacer-correccion",
+  "title": "Undoing a mistaken budget change restores the value it replaced",
+  "tags": [
+    "undo",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "El presupuesto de la migración a Kubernetes es de 20.000 euros.",
+          "agent_captures": [
+            {
+              "entity": "k8s_migration",
+              "predicate": "budget",
+              "value": "20.000 euros",
+              "quote": "El presupuesto de la migración a Kubernetes es de 20.000 euros"
+            }
+          ],
+          "agent_reply": "Anotado: 20.000 euros para la migración a Kubernetes. Lo uso para dimensionar la ayuda externa."
+        },
+        {
+          "user": "Calculá cuántas horas de consultoría entran con ese presupuesto a 80 euros la hora.",
+          "agent_captures": [],
+          "agent_reply": "Con 20.000 euros a 80 euros la hora entran 250 horas de consultoría. Son unas seis semanas de una persona a tiempo completo."
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "Subió el presupuesto de la migración a Kubernetes: ahora son 35.000 euros.",
+          "agent_captures": [
+            {
+              "entity": "k8s_migration",
+              "predicate": "budget",
+              "value": "35.000 euros",
+              "quote": "ahora son 35.000 euros",
+              "replaces": "k8s_migration.budget"
+            }
+          ],
+          "agent_reply": "Actualizado: el presupuesto de la migración a Kubernetes ahora es de 35.000 euros. Con eso entran unas 437 horas de consultoría.",
+          "expect_packet": {
+            "delivered": [
+              "k8s_migration.budget"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "k8s_migration.budget": "35.000 euros"
+            }
+          }
+        },
+        {
+          "user": "Eso no, me confundí de proyecto. Deshazlo.",
+          "agent_captures": [],
+          "agent_calls": [
+            {
+              "tool": "memory_undo"
+            }
+          ],
+          "agent_reply": "Hecho: deshice el último cambio. El presupuesto de la migración a Kubernetes vuelve a ser de 20.000 euros.",
+          "expect_after": {
+            "current": {
+              "k8s_migration.budget": "20.000 euros"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "¿Cuánto tenemos para la migración a Kubernetes?",
+          "agent_captures": [],
+          "agent_reply": "Tenemos 20.000 euros para la migración a Kubernetes. El aumento a 35.000 que mencionaste era de otro proyecto.",
+          "expect_packet": {
+            "delivered": [
+              "k8s_migration.budget"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "k8s_migration.budget": "20.000 euros"
+            }
+          }
+        },
+        {
+          "user": "Perfecto, seguimos con ese número.",
+          "agent_captures": [],
+          "agent_reply": "Perfecto. Con 20.000 euros siguen entrando unas 250 horas de consultoría."
+        }
+      ]
+    }
+  ]
+}

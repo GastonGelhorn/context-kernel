@@ -1,0 +1,91 @@
+{
+  "id": "20-ios-minimo-mixed",
+  "title": "Advice given in Spanish under an iOS 15 constraint is flagged after an English message raises the minimum",
+  "tags": [
+    "stale",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "La app de Turnos tiene que seguir funcionando en iOS 15. ¿Uso SwiftData o Core Data para la caché offline?",
+          "agent_captures": [
+            {
+              "entity": "turnos",
+              "predicate": "min_ios",
+              "value": "iOS 15",
+              "quote": "La app de Turnos tiene que seguir funcionando en iOS 15"
+            }
+          ],
+          "agent_reply": "Usá Core Data para la caché offline: SwiftData necesita iOS 17 y la app tiene que seguir funcionando en iOS 15. Armá el modelo con NSPersistentContainer y dejá el acceso detrás de un protocolo para migrar más adelante.",
+          "expect_after": {
+            "current": {
+              "turnos.min_ios": "iOS 15"
+            }
+          }
+        },
+        {
+          "user": "Creá la entidad Turno con fecha, profesional y estado.",
+          "agent_captures": [],
+          "agent_reply": "Listo: agregué la entidad Turno al modelo de Core Data con fecha, profesional y estado. También sumé un TurnoRepository para leer y guardar."
+        }
+      ]
+    },
+    {
+      "days_later": 12,
+      "turns": [
+        {
+          "user": "Good news: Turnos now requires iOS 17 as the minimum.",
+          "agent_captures": [
+            {
+              "entity": "turnos",
+              "predicate": "min_ios",
+              "value": "iOS 17",
+              "quote": "Turnos now requires iOS 17 as the minimum",
+              "replaces": "turnos.min_ios"
+            }
+          ],
+          "agent_reply": "Noted: the minimum for Turnos is now iOS 17. I have updated it.",
+          "expect_packet": {
+            "delivered": [
+              "turnos.min_ios"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "turnos.min_ios": "iOS 17"
+            }
+          }
+        },
+        {
+          "user": "Bump the deployment target in the Xcode project accordingly.",
+          "agent_captures": [],
+          "agent_reply": "Done: IPHONEOS_DEPLOYMENT_TARGET is now 17.0 for the app and the widget. I also removed two availability checks that no longer apply."
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "¿Sigue teniendo sentido Core Data para la caché offline de Turnos?",
+          "agent_captures": [],
+          "agent_reply": "Esa recomendación se basaba en soportar iOS 15, y ahora el mínimo es iOS 17, así que hay que revisarla. Con iOS 17, SwiftData pasa a ser una opción; si la caché todavía es chica, migrarla ahora sale barato.",
+          "expect_packet": {
+            "delivered": [
+              "turnos.min_ios"
+            ],
+            "review": true
+          }
+        },
+        {
+          "user": "Dale, lo vemos el lunes.",
+          "agent_captures": [],
+          "agent_reply": "Perfecto. Para el lunes te dejo un resumen de qué cambiaría al pasar la caché a SwiftData."
+        }
+      ]
+    }
+  ]
+}

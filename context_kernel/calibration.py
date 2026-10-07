@@ -11,6 +11,82 @@ import json
 from pathlib import Path
 
 from .common import KernelError
+from .judge import JudgeError, model_key
+
+
+# Fourteen rows the kernel's thresholds must still separate with whatever model jev runs. Taken from
+# fixtures/calibration.jsonl, where the shipped local model (tev1-32k) puts each one well clear of its bar:
+# true statements at 0.86-0.97 against 0.75, non-statements at 0.02-0.25 against 0.6, the joke at 0.73
+# against 0.6, a past and a current state at 0.97 and 0.01 against 0.7. A model that gets one of them
+# wrong does not get to save anything until it is tuned.
+CANARY = [
+    ("affirmed", {"text": "Mi manager es Dani.", "fact": "user manager: Dani"}, True),
+    ("affirmed", {"text": "Our budget for the migration is 20k EUR.", "fact": "migration budget: 20000 EUR"}, True),
+    ("affirmed", {"text": "We decided to deploy only in the EU region.", "fact": "platform deploy region: EU only"}, True),
+    ("affirmed", {"text": "Siempre usamos UTC en los logs.", "fact": "logging convention: UTC timestamps"}, True),
+    ("affirmed", {"text": "Ana dijo que su manager es Dani.", "fact": "user manager: Dani"}, False),
+    ("affirmed", {"text": "No estoy seguro de si el presupuesto es 20k.", "fact": "migration budget: 20000 EUR"}, False),
+    ("affirmed", {"text": "The deadline might move to three weeks, not sure yet.", "fact": "checkout deadline: three weeks"}, False),
+    ("affirmed", {"text": "Ya no trabajo en el proyecto aurora.", "fact": "user employment: aurora"}, False),
+    ("sarcasm", {"text": "lol, our tests always pass on the first try", "fact": "test suite status: always passes"}, True),
+    ("sarcasm", {"text": "Our on-call week starts on Tuesdays.", "fact": "on-call week start: Tuesday"}, False),
+    ("past", {"text": "I used to work nights until last year.", "fact": "user work schedule: nights"}, True),
+    ("past", {"text": "Mi manager es Dani.", "fact": "user manager: Dani"}, False),
+    ("facts", {"text": "El plazo cambió: tenemos tres semanas."}, True),
+    ("facts", {"text": "Thanks!"}, False),
+]
+
+
+def judge_state(store, judge):
+    """(state, model key) of the judge for this scope: `verified` (passed the canary), `failed`, `changed`
+    (another judge was verified here and this one not yet) or `unverified` (first use: the shipped
+    thresholds apply until the background check runs)."""
+    try:
+        key = model_key(judge.describe())
+    except (JudgeError, KernelError):
+        return "unknown", None
+    record = store.judge_record(key)
+    if record and record["status"] in {"passed", "failed"}:
+        return ("verified" if record["status"] == "passed" else "failed"), key
+    if any(r["status"] == "passed" and r["model_key"] != key for r in store.judge_records()):
+        return "changed", key
+    return "unverified", key
+
+
+def check(store, judge, timeout=60):
+    """Run the canary with the scope's thresholds and record the verdict for this judge."""
+    from .capture import AFFIRMED, CATEGORIES, CATEGORY, COUNTS, FACT_COUNT, PAST, SARCASM, policy
+    thresholds = policy(store)["thresholds"]
+    description = judge.describe()
+    key = model_key(description)
+    store.set_judge_record(key, "running", {"model": description.get("model"), "url": description.get("url")})
+    rows, wrong = [], []
+    try:
+        for kind, state, expected in CANARY:
+            if kind == "facts":
+                answers, _ = judge.ask(state, {"count": ("choice", FACT_COUNT, COUNTS)}, timeout=timeout)
+                p = answers["count"].get("none", 0.0)
+                right = (p < thresholds["none_bar"]) == expected
+            else:
+                answers, _ = judge.ask(state, {"affirmed": ("noul", AFFIRMED), "category": ("choice", CATEGORY, CATEGORIES),
+                                               "sarcasm": ("noul", SARCASM), "past": ("noul", PAST)}, timeout=timeout)
+                p = answers[kind]
+                bar = {"affirmed": thresholds["affirmed"], "sarcasm": thresholds.get("sarcasm", 0.6),
+                       "past": thresholds.get("past", 0.7)}[kind]
+                # A non-statement must not even reach the band that is held for review.
+                right = p >= bar if expected else p < (thresholds.get("uncertain", bar) if kind == "affirmed" else bar)
+            rows.append({"kind": kind, "expected": expected, "p": round(p, 3)})
+            if not right:
+                wrong.append(rows[-1] | {"text": state["text"][:60]})
+    except (JudgeError, KernelError) as exc:
+        # The judge did not answer: no verdict either way, so the next warm-up tries again.
+        store.clear_judge_records(key)
+        return {"status": "error", "model_key": key, "error": str(exc)[:200]}
+    status = "failed" if wrong else "passed"
+    detail = {"model": description.get("model"), "url": description.get("url"), "weights": description.get("weights"),
+              "rows": len(rows), "wrong": wrong}
+    store.set_judge_record(key, status, detail)
+    return {"status": status, "model_key": key} | detail
 
 
 QUESTIONS = {

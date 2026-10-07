@@ -238,6 +238,121 @@ Both clients have now passed the same pre-registered scenario once each, with no
 
 We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
+## v0.8: trust and scale
+
+Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`), on macOS arm64 with 48 GB, with no paid API. An external review asked for five things: a public, reproducible benchmark; fewer false memories; less dependence on host behaviour, watched by a compatibility matrix; latency handled as part of the product; and a narrower story for jevmate. Cues, safe mode, warm-up and the metrics below answer it.
+
+### What a judgment costs
+
+Measured with the three old facts of `tests/growth_check.py` among 1 to 48 unrelated ones, warm:
+
+| Pairs in one request | 1 | 8 | 24 | 48 |
+| --- | --- | --- | --- | --- |
+| Time | 0.4 s | 2.0 s | 4.9 s | 9.5 s |
+| The old fact's score | identical at every size | | | |
+
+So a pair costs about 0.19 s whatever the batch, and its score does not depend on its neighbours. Before v0.8 the hook judged up to 48 pairs: past about 35 facts, a new question used up the 8 s budget even with the model warm, and selection fell back to keyword rules. The number of pairs is now fitted to the time left, at the pace the previous calls measured.
+
+Loading the model is not the problem it seemed: 1.6 s for a cold `jev ask` here, 1.05 s for a cold keep-alive request. Ollama keeps a model five minutes by default; a keep-alive of 30 minutes set at session start survives jev's own requests (the expiry stays at 30 minutes after each one). A prompt that finds the model unloaded no longer waits for it: it answers from keyword matches and starts a warm-up.
+
+### The judge alone cannot order a busy inventory
+
+For "Is there room to squeeze the payments refactor in before we ship?" over the checkout deadline and 40 unrelated facts, the deadline scored 0.554 and ranked 23rd; 32 of the 40 scored above 0.5. Adding the agent's cues to the line the judge reads did not help (0.527, 24th), so cues go to the keyword match instead, where "ship date" meets "ship", and a pair matched in words and judged at 0.35 or more goes first.
+
+### Selection on the labelled relevance set
+
+`python3 -m tests.relevance_check` replays the judge's scores for all 60 questions through the real compiler (packet budget, judging order, selection rule). The scores are in `fixtures/relevance_scores.json`; the cues were written blind to the questions. With these facts and questions a pair cost 0.31 s warm (0.46 s while other jobs shared the model), so the 8 s hook judges about 12 to 19 pairs. In v0.7, 48 pairs over 30 facts could not finish in time, and every such prompt fell back to keyword rules: that is the first row.
+
+| Relevant facts delivered (of 30) | Tuning split | Held out | Paraphrased questions (of 45) |
+| --- | --- | --- | --- |
+| v0.7 as it ran: jev out of time, keyword rules | 6 | 7 | 0 |
+| v0.7's rule, had there been time for 48 pairs | 18 | 21 | 26 |
+| v0.8 rule without cues, 12 pairs | 16 | 16 | 18 |
+| v0.8 with cues, 12 pairs (what the hook affords) | 18 | 17 | 21 |
+| v0.8 with cues, 24 pairs (a faster judge) | 20 | 23 | 29 |
+
+What changed most is that the judgment now finishes: 6 and 7 of 30 became 18 and 17. The rule and the cues add on top of that when there is time for more pairs (21 → 23 held out at 24 pairs against v0.7's rule at 48). Generic questions stay quiet (5 or 6 of 6 got nothing). Precision is low by design of the packet: with 2 to 5 claims delivered for 1 to 3 that matter, 0.16 to 0.36 of what is delivered is labelled relevant.
+
+Cues only feed the keyword match: in the line the judge reads they made separation worse on the tuning split (AUC 0.739 against 0.771) and better on the held-out one (0.869 against 0.822), at a slower pace, so they stay out of it. With cues, 28 of the 60 relevant facts share a word with their question, against 17 without.
+
+Concurrent requests do not help: 24 pairs took 7.4 s as one request, 7.5 s as two, 6.3 s as three and 7.5 s as four.
+
+### Held-out capture
+
+`python3 -m tests.holdout_check`, run once after the holds were set on new calibration rows (never on these):
+
+| | v0.7 | v0.8 |
+| --- | --- | --- |
+| True statements saved (of 18) | 17 | 17 |
+| Messages stating nothing that were saved (of 20) | 2 | 0 |
+| … held for review | 4 | 6 |
+| … refused | 14 | 14 |
+
+The true row not saved is "I'm vegetarian…", held because personal details are off by default. The two that v0.7 saved are now held: "Write a test that checks invoices are PDF only." as a request for work, and "lol sure, we totally have infinite budget for AWS" as a joke. The gate saw a fact in all 21 true statements of the calibration set, so the 0.90 bar for facts it saw nothing of applied to none of them.
+
+### Growth, again
+
+| Facts | v0.7: delivered | v0.8: delivered |
+| --- | --- | --- |
+| 13 | 2 of 3 | 3 of 3 |
+| 48 | 2 of 3 | 3 of 3 |
+| 103 | 1 of 3 | 3 of 3 |
+| 203 | 2 of 3 | 3 of 3 |
+
+Read this one with care: the default cues for deadlines and allergies (`language.CONCEPTS`) were written after these three questions were known, and "ship" and "snack" are among them. So it shows the plumbing holds as memory grows (old constraints judged first, the right ones kept), not that paraphrases are solved; the relevance set above, written and cued blind, measures that. growth_check runs without the hook's time limit (48 pairs, 17 to 23 s).
+
+### The benchmark
+
+`python3 -m tests.bench --filler 0 200 1000`: 30 scenarios, 211 checks, the local judge, the prompt hook's real 8 s budget. The scenarios and their cues are in `fixtures/bench` ([how to read them](benchmark.md)).
+
+| | Empty memory | +200 unrelated facts | +1,000 unrelated facts |
+| --- | --- | --- | --- |
+| All checks | 193 | 186 | 179 |
+| Delivered when it should be (of 50) | 41 | 36 | 34 |
+| Not delivered when it should not be (of 19) | 19 | 19 | 19 |
+| Earlier advice flagged for review (of 7) / not flagged when unrelated (of 2) | 7 / 2 | 6 / 2 | 5 / 2 |
+| Current value right (of 76) | 70 | 70 | 68 |
+| Absent: never saved, held or forgotten (of 50) | 49 | 48 | 46 |
+| Held (of 2) / standing (of 5) | 2 / 3 | 2 / 3 | 2 / 3 |
+| Prompt hook, median / p90 / max | 1.3 / 1.7 / 2.3 s | 4.6 / 8.0 / 8.0 s | 4.6 / 8.0 / 8.1 s |
+| Stop hook, median / p90 | 0.9 / 1.6 s | 1.0 / 3.5 s | 1.0 / 3.7 s |
+
+By tag, with an empty memory: privacy 26 of 26, forget 23 of 23, decision records 24 of 24, paraphrase 24 of 25, several premises 14 of 15, stale 57 of 61, false captures 42 of 45, capture 92 of 99, key drift 21 of 25, standing 13 of 17. The Stop hook's median rose from 0.5 s to 0.9 s with the opening-sentence question (below). The 18 checks still failing, and why:
+
+- **Relevance (7).** Five are turns that state a change ("Update: the checkout deadline changed, we now have three weeks.", "Subió el presupuesto… ahora son 35.000 euros."): the judge reads a statement as asking for nothing, so the old value is not delivered as a claim. It still reaches the agent there, in `turn.capture.related` with the id to replace, which the check does not count. The other two are real misses: a deadline asked about as "antes del lanzamiento", and a commit rule taken off the standing list that did not come back for "Commit that query as a view".
+- **Key drift (3).** "release_signoff" was not recognised as the same attribute as "release_approver" (jev below 0.70), so the new approver became a second fact.
+- **A clear statement held as unsure (3).** "For the record, our production cluster runs in us-east-2, so the check itself is wrong." read 0.744, just under the bar, and is held for review.
+- **Standing (3).** The third restatement of "webshop uses pnpm", "Again, webshop uses pnpm: someone ran npm install yesterday and broke the lockfile.", read 0.72 as a statement, so it did not count as the third session.
+- **Ambiguity (2).** "Ojo, que la demo de Ceibo cambió de fecha." without a new date: the agent saved "cambió de fecha (sin confirmar)" and the kernel let it replace the old date.
+
+The CI job replays the recorded answers of the empty-memory run (`fixtures/bench/recorded.json`) and fails below 0.90.
+
+### What the first benchmark run found
+
+The first full run of `tests/bench.py` scored 75 of 211 checks, and the cause was the runner: the prompt hook records the real process ancestry, the replayed MCP server stood for another one, and every capture was refused as unbound. The unit tests rebind the session after each prompt; the runner now does too. The second run, with the real judge, scored 183 of 211 with an empty memory and found two false memories worth a change:
+
+- **A joke replaced a real value.** "Sí, claro, como tenemos presupuesto infinito, metamos un cluster de GPUs, jaja." turned the stored infrastructure budget into "infinito": the sarcasm question gave 0.588, under its 0.60 bar. The message's own markers (jaja, lol, "como si", "yeah right") now lower the bar to 0.45; no true statement of the calibration set scored above 0.33.
+- **A past state was saved as current.** "Hasta agosto el deploy de Brújula era manual" became the current deploy method (asserted at 0.865). The first fix asked whether the fact is true now, rather than only in the past. It separated the calibration rows, but the next benchmark run held three future dates as past ("The partner portal launches on March 3." scored 0.37 as true now) and lost 9 checks. Asking instead whether the writer says the fact used to be true and has since stopped put the six past states at 0.76 or more and 77 of 78 true statements (calibration, held-out and benchmark rows, future dates included) at 0.46 or less; the 78th, "se fueron dos personas del equipo: ahora somos dos", at 0.67. It is held from 0.70. It took the place of the work-request question in the main request, which is now asked separately and only when the sentence opens with a work verb.
+
+The run after those two changes scored 186 of 211 and left two more causes worth a change:
+
+- **A constraint stated next to a question was only held.** "Tenemos cinco semanas hasta el lanzamiento de cobros. ¿Pasamos los PDF…?", "We need search-as-you-type live in four weeks. Should we…?" and "La app tiene que seguir funcionando en iOS 15. ¿Uso SwiftData…?" read 0.64 to 0.75 as whole messages, so the premise of the very recommendation that followed was never saved. The sentence the agent cited read 0.81 to 0.94. It now decides when the whole message is in the band; five traps (a doubt in the next sentence, "just kidding", "maybe", a reminder request) stayed out.
+- **A held reading blocked the next value.** After "the Orion migration deadline moved" was held as unsure, "it is now due on April 4" opened a question about conflicting values instead of replacing the deadline. Held readings no longer count as a disagreement, and the stated value replaces them.
+
+The 183-check run also showed that with 200 or 1,000 unrelated facts in memory, every prompt used the full 8 s judging facts that rarely matter. Pairs outside the likely set (matched in words, constraints and decisions, the four most recent) are now judged only while 3 s would still be left.
+
+### The compatibility matrix
+
+`python3 -m tests.compat_matrix` runs the native checks in fresh folders against the Claude Code installed now (2.1.287) and records each run in [compatibility](compatibility.md). Its first run passed the v0.4 flow (10 of 10) and failed the v0.6 flow (7 of 9): the recommendation was not linked to the decision record, so the fresh session could not flag it. A second run failed the same way on its first attempt and passed on the retry. The failing reply opened with clear advice ("The new email worker should use the SQLite job queue…") and ended with a caveat ("I couldn't open the file in this session, so I'm going on the project memory's summary"); judged whole, it read 0.71 to 0.73 as a recommendation, against a 0.70 bar, and in the hook it fell under. Its opening sentence read 0.93. The judgment now takes the higher of the two; on nine labelled replies, recommendations read 0.76 to 0.97 as openings and reports, questions and refusals at most 0.57. The matrix itself now retries a failed check once and records a pass on the retry as flaky, with what failed first, so this kind of failure stays visible instead of averaging away. With the change, the next run passed both flows on the first attempt (10 of 10 and 9 of 9). It is scheduled weekly on the owner's machine.
+
+### The canary
+
+The fourteen canary rows passed on tev1-32k with the default thresholds (14 of 14), in 17 s: fourteen requests, about 1.2 s apiece. It runs in the session-start background pass, so nobody waits for it, and only when the judge has no verdict yet. Re-run after the current-state question was added, the held-out capture check gave the same result as above (17 of 18 true statements saved, none of the 20 others).
+
+### A schema bump an installed plugin refused
+
+While v0.8 was developed, this repository's own hooks ran the checkout and migrated the shared database to schema 7. The installed v0.7 plugin then refused it ("Unsupported memory schema") in every other project, failing open: prompts went through without memory. The change was additive (a column, a table), so v0.8 keeps version 6, adds what is missing when it opens a database, and reads a database stamped 7 as 6. The installed v0.7 plugin read the database again right after.
+
 ## v0.7: jevmate alone, the kernel alone, both, and neither
 
 Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`) and Claude Code 2.1.287 headless on the owner's subscription, with fictional prompts.

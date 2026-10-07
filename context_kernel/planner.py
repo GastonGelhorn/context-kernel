@@ -147,12 +147,57 @@ def jev_candidate(entity, predicate, values):
     return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()
 
 
+# Measured on the local model (tev1-32k, 2026-10-06): one pair costs 0.19 s (short lines) to 0.31 s (the
+# facts and questions of fixtures/relevance.json) warm, whatever the batch size and with no gain from
+# concurrent requests, and a pair's score does not depend on the other pairs in the batch. 48 pairs took
+# 9.5 s even with short lines, more than the prompt hook's whole budget. So the number of pairs judged is
+# fitted to the time left, at the pace the last calls measured; what the hook does after the judgment
+# (the packet, the trace, a keep-alive request) takes well under RESERVE_SECONDS.
+DEFAULT_PAIR_SECONDS = 0.3
+RESERVE_SECONDS = 1.0
+PACE_KEY = "judge_pair_seconds"
+# Pairs the question matches in words, constraints and decisions, and the few most recent are judged first, as
+# time allows. The others are judged only with PATIENCE_SECONDS still to spare: in the labelled relevance set,
+# 54 of the 60 facts that mattered were matched in words or were constraints or decisions, and 3 of the other
+# 6 were among the 4 most recent. With 200 unrelated facts in memory, judging them anyway kept every prompt at
+# the full 8 s (tests/bench.py).
+RECENT_PAIRS = 4
+PATIENCE_SECONDS = 3.0
+
+
+def affordable_pairs(deadline, pace, limit, reserve=RESERVE_SECONDS):
+    if deadline is None:
+        return limit
+    return max(0, min(limit, int((deadline.remaining() - reserve) / max(pace, 0.01))))
+
+
+def select(scored, lexical, critical, supporting, band):
+    """Needs from judged pairs, best first. Two independent signals agreeing beat one strong one: a pair the
+    question matches in words (its key, value or cues) and jev puts at least in the band comes before a
+    pair jev alone scores high. On paraphrased questions the judge scored most facts of a busy inventory
+    above 0.5 (32 of 40 for "is there room before we ship?"), so jev alone cannot order them; the cues
+    the agent wrote when it saved a fact supply the second signal. Returns [(tier, score, entity, predicate, critical)]."""
+    chosen = []
+    for score, entity, predicate in scored:
+        matched = (entity, predicate) in lexical
+        if matched and score >= band:
+            tier = 0
+        elif score >= critical:
+            tier = 1
+        elif score >= supporting:
+            tier = 2
+        else:
+            continue
+        # Two agreeing signals are as strong a reason to deliver as a high score alone: both go first.
+        chosen.append((tier, score, entity, predicate, tier == 0 or score >= critical))
+    return sorted(chosen, key=lambda c: (c[0], -c[1], c[2], c[3]))
+
+
 def jev_plan(query, records, jev, relations=(), lexical=(), cache=None, deadline=None, allow_remote=False):
-    """Every authorized entity/property pair is judged against the question; the plan keeps the
-    pairs above the supporting threshold, critical above the critical one. A pair that lands in
-    the uncertain band below the supporting bar is kept as supporting only when the question
-    lexically matches it (`lexical` holds those pairs): the band is decided by other evidence, not
-    by lowering the bar.
+    """The pairs most likely to matter are judged against the question, as many as the time left allows:
+    the ones the question matches in words first (strongest match first), then constraints and decisions,
+    then the most recent. `lexical` maps a pair to its keyword score (key, value and cues; see
+    compiler.lexical_scores); a plain set also works. `select` turns the scores into needs.
 
     Selection fails open: if the judge is unavailable, out of time, or points to a hosted backend
     this scope has not authorized, the rules plan is used with a visible warning. Judgments are
@@ -169,51 +214,62 @@ def jev_plan(query, records, jev, relations=(), lexical=(), cache=None, deadline
         latest[pair] = max(latest.get(pair, ""), row["recorded_at"])
         if durable(row):
             lasting.add(pair)
-    lexical = set(lexical)
-    keys = sorted(pairs)
-    warnings = ()
-    if len(keys) > jev.max_pairs:
-        # A local model answers about 50 ms per pair once warm and several seconds cold; the hook has
-        # ten seconds. Judge the pairs the question mentions first, then constraints and decisions (an
-        # old deadline matters more than last week's channel name), then the most recently recorded.
-        # Measured with tests/growth_check.py: by recency alone, no old constraint was judged past 48 facts.
-        keys = sorted(sorted(keys, key=lambda k: latest[k], reverse=True),
-                      key=lambda k: (k not in lexical, k not in lasting))[:jev.max_pairs]
-        warnings = ("jev_inventory_capped",)
+    strength = dict(lexical) if isinstance(lexical, dict) else {pair: 1.0 for pair in lexical}
+    # An old deadline matters more than last week's channel name: by recency alone, no old constraint was
+    # judged past 48 facts (tests/growth_check.py, v0.6).
+    keys = sorted(sorted(pairs, key=lambda k: latest[k], reverse=True),
+                  key=lambda k: (k not in strength, -strength.get(k, 0.0), k not in lasting))
     if not keys:
         return NeedPlan(strategy="jev"), {"calls": 0}
-    lines = [jev_candidate(e, p, pairs[(e, p)]) for e, p in keys]
-    digests = [digest(line) for line in lines]
+    lines = {k: jev_candidate(k[0], k[1], pairs[k]) for k in keys}
+    digests = {k: digest(lines[k]) for k in keys}
     usage = {"calls": 0, "cached": 0}
+    warnings = ()
     try:
         jev.require_local(allow_remote)
         model = canonical(jev.describe())
         state = digest(query)
-        known = cache.judgments("relevance", jev.question, model, state, digests) if cache else {}
-        misses = [i for i, d in enumerate(digests) if d not in known]
-        scores = {i: known[d] for i, d in enumerate(digests) if d in known}
+        known = cache.judgments("relevance", jev.question, model, state, list(digests.values())) if cache else {}
+        pace = float(cache.meta(PACE_KEY) or DEFAULT_PAIR_SECONDS) if cache and hasattr(cache, "meta") else DEFAULT_PAIR_SECONDS
+        # Cached pairs cost nothing; the time left buys the next pairs in order, the likely ones first.
+        recent = set(sorted(pairs, key=lambda k: latest[k], reverse=True)[:RECENT_PAIRS])
+        likely = {k for k in keys if k in strength or k in lasting or k in recent}
+        cached_keys = [k for k in keys if digests[k] in known]
+        fresh_keys = [k for k in keys if digests[k] not in known and k in likely][:affordable_pairs(deadline, pace, jev.max_pairs)]
+        spare = min(jev.max_pairs - len(fresh_keys),
+                    affordable_pairs(deadline, pace, jev.max_pairs, RESERVE_SECONDS + PATIENCE_SECONDS) - len(fresh_keys))
+        fresh_keys += [k for k in keys if digests[k] not in known and k not in likely][:max(0, spare)]
+        judged = cached_keys + fresh_keys
+        if len(judged) < len(keys):
+            warnings = ("jev_inventory_capped",)
+        scores = {k: known[digests[k]] for k in judged if digests[k] in known}
         usage["cached"] = len(scores)
-        if misses:
+        if fresh_keys:
             timeout = deadline.timeout(jev.timeout) if deadline else None
-            fresh, call = jev.rank(query, [lines[i] for i in misses], no_cache=True, timeout=timeout)
+            fresh, call = jev.rank(query, [lines[k] for k in fresh_keys], no_cache=True, timeout=timeout)
             usage.update(call, calls=1)
-            for position, index in enumerate(misses):
-                scores[index] = fresh.get(position, 0.0)
+            for position, k in enumerate(fresh_keys):
+                scores[k] = fresh.get(position, 0.0)
             if cache:
-                cache.save_judgments("relevance", jev.question, model, state,
-                                     {digests[i]: scores[i] for i in misses})
+                cache.save_judgments("relevance", jev.question, model, state, {digests[k]: scores[k] for k in fresh_keys})
+                # A call also pays a fixed start-up; with a handful of pairs it would read as a slow pace.
+                measured = (call.get("latency_ms") or 0) / 1000 / len(fresh_keys)
+                if measured > 0 and len(fresh_keys) >= 8 and hasattr(cache, "meta"):
+                    cache.meta(PACE_KEY, round(0.7 * pace + 0.3 * measured, 4))
+        elif not judged:
+            raise KernelError("No time left to judge relevance in this turn.")
     except JudgeRemote as exc:
         fallback = rules_plan(query, records, relations)
         return NeedPlan(fallback.needs, "jev", fallback.warnings + ("judge_remote",)), usage | {"failure": str(exc)}
     except KernelError as exc:
         fallback = rules_plan(query, records, relations)
         return NeedPlan(fallback.needs, "jev", fallback.warnings + ("jev_unavailable",)), usage | {"calls": 1, "failure": str(exc)}
-    ranked = sorted(((scores.get(i, 0.0), e, p) for i, (e, p) in enumerate(keys)), key=lambda t: (-t[0], t[1], t[2]))
-    rescued = [f"{e}.{p}" for score, e, p in ranked if jev.band <= score < jev.supporting and (e, p) in lexical]
-    needs = tuple(Need((p,), (e,), critical=score >= jev.critical) for score, e, p in ranked
-                  if score >= jev.supporting or (jev.band <= score and (e, p) in lexical))[:16]
+    ranked = sorted(((scores[k], k[0], k[1]) for k in judged), key=lambda t: (-t[0], t[1], t[2]))
+    chosen = select(ranked, strength, jev.critical, jev.supporting, jev.band)
+    needs = tuple(Need((p,), (e,), critical=crit) for _, _, e, p, crit in chosen)[:16]
     # Scores are keyed by source pair, never by value: the trace stays metadata-only.
     usage.update(scores={f"{e}.{p}": round(score, 3) for score, e, p in ranked},
                  thresholds={"critical": jev.critical, "supporting": jev.supporting, "band": jev.band},
-                 lexical_rescues=rescued, judged_pairs=len(keys), unjudged_pairs=len(pairs) - len(keys))
+                 lexical_matches=[f"{e}.{p}" for _, _, e, p, _ in chosen if (e, p) in strength],
+                 judged_pairs=len(judged), unjudged_pairs=len(pairs) - len(judged))
     return NeedPlan(needs, "jev", warnings), usage

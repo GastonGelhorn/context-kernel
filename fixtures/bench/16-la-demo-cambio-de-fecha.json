@@ -1,0 +1,102 @@
+{
+  "id": "16-la-demo-cambio-de-fecha",
+  "title": "\"The demo date changed\" with no new date leaves the stored date in place until the user gives the new one",
+  "tags": [
+    "ambiguous",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "La demo para Grupo Ceibo es el martes 18 a las 10.",
+          "agent_captures": [
+            {
+              "entity": "ceibo",
+              "predicate": "demo_date",
+              "value": "martes 18 a las 10",
+              "quote": "La demo para Grupo Ceibo es el martes 18 a las 10"
+            }
+          ],
+          "agent_reply": "Anotado: la demo para Grupo Ceibo es el martes 18 a las 10. Preparo todo para esa fecha."
+        },
+        {
+          "user": "Prepará datos de ejemplo para la demo: 20 clientes y 100 pedidos.",
+          "agent_captures": [],
+          "agent_reply": "Listo: seeds/demo_ceibo.sql carga 20 clientes y 100 pedidos. Las fechas de los pedidos caen en el último mes."
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "Ojo, que la demo de Ceibo cambió de fecha.",
+          "agent_captures": [
+            {
+              "entity": "ceibo",
+              "predicate": "demo_date",
+              "value": "cambió de fecha (nueva fecha sin confirmar)",
+              "quote": "la demo de Ceibo cambió de fecha"
+            }
+          ],
+          "agent_reply": "Gracias por avisar. ¿Sabés la nueva fecha? Hasta que me la confirmes, tomo el martes 18 como no vigente.",
+          "expect_packet": {
+            "delivered": [
+              "ceibo.demo_date"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "ceibo.demo_date": "martes 18 a las 10"
+            }
+          }
+        },
+        {
+          "user": "Todavía no, Lucía me la pasa mañana.",
+          "agent_captures": [],
+          "agent_reply": "Perfecto. Cuando la tengas, la anoto.",
+          "expect_after": {
+            "current": {
+              "ceibo.demo_date": "martes 18 a las 10"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 1,
+      "turns": [
+        {
+          "user": "¿Qué día tenemos la demo con Ceibo?",
+          "agent_captures": [],
+          "agent_reply": "Lo último que tengo es el martes 18 a las 10, pero me avisaste que cambió y todavía no tengo la fecha nueva. Conviene confirmarla con Lucía.",
+          "expect_packet": {
+            "delivered": [
+              "ceibo.demo_date"
+            ]
+          }
+        },
+        {
+          "user": "Ya está: la demo con Ceibo pasó al jueves 20 a las 15.",
+          "agent_captures": [
+            {
+              "entity": "ceibo",
+              "predicate": "demo_date",
+              "value": "jueves 20 a las 15",
+              "quote": "la demo con Ceibo pasó al jueves 20 a las 15",
+              "replaces": "ceibo.demo_date"
+            }
+          ],
+          "agent_reply": "Anotado: la demo con Grupo Ceibo es el jueves 20 a las 15. Los datos de ejemplo siguen sirviendo.",
+          "expect_after": {
+            "current": {
+              "ceibo.demo_date": "jueves 20 a las 15"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

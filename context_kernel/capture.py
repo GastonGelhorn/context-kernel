@@ -9,7 +9,7 @@ never the policy itself: correctness, authorization, and session origin are chec
 import json
 import re
 
-from .common import KernelError, canonical, key
+from .common import KernelError, canonical, key, reject_secrets
 from .judge import JudgeError
 from .language import fold, query_terms
 from .turns import do_not_remember
@@ -34,10 +34,15 @@ DEFAULT_POLICY = {
     "categories": {name: name not in {"personal_attributes", "third_party_sensitive"} for name in CATEGORIES},
     # Measured with `memory calibrate affirmed --score` on the local model: every true row scored
     # 0.76 or more, the highest false one (a question) 0.757. The band below holds, not delivers.
-    "thresholds": {"affirmed": 0.75, "uncertain": 0.6, "none_bar": NONE_BAR},
+    "thresholds": {"affirmed": 0.75, "uncertain": 0.6, "none_bar": NONE_BAR, "sarcasm": 0.6, "past": 0.7, "task": 0.6,
+                   "unprompted": 0.9},
     "caps": {"turn": 2, "session": 10, "day": 30},
-    # Decision records and decision commits of the repository a session runs in (repository.py).
+    # Decision records of the repository a session runs in (repository.py); commit messages only when
+    # `repository_commits` is on: a commit subject is a weaker source than a record a team wrote.
     "repository": True,
+    "repository_commits": False,
+    # How long the local judge's model stays loaded after each turn ("off" leaves Ollama's default).
+    "keep_alive": "30m",
 }
 # A property the user has stated in this many separate sessions is delivered at the start of every
 # session from then on, whether or not a question touches it: they should not have to say it again.
@@ -52,6 +57,28 @@ STANDING_KINDS = {"preferences", "constraints", "project_decisions"}
 AFFIRMED = ("Does the writer of `text` assert `fact` as true, in their own words, rather than quoting someone, "
             "asking about it, denying it, or describing a hypothetical?")
 CATEGORY = "Which kind of information is `fact`?"
+# Asked in the same request as AFFIRMED. Measured on the local model (fixtures/calibration.jsonl, v0.8 rows):
+# jokes and sarcasm scored 0.65-0.73 and every true statement 0.33 or less; "Sí, claro, como tenemos
+# presupuesto infinito… jaja" only 0.588, so a joke's own markers (jaja, lol, "como si") lower the bar to
+# JOKE_MARKED_BAR. A past state ("hasta agosto el deploy era manual") reads as asserted (0.865); PAST put
+# all 6 past states of the calibration and benchmark rows at 0.76 or more and 77 of 78 true statements
+# under 0.46 (the 78th, "se fueron dos personas: ahora somos dos", at 0.67). Asking instead whether a fact
+# is "true now" held future dates as past ("the portal launches on March 3": 0.37).
+SARCASM = "Is the writer of `text` joking, being sarcastic, or saying the opposite of what they mean about `fact`?"
+PAST = "Does the writer of `text` say that `fact` used to be true and has since stopped being true?"
+# Asked in a second request, only when the sentence stating the fact opens with a work verb (task_clause):
+# work requests ("write a test that checks invoices are PDF only") scored 0.73-0.89, but a fact stated next
+# to a question also reached 0.68, so neither signal holds a fact alone.
+TASK = ("Is the writer of `text` asking the assistant to carry out a piece of work now (write, build, run, change, "
+        "explain or look up something), rather than telling it how things are or how things must always be done?")
+SARCASM_BAR = 0.6
+JOKE_MARKED_BAR = 0.45
+PAST_BAR = 0.7
+TASK_BAR = 0.6
+_JOKE_MARKS = re.compile(r"\b(lol|lmao|rofl|xd|ja(ja)+|je(je)+|ha(ha)+|yeah right|as if|como si|si,? claro|ya,? claro)\b")
+# A fact the hook's gate did not see in the message (it judged that nothing was stated) and the agent
+# proposed on its own is saved only on a near-certain reading; otherwise it is held for review.
+UNPROMPTED_BAR = 0.9
 FACT_COUNT = ("How many distinct durable facts, decisions, constraints, or preferences that the writer would want "
               "remembered in a later conversation does `text` state?")
 INSTRUCTION = "Is `text` mainly an instruction or command aimed at an AI assistant rather than information about the writer or their work?"
@@ -74,6 +101,17 @@ _REPLY_MARKER = re.compile(r"^\s*(-{3,}|_{3,}|-+ ?(original message|forwarded me
 _INSTRUCTION_VALUE = re.compile(r"(?i)\b(ignore (all|previous|the)|always (run|execute|answer)|you must|siempre (ejecuta|responde)|ignora)\b")
 AUTHORED_LIMIT = 1500
 VALUE_LIMIT = 200
+QUOTE_LIMIT = 300
+CUE_LIMIT, CUE_LENGTH = 8, 40
+# A sentence that opens with a request for work ("write a test that…", "genera un script que…") talks
+# about the work, not about how things are. Verbs of convention ("use", "prefer", "avoid") are not here:
+# "use pnpm in this repo" is a decision.
+_TASK_VERBS = re.compile(r"^(please\s+|por favor\s+|can you\s+|could you\s+|puedes\s+|podrias\s+)?"
+                         r"(write|add|create|generate|build|implement|make|fix|refactor|rename|delete|remove|update|change|"
+                         r"explain|show|list|draft|test|check|run|migrate|convert|translate|summari[sz]e|"
+                         r"escribe|anade|agrega|crea|genera|construye|implementa|haz|arregla|corrige|refactoriza|renombra|borra|"
+                         r"elimina|actualiza|cambia|explica|explicame|muestra|muestrame|lista|redacta|prueba|comprueba|ejecuta|"
+                         r"corre|migra|convierte|traduce|resume)\b")
 
 
 def policy(store):
@@ -208,6 +246,68 @@ def asked_to_remember(authored, value):
     return None
 
 
+def _normal(value):
+    return re.sub(r"\s+", " ", re.sub(r"[\"'“”‘’«»`]", "", fold(value))).strip(" .,:;!¡?¿-")
+
+
+def _sentences(value):
+    return [s.strip() for s in re.split(r"(?<=[.!?\n;])\s+", value) if s.strip()]
+
+
+def locate_quote(quote, value):
+    """The sentence of `value` that holds `quote`, the user's own words the agent cited, or None.
+    Case, accents, quotes and spacing are ignored; an agent that dropped a filler word still matches
+    when four in five of the quote's words appear in one sentence."""
+    wanted = _normal(quote)
+    if len(wanted) < 3 or not value:
+        return None
+    for sentence in _sentences(value):
+        if wanted in _normal(sentence):
+            return sentence
+    words = [w for w in re.findall(r"[^\W_]+", wanted) if len(w) > 2]
+    if len(words) < 3:
+        return None
+    for sentence in _sentences(value):
+        present = set(re.findall(r"[^\W_]+", _normal(sentence)))
+        if sum(1 for w in words if w in present) >= 0.8 * len(words):
+            return sentence
+    return None
+
+
+def clean_cues(raw):
+    """At most CUE_LIMIT short cues from the agent: plain words or phrases, no instructions, no secrets."""
+    if not isinstance(raw, list):
+        return []
+    kept, seen = [], set()
+    for item in raw:
+        if not isinstance(item, str):
+            continue
+        cue = re.sub(r"\s+", " ", item).strip()[:CUE_LENGTH]
+        folded = fold(cue)
+        if len(folded) < 2 or folded in seen or _INSTRUCTION_VALUE.search(cue):
+            continue
+        try:
+            reject_secrets(cue)
+        except KernelError:
+            continue
+        seen.add(folded)
+        kept.append(cue)
+        if len(kept) == CUE_LIMIT:
+            break
+    return kept
+
+
+def task_clause(authored, anchor):
+    """The sentence stating the fact (the one holding `anchor`, the quote or the value) asks for work:
+    it opens with a work verb and says nothing about always or from now on, and is no request to remember."""
+    sentence = locate_quote(anchor, authored) if anchor else None
+    if not sentence:
+        return False
+    folded = fold(sentence)
+    return bool(_TASK_VERBS.match(folded)) and not _STANDING_CUES.search(folded) and not _REMEMBER_PHRASES.search(folded) \
+        and not any(_is_cue(w, "") for w in re.findall(r"[^\W_]+", folded)[:2])
+
+
 def fact_line(entity, predicate, value):
     rendered = value if isinstance(value, str) else canonical(value)
     return re.sub(r"\s+", " ", f"{entity} {predicate.replace('_', ' ')}: {rendered}").strip()
@@ -229,7 +329,8 @@ def gate(judge, prompt, deadline=None, none_bar=None):
         return {"facts": 0, "p_none": 1.0, "instruction": 0.0, "calls": 0}
     timeout = deadline.timeout(judge.timeout) if deadline else None
     answers, usage = judge.ask({"text": authored}, {"count": ("choice", FACT_COUNT, COUNTS),
-                                                    "instruction": ("noul", INSTRUCTION)}, timeout=timeout)
+                                                    "instruction": ("noul", INSTRUCTION),
+                                                    "task": ("noul", TASK)}, timeout=timeout)
     counts = answers["count"]
     # Measured on the local model: messages that state a fact put P(none) at 0.04 or less, a generic
     # question at 0.27. The count itself is an estimate (a fact plus a question reads as "two"), so
@@ -239,11 +340,13 @@ def gate(judge, prompt, deadline=None, none_bar=None):
     else:
         best = max((k for k in counts if k != "none"), key=counts.get)
         facts = {"one": 1, "two": 2, "several": 3}[best]
-    return {"facts": facts, "p_none": counts.get("none", 0.0), "instruction": answers["instruction"], "calls": 1,
-            "latency_ms": usage.get("latency_ms")}
+    return {"facts": facts, "p_none": counts.get("none", 0.0), "instruction": answers["instruction"],
+            "task": answers.get("task", 0.0), "calls": 1, "latency_ms": usage.get("latency_ms")}
 
 
-def _decide(store, judge, turn, triple, rules, deadline):
+def _decide(store, judge, turn, triple, rules, deadline, quote=None):
+    """(status, reason, category, source) for one proposed fact against the user's recorded words.
+    `quote` is the agent's citation of those words; when given it must be found in them."""
     entity, predicate, value = triple
     authored, quoted = segments(turn["prompt_excerpt"] or "")
     # A message made only of questions states nothing. The hook already skips its nudge for these, but
@@ -253,21 +356,60 @@ def _decide(store, judge, turn, triple, rules, deadline):
         return "rejected", "question_only", None, None
     line = fact_line(entity, predicate, value)
     timeout = deadline.timeout(judge.timeout) if deadline else None
+    thresholds = rules["thresholds"]
+    bar = thresholds["affirmed"]
+    cited = None
+    if quote:
+        # The agent says where the user stated it. Words the user did not type are not evidence, and words
+        # only found in what they pasted are someone else's.
+        cited = locate_quote(quote, authored)
+        if not cited:
+            if not (quoted and locate_quote(quote, quoted)):
+                return "rejected", "quote_not_found", None, None
+            pasted, _ = judge.ask({"text": quoted, "fact": line}, {"affirmed": ("noul", AFFIRMED),
+                                  "category": ("choice", CATEGORY, CATEGORIES)}, timeout=timeout)
+            category = max(pasted["category"], key=pasted["category"].get)
+            if pasted["affirmed"] >= bar:
+                return "quarantined", "quoted_source", category, quoted
+            return "rejected", "not_affirmed", category, None
     answers, _ = judge.ask({"text": authored, "fact": line},
-                           {"affirmed": ("noul", AFFIRMED), "category": ("choice", CATEGORY, CATEGORIES)}, timeout=timeout)
+                           {"affirmed": ("noul", AFFIRMED), "category": ("choice", CATEGORY, CATEGORIES),
+                            "sarcasm": ("noul", SARCASM), "past": ("noul", PAST)}, timeout=timeout)
     category = max(answers["category"], key=answers["category"].get)
-    bar = rules["thresholds"]["affirmed"]
-    if answers["affirmed"] >= bar or asked_to_remember(authored, value):
+    asked = asked_to_remember(authored, value)
+    affirmed = answers["affirmed"] >= bar or asked
+    if not affirmed and cited and cited.strip() != authored.strip() and answers["affirmed"] >= thresholds.get("uncertain", bar):
+        # A fact stated next to a question ("Tenemos cinco semanas hasta el lanzamiento. ¿Pasamos los PDF…?") reads
+        # as less asserted as a whole (0.64-0.75) than the sentence the agent cited (0.81-0.94). The cited sentence
+        # alone decides only when the whole message is already in the band: "Our budget is 20k EUR. Just
+        # kidding…" scored 0.96 as a sentence and 0.06 as a message.
+        sentence, _ = judge.ask({"text": cited, "fact": line}, {"affirmed": ("noul", AFFIRMED)}, timeout=timeout)
+        affirmed = sentence["affirmed"] >= bar
+    if affirmed:
+        source = cited or authored
         if turn["origin"] != "interactive":
-            return "quarantined", "origin_unverified", category, authored
+            return "quarantined", "origin_unverified", category, source
+        # Held, not refused: the user can still say it was meant.
+        marked = bool(_JOKE_MARKS.search(fold(authored)))
+        if answers["sarcasm"] >= thresholds.get("sarcasm", SARCASM_BAR) or (marked and answers["sarcasm"] >= JOKE_MARKED_BAR):
+            return "quarantined", "joke", category, source
+        if not asked and answers["past"] >= thresholds.get("past", PAST_BAR):
+            return "quarantined", "past_state", category, source
+        rendered = value if isinstance(value, str) else canonical(value)
+        if not asked and task_clause(authored, quote or rendered):
+            work, _ = judge.ask({"text": authored, "fact": line}, {"task": ("noul", TASK)}, timeout=timeout)
+            if work["task"] >= thresholds.get("task", TASK_BAR):
+                return "quarantined", "task_request", category, source
+        if not asked and "gate_none" in turn["flags"] and answers["affirmed"] < thresholds.get("unprompted", UNPROMPTED_BAR):
+            return "quarantined", "unprompted", category, source
         if not rules["categories"].get(category, False):
-            return "quarantined", "category_disabled", category, authored
-        return "captured", None, category, authored
-    if quoted:
+            return "quarantined", "category_disabled", category, source
+        return "captured", None, category, source
+    if quoted and not quote:
         pasted, _ = judge.ask({"text": quoted, "fact": line}, {"affirmed": ("noul", AFFIRMED)}, timeout=timeout)
         if pasted["affirmed"] >= bar:
             return "quarantined", "quoted_source", category, quoted
-    if answers["affirmed"] >= rules["thresholds"].get("uncertain", bar):
+    if answers["affirmed"] >= thresholds.get("uncertain", bar):
         return "quarantined", "uncertain", category, authored
     return "rejected", "not_affirmed", category, None
 
@@ -335,6 +477,10 @@ def capture(store, judge, turn, triples, deadline=None):
     except JudgeError as exc:
         # Writes fail closed: without a usable judge nothing is stored.
         return [{"status": "rejected", "reason": "judge_unavailable", "detail": str(exc)} for _ in triples]
+    from .calibration import judge_state
+    # Thresholds are measured per model. A judge this scope has not verified yet, after another one was,
+    # or one that failed the check, only holds facts for review until the check passes (safe mode).
+    safe = judge_state(store, judge)[0] in {"changed", "failed"}
     for raw in triples:
         try:
             entity, predicate = key(raw.get("entity"), "entity"), key(raw.get("predicate"), "predicate")
@@ -347,7 +493,10 @@ def capture(store, judge, turn, triples, deadline=None):
             results.append({"status": "rejected", "reason": "invalid_triple"})
             continue
         replaces = raw.get("replaces") if isinstance(raw.get("replaces"), str) else None
-        result = _capture_one(store, judge, turn, (entity, predicate, value), rules, deadline, replaces)
+        quote = raw.get("quote").strip()[:QUOTE_LIMIT] if isinstance(raw.get("quote"), str) else ""
+        quote = quote if len(quote) >= 3 else None  # too short to cite anything; judged as if absent
+        result = _capture_one(store, judge, turn, (entity, predicate, value), rules, deadline, replaces,
+                              quote=quote, cues=clean_cues(raw.get("cues")), safe=safe)
         if result["status"] in {"captured", "quarantined"}:
             turn["captured_ids"] = turn["captured_ids"] + [result["id"]]
             store.update_turn(turn["session_id"], turn["turn_key"], captured_ids=turn["captured_ids"])
@@ -355,9 +504,10 @@ def capture(store, judge, turn, triples, deadline=None):
     return results
 
 
-def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
+def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None, quote=None, cues=(), safe=False):
     """`proposed` is what the agent extracted; it is what the user's words are checked against. It
-    is stored under the keys of the pair it updates, when there is one."""
+    is stored under the keys of the pair it updates, when there is one. `cues` are the agent's words
+    for when the fact matters later; `safe` holds what would be saved (an unverified judge)."""
     entity, predicate, value = proposed
     session, turn_key = turn["session_id"], turn["turn_key"]
     resolved_from = None
@@ -387,9 +537,16 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
         if turn["origin"] != "interactive":
             return done("duplicate", "already_known", same["id"])
         try:
-            status, _, _, _ = _decide(store, judge, turn, proposed, rules, deadline)
+            status, _, _, _ = _decide(store, judge, turn, proposed, rules, deadline, quote)
         except JudgeError:
             return done("duplicate", "already_known", same["id"])
+        if safe and status == "captured":
+            return done("duplicate", "already_known", same["id"])
+        if status == "captured" and cues:
+            # Said again in other words: those words are how it will be asked about too.
+            merged = list(dict.fromkeys(same.get("cues", []) + list(cues)))[:CUE_LIMIT * 2]
+            if merged != same.get("cues", []):
+                store.set_cues(same["id"], merged)
         if status == "captured" and same["trust"] != "confirmed":
             store.confirm(same["id"])
             return _standing(store, turn, done("confirmed", "restated_by_user", same["id"]), value, same["category"])
@@ -398,32 +555,44 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None):
             return _standing(store, turn, done("duplicate", "restated_by_user", same["id"]), value, same["category"])
         return done("duplicate", "already_known", same["id"])
     try:
-        status, reason, category, source = _decide(store, judge, turn, proposed, rules, deadline)
+        status, reason, category, source = _decide(store, judge, turn, proposed, rules, deadline, quote)
     except JudgeError as exc:
         return done("rejected", "judge_unavailable", detail=str(exc))
     if status == "rejected":
         return done("rejected", reason)
+    if safe and status == "captured":
+        status, reason = "quarantined", "judge_unverified"
     evidence = evidence_sentence(source, proposed)
-    origin = {"source_kind": "captured_prompt", "source_ref": f"turn:{turn['token'][:8]}", "trust": status, "category": category}
+    origin = {"source_kind": "captured_prompt", "source_ref": f"turn:{turn['token'][:8]}", "trust": status, "category": category,
+              "cues": list(cues) or None}
     # The judge ran outside any transaction; a forget that arrived meanwhile wins.
     if store.tombstoned_since(entity, predicate, turn["opened_at"]):
         return done("rejected", "forgotten")
     # A change the user typed to a confirmed value is applied as a new version, said in the receipt
     # and undoable. The question remains only where the kernel itself chose the target (a drifted
     # key) or two values already disagree: nobody saw those questions, so they are kept rare.
-    if len(current) > 1 or (current and current[0]["trust"] == "confirmed" and status == "captured" and resolved_from):
-        proposal = store.propose("correct", {"target_id": current[0]["id"], "value": value, "evidence": evidence}) \
-            if len(current) == 1 else store.propose("remember", {"entity": entity, "predicate": predicate, "value": value, "evidence": evidence})
-        return done("needs_confirmation", "confirmed_value_differs" if len(current) == 1 else "conflicting_values",
-                    proposal_id=proposal["id"], current=[r["value"] for r in current])
+    # Held readings of the same attribute never count as a disagreement: they were never delivered, and a
+    # value the user states plainly replaces them ("the deadline moved", held, then "it is now April 4").
+    live = [r for r in current if r["trust"] != "quarantined"]
+    held = [r for r in current if r["trust"] == "quarantined"]
+    if len(live) > 1 or (live and live[0]["trust"] == "confirmed" and status == "captured" and resolved_from):
+        proposal = store.propose("correct", {"target_id": live[0]["id"], "value": value, "evidence": evidence}) \
+            if len(live) == 1 else store.propose("remember", {"entity": entity, "predicate": predicate, "value": value, "evidence": evidence})
+        return done("needs_confirmation", "confirmed_value_differs" if len(live) == 1 else "conflicting_values",
+                    proposal_id=proposal["id"], current=[r["value"] for r in live])
     with store.db:
-        if current and status == "captured":
-            new_id = store._correct(current[0]["id"], value, evidence, **origin)
+        if live and status == "captured":
+            if live[0]["source_kind"] == "captured_prompt":
+                store.log_correction(live[0]["id"])
+            new_id = store._correct(live[0]["id"], value, evidence, **origin)
         else:
             new_id = store._insert(entity, predicate, value, evidence, kind=_kind(category), **origin)
+        if status == "captured":
+            for row in held:
+                store._supersede(row["id"], new_id)
         store._event("capture", {"statement_id": new_id, "trust": status})
-    if current and current[0]["trust"] == "confirmed" and status == "captured":
-        result = done(status, reason, new_id, category=category, previous=current[0]["value"])
+    if live and live[0]["trust"] == "confirmed" and status == "captured":
+        result = done(status, reason, new_id, category=category, previous=live[0]["value"])
     else:
         result = done(status, reason, new_id, category=category)
     return _standing(store, turn, result, value, category) if status == "captured" else result
@@ -506,4 +675,8 @@ WHY = {"not_affirmed": "not read as something you stated", "uncertain": "sounded
        "quoted_source": "came from pasted text", "origin_unverified": "not typed by you",
        "category_disabled": "this kind is off for the scope", "forgotten": "you asked to forget it",
        "judge_unavailable": "jev did not answer", "question_only": "the message only asked", "cap": "too many in one turn", "expired": "too late for that message",
-       "replaces_mismatch": "named the wrong fact to replace", "unknown_target": "named a fact that does not exist"}
+       "replaces_mismatch": "named the wrong fact to replace", "unknown_target": "named a fact that does not exist",
+       "quote_not_found": "those words are not in your message", "joke": "sounded like a joke",
+       "past_state": "said it was true before, not now",
+       "task_request": "read as a request for work, not a fact", "unprompted": "not clearly stated",
+       "judge_unverified": "the judge changed and is being checked"}

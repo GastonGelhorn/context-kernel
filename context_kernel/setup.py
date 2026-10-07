@@ -19,7 +19,7 @@ from pathlib import Path
 
 from . import cli
 from .common import KernelError
-from .judge import JevCommand, JudgeError
+from .judge import JevCommand, JudgeError, loaded
 from .plugin import CONFIG, DEFAULTS, ensure_database, find_jev, fts5_available, settings, workspace
 
 MARKETPLACE = "GastonGelhorn/jevmate"
@@ -58,6 +58,59 @@ def _wired_by_hand(root):
         except OSError:
             pass
     return found
+
+
+def _plugin_installed(home=None):
+    path = Path(home or Path.home()) / ".claude" / "plugins" / "installed_plugins.json"
+    try:
+        return PLUGIN in path.read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
+def _plugin_disabled_here(root):
+    """The project turned the plugin off (`enabledPlugins` false), so its own hook entries are the only ones."""
+    for name in (".claude/settings.local.json", ".claude/settings.json"):
+        try:
+            if json.loads((Path(root) / name).read_text(encoding="utf-8")).get("enabledPlugins", {}).get(PLUGIN) is False:
+                return True
+        except (OSError, ValueError, AttributeError):
+            pass
+    return False
+
+
+def _calibration_line(config, backend):
+    from .judge import model_key
+    from .store import Store
+    store = Store(config["db"], config["scope"])
+    try:
+        record = store.judge_record(model_key(backend))
+        others = [r for r in store.judge_records() if r["status"] == "passed" and r["model_key"] != model_key(backend)]
+    finally:
+        store.close()
+    if record and record["status"] == "passed":
+        return "ok", "calibration", f"this judge passed the canary on {record['checked_at'][:10]}"
+    if record and record["status"] == "failed":
+        wrong = len(record["detail"].get("wrong", []))
+        return "warn", "calibration", (f"this judge got {wrong} canary row(s) wrong: captures are held for review. Tune the "
+                                       "thresholds (`context-kernel memory calibrate affirmed --score`), then "
+                                       "`context-kernel memory calibrate --check`")
+    if others:
+        return "warn", "calibration", "the judge changed since the last check: captures are held for review until the next " \
+                                      "session start checks it (or run `context-kernel memory calibrate --check`)"
+    return "ok", "calibration", "not checked yet; the next session start runs the canary in the background"
+
+
+def _regret(config):
+    from .store import Store
+    try:
+        store = Store(config["db"], config["scope"])
+    except (KernelError, OSError):
+        return None
+    try:
+        return store.regret_metrics(30)
+    finally:
+        store.close()
 
 
 SF_DATALESS = 0x40000000  # macOS: the file's content was evicted to iCloud and is downloaded on first read
@@ -114,12 +167,25 @@ def doctor(config, jev, json_output=False):
         if "error" in backend:
             add("fail", "jev", f"{jev}: {backend['error']}")
         elif backend["local"]:
-            add("ok", "jev", f"{jev} · local · {backend['model']} at {backend['url']}")
+            state = {True: "loaded", False: "not loaded (the next session start loads it)", None: "load state unknown"}[loaded(backend)]
+            add("ok", "jev", f"{jev} · local · {backend['model']} at {backend['url']} · {state}")
         else:
             allowed = bool(rules and rules.get("allow_remote_judge"))
             add("ok" if allowed else "warn", "jev",
                 f"{jev} · hosted · {backend['url']}" + ("" if allowed else
                     " · this scope does not allow a hosted judge, so nothing is saved: run `context-kernel setup`"))
+        if "error" not in backend and Path(config["db"]).exists():
+            add(*_calibration_line(config, backend))
+    if rules is not None:
+        add("ok", "repository", "decision records" + (" and decision commits" if rules.get("repository_commits") else
+                                                      " (commit messages off; `context-kernel memory policy --repository-commits on`)")
+            if rules.get("repository", True) else "off for this scope")
+        regret = _regret(config)
+        if regret and regret["captured"]:
+            estimate = regret["precision_estimate"]
+            add("ok" if estimate is None or estimate >= 0.9 else "warn", "precision",
+                f"last 30 days: {regret['captured']} saved, {sum(regret['taken_back'].values())} taken back soon after "
+                f"(estimate {estimate}); {regret['held_for_review']} held for review")
     for place in icloud([Path(__file__).resolve().parent, Path(config["db"]).expanduser().parent]):
         where = place["path"]
         if place["evicted"]:
@@ -129,11 +195,12 @@ def doctor(config, jev, json_output=False):
         else:
             add("warn", "icloud", f"{where} is in a folder iCloud syncs: macOS can evict its files later, and hooks would then wait "
                                   "for downloads. Choose Keep Downloaded for it in Finder, or keep it outside Documents and Desktop.")
-    if os.environ.get("CLAUDE_PLUGIN_ROOT"):
-        twice = _wired_by_hand(workspace())
+    if os.environ.get("CLAUDE_PLUGIN_ROOT") or _plugin_installed():
+        twice = [name for name in _wired_by_hand(workspace()) if not _plugin_disabled_here(workspace())]
         if twice:
             add("warn", "hooks", "the plugin is on and " + ", ".join(twice) + " in this project also runs the kernel: "
-                "every hook runs twice. Remove the kernel's entries from those files.")
+                "each prompt reaches the kernel twice (the second is skipped, but both wait). Remove the kernel's entries "
+                "from those files, or turn the plugin off for this project.")
     if json_output:
         print(json.dumps(report, ensure_ascii=False))
     else:

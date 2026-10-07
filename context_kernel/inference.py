@@ -19,7 +19,12 @@ from .turns import mask_secrets
 
 RECOMMENDATION = ("Does `reply` recommend, advise, or decide a course of action (including advising against one), "
                   "rather than only reporting, asking a question, or declining to answer?")
-# Measured: recommendations scored 0.80-0.95; reports, questions, and refusals 0.02-0.61.
+# The same question about the reply's opening sentence, where the advice usually is: a caveat that follows
+# ("I couldn't open the file, so I'm going on memory's summary") pulled a clear recommendation to 0.71-0.73 as a
+# whole, against 0.93 as an opening, and the link was lost in 2 of 4 native runs (tests/compat_matrix.py).
+OPENING = RECOMMENDATION.replace("`reply`", "`opening`")
+# Measured: recommendations scored 0.80-0.95 as a whole and 0.76-0.97 as an opening; reports, questions, and
+# refusals 0.02-0.62 as a whole and 0.39-0.57 as an opening. The higher of the two counts.
 RECOMMENDATION_BAR = 0.7
 RESTS_ON = ("Does the recommendation or decision in `query` rest on `candidate` being true, so that if "
             "`candidate` changed the recommendation might need to change?")
@@ -65,9 +70,11 @@ def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
     try:
         judge.require_local(allow_remote)
         timeout = deadline.timeout(judge.timeout) if deadline else None
-        verdict, _ = judge.ask({"reply": query}, {"recommends": ("noul", RECOMMENDATION)}, timeout=timeout)
-        if verdict["recommends"] < RECOMMENDATION_BAR:
-            return {"calls": 1, "linked": 0, "recommends": round(verdict["recommends"], 3)}
+        verdict, _ = judge.ask({"reply": query, "opening": first_sentence(query)},
+                               {"recommends": ("noul", RECOMMENDATION), "opening": ("noul", OPENING)}, timeout=timeout)
+        recommends = max(verdict["recommends"], verdict.get("opening", 0.0))
+        if recommends < RECOMMENDATION_BAR:
+            return {"calls": 1, "linked": 0, "recommends": round(recommends, 3)}
         timeout = deadline.timeout(judge.timeout) if deadline else None
         scores, usage = judge.rank(query, [re.sub(r"\s+", " ", l) for l in lines], no_cache=True,
                                    timeout=timeout, question=RESTS_ON)
@@ -108,7 +115,9 @@ def infer(store, judge, turn, reply, allow_remote=False, deadline=None):
 
 
 def stale_recommendations(records):
-    """Inferred recommendations whose premises changed, with the pairs those premises described."""
+    """Inferred recommendations whose premises changed, with the pairs those premises described and the
+    pairs of what replaced them: a decision record superseded by another record lives under another key
+    (adr_0003 by adr_0004), and a question about the new one must bring the review too."""
     by_id = {r["id"]: r for r in records}
     found = []
     for row in records:
@@ -116,6 +125,12 @@ def stale_recommendations(records):
             continue
         changed = [a for a in row["assumptions"] if a["effective_state"] != "active"]
         pairs = {(by_id[a["id"]]["entity_key"], by_id[a["id"]]["predicate"]) for a in changed if a["id"] in by_id}
+        for assumption in changed:
+            successor, seen = assumption.get("superseded_by"), set()
+            while successor in by_id and successor not in seen:
+                seen.add(successor)
+                pairs.add((by_id[successor]["entity_key"], by_id[successor]["predicate"]))
+                successor = by_id[successor].get("superseded_by")
         found.append({"id": row["id"], "recorded_at": row["recorded_at"], "changed": [a["id"] for a in changed],
                       "pairs": sorted(pairs)})
     return found

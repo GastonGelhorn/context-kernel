@@ -1,8 +1,8 @@
 {
   "name": "context-kernel",
   "displayName": "Context Kernel",
-  "version": "0.7.0",
-  "description": "Memory for coding agents that you keep up to date just by talking. It remembers what you tell it, notices when you change your mind, and warns the agent when an earlier recommendation relied on something that changed. Stored locally in SQLite; needs jev, from jevmate. After each turn a line above the prompt says what was saved, with undo.",
+  "version": "0.8.0",
+  "description": "Durable context for coding agents that tracks when earlier advice goes stale. It keeps what you tell the agent and what your repository's decision records say, notices when you change your mind, and flags a recommendation for review when a fact it rested on changes. Stored locally in SQLite; judged by jev on a local model. After each turn a line above the prompt says what was saved, with undo.",
   "author": {
     "name": "Gaston Gelhorn",
     "email": "gastongelhorn@gmail.com"
@@ -43,7 +43,7 @@
     "strategy": {
       "type": "string",
       "title": "Selection",
-      "description": "jev: jev scores each stored fact against every prompt (needs jevmate). rules: keyword matching only. Without jev nothing new gets saved from the conversation.",
+      "description": "jev: jev judges the stored facts a prompt is most likely to need, as many as the hook's time allows (needs jev). rules: keyword matching only. Without jev nothing new gets saved from the conversation.",
       "default": "jev",
       "options": [
         "jev",

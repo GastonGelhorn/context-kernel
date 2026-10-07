@@ -1,6 +1,6 @@
 # Context Kernel
 
-Memory for coding agents that you keep up to date just by talking to them. It remembers what you tell it, notices when you change your mind, and warns the agent when an earlier recommendation was based on something that is no longer true.
+Durable context for coding agents that tracks when earlier advice goes stale. You keep it up to date just by talking: it remembers what you tell the agent and what your repository's decision records say, notices when you change your mind, and when a fact a recommendation rested on changes, it tells the agent that recommendation needs another look. The memory is the mechanism; not building on assumptions that no longer hold is the point.
 
 The Python core uses only the standard library (SQLite with FTS5). It plugs into Claude Code and Codex through their own hooks and a local MCP server. Automatic capture needs two things besides your agent: [jev](https://github.com/GastonGelhorn/jevmate) and a backend for it. Your agent does the extraction; jev makes the small classification judgments (is this worth keeping, is it relevant to this question, did that recommendation depend on it) on a local model by default. No additional generative model is involved. Without jev, reading memory keeps working and nothing new is saved.
 
@@ -28,14 +28,14 @@ Changes are stored as new versions linked to the old ones. You can look at the h
 
 When the agent recommends something, the Stop hook asks jev which facts the recommendation relied on: the ones the kernel handed to the agent that turn, plus anything you said in the same message. Those links are saved. Later, when one of those facts changes, the next prompt that touches it tells the agent the earlier recommendation needs another look. It doesn't call the recommendation wrong and it doesn't paste the old text back in; the agent can ask `memory_dependents` if it wants the details.
 
-On each prompt jev also scores stored facts for relevance, and only the relevant ones are delivered. It judges at most 48 of them per prompt: the ones your words mention first, then constraints and decisions, then the most recent. Scores are cached, so asking the same thing again takes about 0.3 s; a new question over 48 facts takes 15 to 20 s on a cold local model, longer than the hook waits, and then selection falls back to keyword rules for that prompt.
+On each prompt jev also scores stored facts for relevance, and only the relevant ones are delivered. When the agent saves a fact it adds a few cues, the words a later question would use when the fact matters ("ship date", "launch" for a deadline), so a question in other words can still find it. jev judges as many facts as the hook's time allows, about 0.3 s each on the local model: the ones your words match first, then constraints and decisions, then the most recent. A fact matched in words that jev also finds plausible goes first. Scores are cached, so asking the same thing again is nearly free.
 
 ## What the repository already says
 
-Teams write decisions down before anyone tells an agent about them: in decision records (`docs/adr/0007-use-postgres.md`) and in commit messages ("Adopt pnpm as the package manager"). When a session starts in a git repository that changed since the last look, the kernel reads them in a background pass, so you never wait for it.
+Teams write decisions down before anyone tells an agent about them, in decision records (`docs/adr/0007-use-postgres.md`). When a session starts in a git repository that changed since the last look, the kernel reads them in a background pass, so you never wait for it. Commit messages ("Adopt pnpm as the package manager") are a weaker source and are read only if you turn them on.
 
 - Decision records are read with a parser, not a model. The Nygard/adr-tools and MADR formats are both understood, in English or Spanish. An accepted record becomes a fact about the project, with the file as its source. A record that is still proposed is skipped. When a record is superseded, it points at the record that replaced it. When it is deprecated or deleted, it stops counting. Either way, every recommendation that rested on it is flagged for review, exactly as if you had changed the fact yourself.
-- Commits go through two word filters and then jev. Fixes, tests, docs, bumps and merges are skipped, and so is any subject that doesn't use the language of a decision (use, require, keep, stop, instead of…). jev then judges each remaining subject on its own: is it a choice for the whole project, or a change in one place? A later decision ends the earlier one it replaces ("Use Redis for the job queue" after "Use SQLite for the job queue"), and a revert takes back the decision it reverts. A commit that writes a decision record adds nothing, because the record is read instead.
+- Commits, when you turn them on (`memory policy --repository-commits on`), go through two word filters and then jev. Fixes, tests, docs, bumps and merges are skipped, and so is any subject that doesn't use the language of a decision (use, require, keep, stop, instead of…). jev then judges each remaining subject on its own: is it a choice for the whole project, or a change in one place? A later decision ends the earlier one it replaces ("Use Redis for the job queue" after "Use SQLite for the job queue"), and a revert takes back the decision it reverts. A commit that writes a decision record adds nothing, because the record is read instead. They are off by default since v0.8: on this repository they had turned "Add the MIT license…" and two other subjects into project decisions. Turning them off retires what was read from commits; turning them back on reads it again.
 - What it learned is announced once, in that session's next memory line ("Memory: learned 2 decision(s) from the repository (ADR 1, commit 6818af9)."). The agent sees these facts attributed to `repository`, with the file or commit they came from.
 
 Forgetting one of them works like any other forget, and it sticks until that record changes again in the repository. `memory policy --repository off` turns the whole thing off for a scope, and you can also ask for that in chat.
@@ -59,9 +59,22 @@ Ask "you don't need to keep that in mind every time" to take one off the list, a
 
 Memory costs about 5 s per session: 3 s in the prompt hook and the rest in the agent's save round trip. One script on one machine is a trend, not a benchmark. The details and what it found are in [verification](docs/verification.md#v07-jevmate-alone-the-kernel-alone-both-and-neither).
 
+Since v0.8 there is a benchmark anyone can rerun without an account ([how](docs/benchmark.md)): 30 multi-session scenarios in English and Spanish replayed through the kernel's own hooks, with what a competent agent would save fixed in the scenario, and the local judge (tev1-32k on Ollama) under the hook's real time budget. Each scenario says what should be delivered, flagged, saved, held or gone afterwards; there are 211 such checks. The scenarios also bury the facts that matter among unrelated ones:
+
+| | Empty memory | +200 unrelated facts | +1,000 unrelated facts |
+| --- | --- | --- | --- |
+| Checks passed (of 211) | 193 | 186 | 179 |
+| Stale recommendations flagged (of 7) | 7 | 6 | 5 |
+| False memories kept out (of 45 checks) | 42 | 42 | 42 |
+| Prompt hook, median / p90 | 1.3 s / 1.7 s | 4.6 s / 8.0 s | 4.6 s / 8.0 s |
+
+Privacy requests, forgetting and decision records passed every check at every size. On 38 held-out messages, 17 of 18 statements were saved and none of the 20 that stated nothing (v0.7: 2). On 60 labelled questions over 122 facts, the facts that matter reached the agent within the hook's time 17 to 18 times out of 30, against 6 to 7 for v0.7, whose judge ran out of time at that size and fell back to keyword rules. The details, including what went wrong on the way, are in [verification](docs/verification.md#v08-trust-and-scale).
+
 ## Trust and privacy
 
-Facts have three trust levels. `confirmed` ones come from you, either through the owner CLI or by restating something that was captured. `captured` ones were validated from the conversation and are delivered labelled as such. `quarantined` ones are stored but never delivered: pasted or quoted text, private details about other people, things that sounded unsure, and turns a person didn't type.
+Facts have three trust levels. `confirmed` ones come from you, either through the owner CLI or by restating something that was captured. `captured` ones were validated from the conversation and are delivered labelled as such. `quarantined` ones are stored but never delivered: pasted or quoted text, private details about other people, things that sounded unsure, jokes, things that were true only in the past ("until August deploys were manual"), requests for work ("write a test that checks invoices are PDF only" is a task, not a fact about invoices), and turns a person didn't type.
+
+A false memory costs more than a missing one, so capture leans to holding. The agent cites the words you used (`quote`), and words that aren't in your message, or are only in what you pasted, aren't saved as yours. A fact the agent proposes when the kernel saw nothing stated in your message needs a near-certain reading, or it is held for review. And the thresholds belong to the model they were measured on: when jev's model changes, a canary of twelve rows checks them in the background, and until it passes nothing is saved, only held (`memory calibrate --check` runs it now).
 
 Each scope has its own policy about what gets saved without asking. In `work`, project state, decisions, constraints, roles and preferences are saved automatically. Personal details and other people's private information are held until you turn those categories on, which you can also do by asking in chat. If you change a confirmed fact, the new value is applied as a new version and the receipt tells you what it replaced (`user.approver (was "Gaston")`). You only get asked first when the kernel itself had to guess which fact you meant, or when two stored values already disagree. Explicit requests like "remember that…" or "from now on…" count as you stating the fact.
 
@@ -126,7 +139,8 @@ Day to day you just talk. The CLI is there when you want to see what's going on:
 ```sh
 memory --pretty inventory          # everything held, by entity, with trust and category
 memory --pretty traces --limit 3   # what each prompt delivered and why (no values, only ids and scores)
-memory --pretty metrics            # captured / held / refused / omitted / missed counts
+memory --pretty metrics            # how often you took back what was saved, hook latency, outcomes by reason
+memory --pretty calibrate --check  # does the current jev model still pass the canary with these thresholds?
 memory policy --enable personal_attributes
 memory undo STATEMENT_ID
 memory forget STATEMENT_ID
@@ -151,9 +165,14 @@ memory policy --threshold affirmed=0.75
 | Judgment | Default | Measured on 6 to 30 fixtures |
 | --- | --- | --- |
 | The message asserts this fact | 0.75 (held for review from 0.60) | every true row ≥ 0.76; highest false row 0.757 (a question) when set in v0.4; held-out results below |
+| … the sentence the agent cited, when the whole message is in the band | 0.75 | facts next to a question: 0.64–0.75 as a message, 0.81–0.94 as a sentence; "…20k EUR. Just kidding" 0.06 as a message never qualifies |
+| The writer is joking about it | 0.60, or 0.45 with a joke's markers (jaja, lol, "como si"): held | jokes 0.59 to 0.73; true statements ≤ 0.33 |
+| It used to be true and has stopped | 0.70: held | 6 past states ≥ 0.76; 77 of 78 true statements ≤ 0.46, the 78th 0.67 |
+| The writer asks for work rather than stating a fact | 0.60, asked only when the sentence opens with a work verb: held | requests 0.73 to 0.89; a fact stated next to a question 0.68, hence the second condition |
+| A fact the gate saw nothing of | saved only from 0.90 | every false row ≤ 0.875; the gate saw a fact in all 21 true statements, so the bar touched none of them |
 | The message states something worth keeping | P(none) < 0.15 | recall 1.0; the one false hit, a forget request, is excluded before judging |
 | The message asks to forget this fact | 0.70 | true rows 0.94 to 0.98; false rows ≤ 0.60 |
-| The reply recommends something | 0.70 | advice 0.80 to 0.95; reports, questions and refusals ≤ 0.61 |
+| The reply recommends something | 0.70, on the whole reply or its opening sentence | advice 0.80 to 0.95 whole, 0.76 to 0.97 opening; reports, questions and refusals ≤ 0.62 whole, ≤ 0.57 opening |
 | The recommendation rests on this premise | 0.85, or 0.50 when the reply names the premise's value | 7 true and 0 false links on 15 labelled pairs |
 | A commit states a project-wide choice | 0.50, after the word filters | 25 of 28 written decisions; 0 of 16 routine changes worded like decisions (highest 0.48) |
 | A later decision replaces an earlier one | 0.70, for decisions sharing a topic word | 7 of 10 replacements; 0 of 12 other pairs (highest 0.654) |
@@ -161,9 +180,9 @@ memory policy --threshold affirmed=0.75
 
 The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes. Cached judgments are keyed by the model's weights digest when the backend is a local Ollama, so a re-pulled alias doesn't reuse old answers.
 
-Thresholds were chosen on `fixtures/calibration.jsonl`. `fixtures/holdout.jsonl` was written afterwards and is never used to tune them; `python3 -m tests.holdout_check` runs it through the whole capture path with the real jev. With `tev1-32k` (weights `527084f384df0682`), 17 of 18 true statements were captured (the 18th was held because its category is off by default), and of 20 messages that stated nothing, 12 were refused, 4 held for review and 2 saved: an instruction to the agent ("Write a test that checks invoices are PDF only.") and sarcasm ("lol sure, we totally have infinite budget for AWS"). 38 rows is still a small sample.
+Thresholds were chosen on `fixtures/calibration.jsonl`. `fixtures/holdout.jsonl` was written afterwards and is never used to tune them; `python3 -m tests.holdout_check` runs it through the whole capture path with the real jev. With `tev1-32k` (weights `527084f384df0682`), 17 of 18 true statements were captured (the 18th was held because its category is off by default), and of 20 messages that stated nothing, none was saved: 14 were refused and 6 held for review. In v0.7 two were saved, a request for work ("Write a test that checks invoices are PDF only.") and sarcasm ("lol sure, we totally have infinite budget for AWS"); both are now held. 38 rows is still a small sample.
 
-With ten stored facts, the prompt hook took 0.33 s for a cached question and about 4 s cold, about a second of which is the check for something worth saving. That check is skipped for acknowledgements, picks among options the agent listed ("haz 1 y 2", "do both"), plain questions, generic questions and forget requests. These are small fixture sets, so read them as a trend rather than a benchmark. The details are in [verification](docs/verification.md).
+With ten stored facts, the prompt hook took 0.33 s for a cached question and about 4 s cold, about a second of which is the check for something worth saving. Since v0.8 a session's start loads the model in the background and asks Ollama to keep it 30 minutes, and a prompt that still finds it unloaded answers from keyword matches instead of waiting. That check is skipped for acknowledgements, picks among options the agent listed ("haz 1 y 2", "do both"), plain questions, generic questions and forget requests. These are small fixture sets, so read them as a trend rather than a benchmark. The details are in [verification](docs/verification.md).
 
 ## Limits
 
@@ -172,8 +191,9 @@ With ten stored facts, the prompt hook took 0.33 s for a cached question and abo
 - `UserPromptSubmit` doesn't prove a person typed the prompt. The kernel is cautious about where a prompt came from and never lets an uncertain origin authorize a deletion, but that's a heuristic, not authentication.
 - jev's scores feed a policy; they aren't proof. A fact can pass validation and still be wrong, which is why captures are labelled, reversible, and announced when they change a confirmed value.
 - Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
-- Relevance on paraphrases is weak. Asked "Is there room to squeeze the payments refactor in before we ship?", the local judge scored the stored checkout deadline 0.55 and unrelated facts (a feature flag, a Slack channel) up to 0.63. `python3 -m tests.growth_check` measures how often an old constraint, asked about in other words, reaches the agent as memory grows: 2 of 3 at 13 facts, 1 to 2 of 3 at 100 to 200.
-- Commits are a narrow channel. The filters and jev keep only clear choices for the whole project, so most commits add nothing. In this repository, where commits change how one tool behaves, 2 of its 13 decision-like commits were kept. Decision records are the dependable source.
+- Paraphrases are still the weak spot. On the labelled set's 45 paraphrased questions (no word in common with the facts that matter), 21 of the relevant facts reach the agent within the hook's time on the local judge, 29 with time for twice as many pairs; on direct questions, 14 of 15. The local judge alone cannot order a busy inventory ("Is there room to squeeze the payments refactor in before we ship?" put the deadline 23rd of 41), which is why the agent's cues and the keyword match carry so much weight.
+- The local judge is slow per pair: about 0.3 s, so the 8 s hook judges 12 to 19 facts per new question (cached questions are free). Memory larger than that relies on the order of judging: what the question matches in words, then constraints and decisions, then the most recent, and the rest only while 3 s would still be left. With 200 to 1,000 unrelated facts in memory, a prompt took 4.5 to 5.8 s at the median and up to the full 8 s. A hosted jev is much faster but sends memory text out, so the scope has to allow it.
+- Commits are a narrow channel and are off by default. With them on, the filters and jev keep only clear choices for the whole project; in this repository three subjects still became "decisions" no one had made for the whole project. Decision records are the dependable source.
 - Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute. Python reads the kernel's own modules the same way, so a hook running from such a folder can be cancelled; `context-kernel doctor` warns when that can happen.
 
-More detail in [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md) and [verification](docs/verification.md).
+More detail in [architecture](docs/architecture.md), [plan](docs/plan.md), [client setup](docs/adapters.md), [verification](docs/verification.md), [measuring it yourself](docs/benchmark.md) and [compatibility](docs/compatibility.md).

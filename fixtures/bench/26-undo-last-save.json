@@ -1,0 +1,99 @@
+{
+  "id": "26-undo-last-save",
+  "title": "\"That's wrong, undo it\" takes back only the last save, the Android approver, and keeps the iOS one",
+  "tags": [
+    "undo",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "The iOS release approver is Pablo Reyes.",
+          "agent_captures": [
+            {
+              "entity": "ios_app",
+              "predicate": "release_approver",
+              "value": "Pablo Reyes",
+              "quote": "The iOS release approver is Pablo Reyes"
+            }
+          ],
+          "agent_reply": "Noted: Pablo Reyes approves iOS releases. I'll ask him when an iOS build is ready."
+        },
+        {
+          "user": "And Android releases are approved by Irene Duarte.",
+          "agent_captures": [
+            {
+              "entity": "android_app",
+              "predicate": "release_approver",
+              "value": "Irene Duarte",
+              "quote": "Android releases are approved by Irene Duarte"
+            }
+          ],
+          "agent_reply": "Noted: Irene Duarte approves Android releases. I'll ask her when an Android build is ready.",
+          "expect_after": {
+            "current": {
+              "ios_app.release_approver": "Pablo Reyes",
+              "android_app.release_approver": "Irene Duarte"
+            }
+          }
+        },
+        {
+          "user": "Wait, that's wrong. Undo it, I need to double check Android first.",
+          "agent_captures": [],
+          "agent_calls": [
+            {
+              "tool": "memory_undo"
+            }
+          ],
+          "agent_reply": "Done: I took back the Android approver. Pablo Reyes is still saved as the iOS approver.",
+          "expect_after": {
+            "current": {
+              "ios_app.release_approver": "Pablo Reyes"
+            },
+            "absent": [
+              "android_app.release_approver"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "Who signs off on the iOS release this Friday?",
+          "agent_captures": [],
+          "agent_reply": "Pablo Reyes approves iOS releases, so he signs off on Friday's. I'll send him the build notes Thursday.",
+          "expect_packet": {
+            "delivered": [
+              "ios_app.release_approver"
+            ],
+            "not_delivered": [
+              "android_app.release_approver"
+            ]
+          }
+        },
+        {
+          "user": "Confirmed now: Android releases are approved by Tomás Gil, not Irene.",
+          "agent_captures": [
+            {
+              "entity": "android_app",
+              "predicate": "release_approver",
+              "value": "Tomás Gil",
+              "quote": "Android releases are approved by Tomás Gil"
+            }
+          ],
+          "agent_reply": "Noted: Tomás Gil approves Android releases. I'll ask him when an Android build is ready.",
+          "expect_after": {
+            "current": {
+              "ios_app.release_approver": "Pablo Reyes",
+              "android_app.release_approver": "Tomás Gil"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

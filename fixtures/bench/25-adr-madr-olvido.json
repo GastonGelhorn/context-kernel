@@ -1,0 +1,116 @@
+{
+  "id": "25-adr-madr-olvido",
+  "title": "A MADR record is learned and delivered, a proposed one is not, and a forgotten record stays forgotten while its file is unchanged",
+  "tags": [
+    "repository",
+    "forget"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "repository_commits": [
+        {
+          "message": "Record the reporting database and partner API decisions",
+          "files": {
+            "docs/decisions/0002-use-postgresql-for-reporting.md": "---\nstatus: accepted\ndate: 2026-09-10\ndeciders: Lucía Ferraro, Tomás Ibarra\n---\n# Use PostgreSQL for the reporting service\n\n## Context and Problem Statement\n\nThe reporting service needs ad hoc SQL over orders and payments, and the team already runs PostgreSQL.\n\n## Considered Options\n\n* PostgreSQL\n* MongoDB\n* ClickHouse\n\n## Decision Outcome\n\nChosen option: \"PostgreSQL\", because the team already operates it and the reporting queries are relational.\n",
+            "docs/decisions/0003-adopt-graphql-for-the-partner-api.md": "---\nstatus: proposed\ndate: 2026-09-22\n---\n# Adopt GraphQL for the partner API\n\n## Context and Problem Statement\n\nPartners ask for flexible queries over their orders.\n\n## Decision Outcome\n\nChosen option: \"GraphQL\", pending a security review.\n"
+          }
+        },
+        {
+          "message": "Update dependencies",
+          "files": {
+            "package.json": "{\n  \"name\": \"benchrepo\",\n  \"private\": true,\n  \"dependencies\": {\n    \"pg\": \"8.13.0\",\n    \"fastify\": \"5.0.0\"\n  }\n}\n"
+          }
+        }
+      ],
+      "turns": [
+        {
+          "user": "¿Qué base de datos uso para el nuevo servicio de reportes?",
+          "agent_captures": [],
+          "agent_reply": "PostgreSQL: la decisión 2 del repositorio lo eligió para el servicio de reportes porque el equipo ya lo opera y las consultas son relacionales. Te sugiero una base de reportes aparte, alimentada por una réplica de lectura.",
+          "expect_packet": {
+            "delivered": [
+              "benchrepo.adr_0002"
+            ]
+          },
+          "expect_after": {
+            "absent": [
+              "benchrepo.adr_0003",
+              "benchrepo.decision_update_dependencies"
+            ]
+          }
+        },
+        {
+          "user": "¿Y la API de partners va con GraphQL?",
+          "agent_captures": [],
+          "agent_reply": "No hay una decisión aceptada sobre eso. El registro de GraphQL para la API de partners sigue como propuesto, pendiente de una revisión de seguridad.",
+          "expect_packet": {
+            "not_delivered": [
+              "benchrepo.adr_0003"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "Forget the PostgreSQL decision for reporting; we're reopening it and I don't want you relying on it meanwhile.",
+          "agent_captures": [],
+          "agent_calls": [
+            {
+              "tool": "memory_forget",
+              "key": "benchrepo.adr_0002"
+            }
+          ],
+          "agent_reply": "Done: I forgot the PostgreSQL decision for reporting. While you rediscuss it, I won't treat it as settled.",
+          "expect_after": {
+            "absent": [
+              "benchrepo.adr_0002"
+            ]
+          }
+        },
+        {
+          "user": "Draft a list of questions for that discussion.",
+          "agent_captures": [],
+          "agent_reply": "Here are four questions for that discussion. How much data do we expect in a year, do we need ad hoc queries or are fixed dashboards enough, who operates the database, and how much lag behind production is acceptable?"
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "repository_commits": [
+        {
+          "message": "Fix typo in CONTRIBUTING",
+          "files": {
+            "CONTRIBUTING.md": "# Contributing\n\nOpen a pull request against main. Every change needs one review and a green CI run.\n"
+          }
+        }
+      ],
+      "turns": [
+        {
+          "user": "¿Qué base de datos tenemos decidida para reportes?",
+          "agent_captures": [],
+          "agent_reply": "No tengo una decisión vigente: me pediste olvidar la de PostgreSQL mientras la rediscuten. El archivo sigue en docs/decisions, así que cuando la cierren conviene actualizarlo.",
+          "expect_packet": {
+            "not_delivered": [
+              "benchrepo.adr_0002"
+            ]
+          },
+          "expect_after": {
+            "absent": [
+              "benchrepo.adr_0002",
+              "benchrepo.decision_fix_typo_in_contributing"
+            ]
+          }
+        },
+        {
+          "user": "Todavía no la cerramos.",
+          "agent_captures": [],
+          "agent_reply": "Entonces la dejo como pendiente. No asumo ninguna base para reportes hasta que me digas."
+        }
+      ]
+    }
+  ]
+}

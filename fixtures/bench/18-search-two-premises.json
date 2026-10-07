@@ -1,0 +1,106 @@
+{
+  "id": "18-search-two-premises",
+  "title": "Build-or-buy advice resting on a team size and a deadline is flagged when the deadline slips",
+  "tags": [
+    "stale",
+    "multi_premise",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "The search team is three engineers: Dana, Yusuf and Mei.",
+          "agent_captures": [
+            {
+              "entity": "search",
+              "predicate": "team_size",
+              "value": "three engineers",
+              "quote": "The search team is three engineers"
+            }
+          ],
+          "agent_reply": "Noted: the search team is three engineers, Dana, Yusuf and Mei. I'll size the search work with that in mind."
+        },
+        {
+          "user": "Open the search service's query builder and tell me what it does.",
+          "agent_captures": [],
+          "agent_reply": "query_builder.py turns the filter form into an OpenSearch bool query: full text on title and description, term filters for category and brand, and a range filter for price. Results are sorted by relevance unless the user picks another order."
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "We need search-as-you-type live in four weeks. Should we keep self-hosting OpenSearch or move to a managed Algolia plan?",
+          "agent_captures": [
+            {
+              "entity": "search",
+              "predicate": "deadline",
+              "value": "four weeks",
+              "quote": "We need search-as-you-type live in four weeks"
+            }
+          ],
+          "agent_reply": "Move to a managed Algolia plan: with four weeks and three engineers, tuning OpenSearch for search-as-you-type and running it in production would take most of the team's time. Algolia gives you typo tolerance and instant results out of the box, so the indexing job is the only new code.",
+          "expect_packet": {
+            "delivered": [
+              "search.team_size"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "search.deadline": "four weeks",
+              "search.team_size": "three engineers"
+            }
+          }
+        },
+        {
+          "user": "Ok, draft the indexing job.",
+          "agent_captures": [],
+          "agent_reply": "Drafted jobs/algolia_index.py: it reads products changed since the last run, maps them to Algolia records and pushes them in batches of 1,000. It runs every five minutes from the existing scheduler."
+        }
+      ]
+    },
+    {
+      "days_later": 6,
+      "turns": [
+        {
+          "user": "The search deadline slipped: we now have ten weeks.",
+          "agent_captures": [
+            {
+              "entity": "search",
+              "predicate": "deadline",
+              "value": "ten weeks",
+              "quote": "we now have ten weeks",
+              "replaces": "search.deadline"
+            }
+          ],
+          "agent_reply": "Noted: the search deadline is now ten weeks out. I have updated it.",
+          "expect_packet": {
+            "delivered": [
+              "search.deadline"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "search.deadline": "ten weeks",
+              "search.team_size": "three engineers"
+            }
+          }
+        },
+        {
+          "user": "Given that, does the managed Algolia plan still make sense?",
+          "agent_captures": [],
+          "agent_reply": "It needs review: that recommendation assumed four weeks, and you now have ten. With more time, staying on OpenSearch becomes possible, but three engineers would still carry the operations load, so Algolia remains the safer choice unless its cost is a problem.",
+          "expect_packet": {
+            "delivered": [
+              "search.deadline"
+            ],
+            "review": true
+          }
+        }
+      ]
+    }
+  ]
+}

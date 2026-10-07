@@ -1,0 +1,92 @@
+{
+  "id": "22-adr-reemplazada",
+  "title": "A Spanish ADR backs a login recommendation; a later ADR replaces it and the recommendation is flagged for review",
+  "tags": [
+    "repository",
+    "stale"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "repository_commits": [
+        {
+          "message": "Registrar la decisión de autenticación",
+          "files": {
+            "docs/adr/0005-usar-keycloak-para-la-autenticacion.md": "# 5. Usar Keycloak para la autenticación\n\nFecha: 2026-08-18\n\n## Estado\n\nAceptada\n\n## Contexto\n\nNecesitamos inicio de sesión único para el panel interno y la app de socios, sin depender de un proveedor externo.\n\n## Decisión\n\nUsaremos Keycloak autoalojado como proveedor de identidad para todas las aplicaciones.\n\n## Consecuencias\n\nEl equipo de plataforma opera Keycloak y sus actualizaciones.\n"
+          }
+        },
+        {
+          "message": "Actualizar dependencias",
+          "files": {
+            "package.json": "{\n  \"name\": \"benchrepo\",\n  \"private\": true,\n  \"dependencies\": {\n    \"express\": \"4.21.1\",\n    \"openid-client\": \"5.7.0\"\n  }\n}\n"
+          }
+        }
+      ],
+      "turns": [
+        {
+          "user": "¿Cómo debería manejar el login de la nueva app de socios?",
+          "agent_captures": [],
+          "agent_reply": "Para el login de la app de socios usá Keycloak, como decidió el ADR 5 para todas las aplicaciones. Registrala como un cliente OIDC nuevo en el realm existente y usá el flujo authorization code con PKCE.",
+          "expect_packet": {
+            "delivered": [
+              "benchrepo.adr_0005"
+            ]
+          },
+          "expect_after": {
+            "absent": [
+              "benchrepo.decision_actualizar_dependencias"
+            ]
+          }
+        },
+        {
+          "user": "Dale. Generame el archivo de configuración del cliente OIDC.",
+          "agent_captures": [],
+          "agent_reply": "Listo: creé config/oidc-socios.json con el client_id socios-app y el flujo authorization code con PKCE. Incluye las URLs de redirección de staging y producción."
+        }
+      ]
+    },
+    {
+      "days_later": 9,
+      "repository_commits": [
+        {
+          "message": "Reemplazar Keycloak por Auth0",
+          "files": {
+            "docs/adr/0005-usar-keycloak-para-la-autenticacion.md": "# 5. Usar Keycloak para la autenticación\n\nFecha: 2026-08-18\n\n## Estado\n\nReemplazada por [ADR-0006](0006-usar-auth0-para-la-autenticacion.md)\n\n## Contexto\n\nNecesitamos inicio de sesión único para el panel interno y la app de socios, sin depender de un proveedor externo.\n\n## Decisión\n\nUsaremos Keycloak autoalojado como proveedor de identidad para todas las aplicaciones.\n\n## Consecuencias\n\nEl equipo de plataforma opera Keycloak y sus actualizaciones.\n",
+            "docs/adr/0006-usar-auth0-para-la-autenticacion.md": "# 6. Usar Auth0 para la autenticación\n\nFecha: 2026-09-02\n\n## Estado\n\nAceptada\n\nReemplaza a [ADR-0005](0005-usar-keycloak-para-la-autenticacion.md)\n\n## Contexto\n\nOperar Keycloak nos llevó más tiempo de plataforma del previsto.\n\n## Decisión\n\nUsaremos Auth0 como proveedor de identidad gestionado para todas las aplicaciones.\n\n## Consecuencias\n\nKeycloak se apaga cuando terminen de migrar las aplicaciones existentes.\n"
+          }
+        },
+        {
+          "message": "Corrige typo en el README",
+          "files": {
+            "README.md": "# benchrepo\n\nHerramientas internas del equipo de socios: panel interno, app de socios y reportes.\n"
+          }
+        }
+      ],
+      "turns": [
+        {
+          "user": "¿Seguimos con Keycloak para el login de la app de socios?",
+          "agent_captures": [],
+          "agent_reply": "Esa recomendación se apoyaba en el ADR 5, que ahora está reemplazado por el ADR 6: la decisión vigente es Auth0 como proveedor de identidad gestionado. Hay que revisarla antes de seguir; el cliente OIDC de la app de socios se puede pasar a Auth0 casi sin tocar el código.",
+          "expect_packet": {
+            "delivered": [
+              "benchrepo.adr_0006"
+            ],
+            "review": true
+          },
+          "expect_after": {
+            "absent": [
+              "benchrepo.adr_0005",
+              "benchrepo.decision_reemplazar_keycloak_por_auth0",
+              "benchrepo.decision_corrige_typo_en_el_readme"
+            ]
+          }
+        },
+        {
+          "user": "Ok. ¿Qué cambia en el archivo de configuración?",
+          "agent_captures": [],
+          "agent_reply": "Cambian el issuer, el client_id y el endpoint de token. El flujo authorization code con PKCE y las URLs de redirección quedan iguales."
+        }
+      ]
+    }
+  ]
+}

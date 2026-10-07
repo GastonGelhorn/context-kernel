@@ -1,0 +1,666 @@
+{
+ "note": "Cues for each scenario capture, written by Claude Sonnet from the user message and the fact only (it never saw later questions), so the benchmark replays what an agent would pass without calling one.",
+ "cues": {
+  "01-deadline-shrinks/0/0/0": [
+   "how long do we have",
+   "project timeline",
+   "time left to ship",
+   "rewrite vs patch",
+   "scope for checkout",
+   "schedule planning",
+   "months remaining"
+  ],
+  "01-deadline-shrinks/1/0/0": [
+   "how much time left",
+   "timeline changed",
+   "tight schedule",
+   "scope cut",
+   "payment refactor",
+   "delivery date",
+   "weeks remaining",
+   "deadline moved up"
+  ],
+  "02-aprobador-presupuesto-decision/0/0/0": [
+   "quién aprueba",
+   "aprobación de release",
+   "sign-off",
+   "publicar versión",
+   "billing app",
+   "quién da el visto bueno",
+   "salir a producción"
+  ],
+  "02-aprobador-presupuesto-decision/0/1/0": [
+   "cuánto cuesta migrar",
+   "costo de migración",
+   "fondos disponibles",
+   "Postgres",
+   "billing database",
+   "presupuesto",
+   "gasto permitido",
+   "cotización"
+  ],
+  "02-aprobador-presupuesto-decision/0/1/1": [
+   "cómo migrar",
+   "estrategia de migración",
+   "fases",
+   "plan de migración",
+   "rollout por etapas",
+   "Postgres",
+   "billing",
+   "cutover",
+   "enfoque incremental"
+  ],
+  "03-pr-size-and-api-compat/0/0/0": [
+   "split the change",
+   "pull request",
+   "how to break up work",
+   "review size",
+   "diff too large",
+   "commit granularity",
+   "refactor batching"
+  ],
+  "03-pr-size-and-api-compat/0/1/0": [
+   "breaking change",
+   "rename endpoint",
+   "remove field",
+   "REST",
+   "deprecate",
+   "version 3",
+   "API change",
+   "client compatibility"
+  ],
+  "04-afford-gpu-mixed/0/0/0": [
+   "gasto en la nube",
+   "costo de GPUs",
+   "cloud spend",
+   "instancias",
+   "cuánto podemos gastar",
+   "data team",
+   "límite de costos",
+   "entrenar modelos"
+  ],
+  "04-afford-gpu-mixed/0/1/0": [
+   "horario de reunión",
+   "stand-up",
+   "agendar reunión",
+   "data team meeting",
+   "a qué hora",
+   "calendario",
+   "sincronización diaria"
+  ],
+  "05-questions-and-hypotheticals/0/0/0": [
+   "go-live",
+   "release date",
+   "when do we ship",
+   "launch plan",
+   "calendario de lanzamiento",
+   "timeline",
+   "external partners site"
+  ],
+  "05-questions-and-hypotheticals/0/1/0": [
+   "move launch earlier",
+   "reschedule",
+   "hypothetical date change",
+   "what if earlier",
+   "January",
+   "accelerate release"
+  ],
+  "05-questions-and-hypotheticals/0/2/0": [
+   "staging environment",
+   "test site address",
+   "preview link",
+   "where to test",
+   "hostname",
+   "QA environment",
+   "stg"
+  ],
+  "05-questions-and-hypotheticals/1/0/0": [
+   "single sign-on",
+   "hiring",
+   "headcount",
+   "staffing",
+   "authentication scope",
+   "feature scope",
+   "extra engineers"
+  ],
+  "06-sarcasmo-y-estado-pasado/0/0/0": [
+   "costo de infraestructura",
+   "gasto mensual",
+   "presupuesto cloud",
+   "hosting",
+   "cuánto podemos gastar",
+   "servidores",
+   "Brújula"
+  ],
+  "06-sarcasmo-y-estado-pasado/0/2/0": [
+   "no limit on spending",
+   "unlimited budget",
+   "GPU cluster",
+   "joke",
+   "sarcasm",
+   "gasto ilimitado"
+  ],
+  "06-sarcasmo-y-estado-pasado/1/0/0": [
+   "cómo se despliega",
+   "deployment process",
+   "release manual",
+   "script de deploy",
+   "historial",
+   "antes de agosto",
+   "pipeline antiguo"
+  ],
+  "06-sarcasmo-y-estado-pasado/1/1/0": [
+   "CI/CD",
+   "cómo publicar",
+   "deploy automático",
+   "pipeline",
+   "release process",
+   "continuous deployment",
+   "workflow",
+   "Brújula"
+  ],
+  "07-task-request-and-pasted-log/0/0/0": [
+   "invoice export",
+   "file type",
+   "download format",
+   "billing documents",
+   "test coverage",
+   "unit test",
+   "generate invoice",
+   "attachments"
+  ],
+  "07-task-request-and-pasted-log/1/0/0": [
+   "CI failure",
+   "DEPLOY_REGION",
+   "deploy check",
+   "AWS region",
+   "pipeline error",
+   "production environment",
+   "build red"
+  ],
+  "07-task-request-and-pasted-log/1/1/0": [
+   "where does prod run",
+   "cluster location",
+   "region mismatch",
+   "fix the check",
+   "correct region",
+   "DEPLOY_REGION",
+   "infrastructure",
+   "AWS"
+  ],
+  "08-mail-reenviado-e-incertidumbre/0/0/0": [
+   "formato de exportación",
+   "responder al cliente",
+   "Excel",
+   "CSV",
+   "customer export",
+   "spreadsheet",
+   "entregable"
+  ],
+  "08-mail-reenviado-e-incertidumbre/0/0/1": [
+   "fecha de entrega",
+   "cuándo hay que entregar",
+   "plazo",
+   "urgencia",
+   "due date",
+   "semana",
+   "responder correo"
+  ],
+  "08-mail-reenviado-e-incertidumbre/0/1/0": [
+   "quién se encarga",
+   "responsable",
+   "a quién preguntar",
+   "ownership",
+   "soporte del export",
+   "escalar",
+   "maintainer",
+   "data team"
+  ],
+  "08-mail-reenviado-e-incertidumbre/1/0/0": [
+   "cuándo es la reunión",
+   "agenda",
+   "calendario",
+   "fecha tentativa",
+   "cliente logístico",
+   "meeting day",
+   "sin confirmar"
+  ],
+  "08-mail-reenviado-e-incertidumbre/1/1/0": [
+   "hora de la reunión",
+   "cita confirmada",
+   "agendar",
+   "calendario",
+   "cuándo nos reunimos",
+   "meeting time",
+   "Logística Norte",
+   "invitación"
+  ],
+  "09-dont-remember-this/0/0/0": [
+   "career",
+   "job search",
+   "personal plans",
+   "private matter",
+   "new job",
+   "Thursday plans"
+  ],
+  "09-dont-remember-this/0/1/0": [
+   "release schedule",
+   "when do we ship",
+   "next release",
+   "sprint cadence",
+   "deploy day",
+   "Helios",
+   "versión",
+   "biweekly"
+  ],
+  "09-dont-remember-this/1/1/0": [
+   "budget",
+   "financial plans",
+   "cost cutting",
+   "funding",
+   "next quarter",
+   "Helios",
+   "spending",
+   "confidential"
+  ],
+  "10-no-guardes-y-vida-ajena/0/0/0": [
+   "personal life",
+   "colleague privacy",
+   "feedback tone",
+   "revisar PR",
+   "comentarios",
+   "empatía",
+   "QA"
+  ],
+  "10-no-guardes-y-vida-ajena/0/1/0": [
+   "quién aprueba QA",
+   "sign-off de pruebas",
+   "testing approval",
+   "revisión de calidad",
+   "responsable de QA",
+   "Faro",
+   "liberar versión"
+  ],
+  "10-no-guardes-y-vida-ajena/1/0/0": [
+   "cobranza",
+   "client payments",
+   "unpaid invoices",
+   "facturas pendientes",
+   "cliente moroso",
+   "finanzas",
+   "Faro"
+  ],
+  "10-no-guardes-y-vida-ajena/1/0/1": [
+   "insolvencia",
+   "bankruptcy",
+   "riesgo de cliente",
+   "continuar trabajando",
+   "contrato",
+   "pagos",
+   "cliente en crisis"
+  ],
+  "11-key-drift-deadline-stale/0/0/0": [
+   "how long do we have",
+   "project schedule",
+   "charting library",
+   "build vs buy",
+   "time left",
+   "reporting UI",
+   "delivery plan"
+  ],
+  "11-key-drift-deadline-stale/1/0/0": [
+   "timeline shortened",
+   "time pressure",
+   "charts library",
+   "build from scratch",
+   "reporting",
+   "scope",
+   "how much time",
+   "due date"
+  ],
+  "12-deriva-del-aprobador/0/0/0": [
+   "quién aprueba",
+   "aprobación de release",
+   "sign-off",
+   "publicar versión",
+   "visto bueno",
+   "salir a producción",
+   "Nimbus"
+  ],
+  "12-deriva-del-aprobador/1/0/0": [
+   "responsable de release",
+   "cambio de aprobador",
+   "quién firma",
+   "reorganización",
+   "nuevo aprobador",
+   "publicar versión",
+   "Nimbus",
+   "handoff"
+  ],
+  "13-renamed-cluster-replaces/0/0/0": [
+   "kubectl",
+   "environment name",
+   "where to deploy staging",
+   "k8s context",
+   "pre-production",
+   "cluster name",
+   "Kubernetes"
+  ],
+  "13-renamed-cluster-replaces/1/0/0": [
+   "rename",
+   "kubectl context",
+   "staging deploy",
+   "update config",
+   "old cluster name",
+   "pre-prod",
+   "infra naming",
+   "Kubernetes"
+  ],
+  "14-freeze-no-es-entrega/0/0/0": [
+   "cuándo entregamos",
+   "fecha límite",
+   "deadline",
+   "go-live",
+   "entrega al cliente",
+   "calendario",
+   "hito final"
+  ],
+  "14-freeze-no-es-entrega/1/0/0": [
+   "congelamiento de código",
+   "cuándo dejar de mergear",
+   "feature cutoff",
+   "release branch",
+   "stabilization",
+   "último merge",
+   "cierre de cambios"
+  ],
+  "15-deadline-moved-no-date/0/0/0": [
+   "when is it due",
+   "API migration schedule",
+   "cutover",
+   "milestone",
+   "timeline",
+   "due date",
+   "plan"
+  ],
+  "15-deadline-moved-no-date/1/0/0": [
+   "postponed",
+   "date unknown",
+   "schedule change",
+   "pending date",
+   "rescheduled",
+   "TBD",
+   "slipped"
+  ],
+  "15-deadline-moved-no-date/2/0/0": [
+   "new due date",
+   "rescheduled",
+   "timeline",
+   "updated schedule",
+   "cutover",
+   "API migration",
+   "milestone",
+   "delay"
+  ],
+  "16-la-demo-cambio-de-fecha/0/0/0": [
+   "cuándo es la demo",
+   "presentación al cliente",
+   "agenda",
+   "reunión",
+   "calendario",
+   "fecha y hora",
+   "Ceibo"
+  ],
+  "16-la-demo-cambio-de-fecha/1/0/0": [
+   "reprogramada",
+   "fecha pendiente",
+   "demo postponed",
+   "sin fecha",
+   "cambio de agenda",
+   "por confirmar",
+   "Ceibo"
+  ],
+  "16-la-demo-cambio-de-fecha/2/1/0": [
+   "cuándo es la demo",
+   "presentación",
+   "calendario",
+   "fecha confirmada",
+   "hora de la demo",
+   "reprogramación",
+   "invitación",
+   "Ceibo"
+  ],
+  "17-plazo-y-equipo/0/0/0": [
+   "tiempo disponible",
+   "cronograma",
+   "plazo",
+   "build vs buy",
+   "rediseño",
+   "planificación",
+   "cuánto tenemos",
+   "deadline"
+  ],
+  "17-plazo-y-equipo/0/0/1": [
+   "capacidad del equipo",
+   "cuántos somos",
+   "recursos",
+   "staffing",
+   "headcount",
+   "desarrolladores",
+   "carga de trabajo",
+   "build vs buy"
+  ],
+  "17-plazo-y-equipo/1/0/0": [
+   "bajas del equipo",
+   "menos gente",
+   "capacidad reducida",
+   "equipo pequeño",
+   "staffing",
+   "attrition",
+   "recursos",
+   "alcance"
+  ],
+  "18-search-two-premises/0/0/0": [
+   "team capacity",
+   "headcount",
+   "who works on search",
+   "staffing",
+   "developers available",
+   "resourcing",
+   "Dana Yusuf Mei"
+  ],
+  "18-search-two-premises/1/0/0": [
+   "time left",
+   "timeline",
+   "schedule",
+   "search-as-you-type",
+   "self-host vs managed",
+   "Algolia",
+   "OpenSearch",
+   "delivery"
+  ],
+  "18-search-two-premises/2/0/0": [
+   "deadline extended",
+   "more time",
+   "schedule slipped",
+   "timeline",
+   "search feature",
+   "self-hosting",
+   "Algolia",
+   "OpenSearch"
+  ],
+  "19-cambio-ajeno-sin-revision/0/0/0": [
+   "tiempo restante",
+   "fecha de lanzamiento",
+   "cronograma",
+   "payments launch",
+   "plazo",
+   "invoice PDFs",
+   "renderizador"
+  ],
+  "19-cambio-ajeno-sin-revision/0/1/0": [
+   "dónde publicar novedades",
+   "comunicación",
+   "anuncio",
+   "canal",
+   "updates",
+   "status",
+   "payments launch",
+   "notificar al equipo"
+  ],
+  "19-cambio-ajeno-sin-revision/1/0/0": [
+   "dónde hablamos",
+   "canal de Slack",
+   "comunicación del equipo",
+   "mover conversación",
+   "urgente",
+   "anuncios",
+   "payments",
+   "notificar"
+  ],
+  "20-ios-minimo-mixed/0/0/0": [
+   "versión mínima",
+   "compatibilidad",
+   "deployment target",
+   "soporte de dispositivos",
+   "persistencia",
+   "caché offline",
+   "SwiftData",
+   "Core Data",
+   "shifts app"
+  ],
+  "20-ios-minimo-mixed/1/0/0": [
+   "minimum OS",
+   "deployment target",
+   "SwiftData",
+   "Core Data",
+   "drop support",
+   "APIs disponibles",
+   "compatibilidad",
+   "persistence",
+   "shifts app"
+  ],
+  "23-forget-legacy-host/0/0/0": [
+   "old database",
+   "orders DB",
+   "legacy system",
+   "migration source",
+   "connection string",
+   "data migration",
+   "deprecated"
+  ],
+  "23-forget-legacy-host/0/0/1": [
+   "hosting provider",
+   "where is it hosted",
+   "server location",
+   "legacy infrastructure",
+   "cloud provider",
+   "datacenter",
+   "migrate off",
+   "orders DB"
+  ],
+  "24-olvida-presupuesto/0/0/0": [
+   "costo de diseño",
+   "landing page",
+   "cuánto gastar",
+   "freelancer",
+   "plantilla",
+   "campaña",
+   "fondos de marketing",
+   "Pampa"
+  ],
+  "26-undo-last-save/0/0/0": [
+   "quién aprueba",
+   "iOS sign-off",
+   "App Store release",
+   "publicar versión",
+   "release approval",
+   "mobile release",
+   "visto bueno"
+  ],
+  "26-undo-last-save/0/1/0": [
+   "Android sign-off",
+   "Play Store release",
+   "who approves",
+   "release approval",
+   "mobile release",
+   "publicar versión",
+   "visto bueno"
+  ],
+  "26-undo-last-save/1/1/0": [
+   "Android approver changed",
+   "correction",
+   "Play Store release",
+   "sign-off",
+   "who approves",
+   "release approval",
+   "mobile release",
+   "quién firma"
+  ],
+  "27-deshacer-correccion/0/0/0": [
+   "costo de migración",
+   "fondos",
+   "cuánto gastar",
+   "k8s",
+   "cotización",
+   "presupuesto aprobado",
+   "infraestructura"
+  ],
+  "27-deshacer-correccion/1/0/0": [
+   "aumento de presupuesto",
+   "costos actualizados",
+   "k8s migration",
+   "fondos",
+   "cuánto gastar",
+   "presupuesto nuevo",
+   "cotización",
+   "infraestructura"
+  ],
+  "28-no-coauthor-trailers/0/0/0": [
+   "git commit",
+   "commit message",
+   "attribution",
+   "co-author",
+   "commit footer",
+   "AI credit",
+   "signing off commits"
+  ],
+  "29-commits-en-ingles/0/0/0": [
+   "git commit",
+   "escribir commit",
+   "idioma",
+   "commit message",
+   "conventional commits",
+   "historial",
+   "redactar cambios"
+  ],
+  "30-pnpm-three-sessions/0/0/0": [
+   "install dependencies",
+   "npm install",
+   "lockfile",
+   "run scripts",
+   "add package",
+   "node tooling",
+   "build webshop"
+  ],
+  "30-pnpm-three-sessions/1/0/0": [
+   "instalar dependencias",
+   "npm install",
+   "lockfile",
+   "agregar paquete",
+   "scripts",
+   "gestor de paquetes",
+   "build tienda"
+  ],
+  "30-pnpm-three-sessions/2/0/0": [
+   "broken lockfile",
+   "npm install",
+   "install dependencies",
+   "add package",
+   "CI install",
+   "dependency management",
+   "yarn vs npm",
+   "storefront"
+  ]
+ }
+}

@@ -1,0 +1,119 @@
+{
+  "id": "30-pnpm-three-sessions",
+  "title": "A package-manager choice restated in three sessions becomes standing and reaches a fourth, unrelated session",
+  "tags": [
+    "standing",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "In the webshop repo we use pnpm, not npm.",
+          "agent_captures": [
+            {
+              "entity": "webshop",
+              "predicate": "package_manager",
+              "value": "pnpm",
+              "quote": "In the webshop repo we use pnpm"
+            }
+          ],
+          "agent_reply": "Noted: the webshop repo uses pnpm. I'll use pnpm for installs there.",
+          "expect_after": {
+            "current": {
+              "webshop.package_manager": "pnpm"
+            }
+          }
+        },
+        {
+          "user": "Add zod as a dependency.",
+          "agent_captures": [],
+          "agent_reply": "Ran pnpm add zod. package.json and pnpm-lock.yaml are updated."
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "Acordate que en webshop usamos pnpm.",
+          "agent_captures": [
+            {
+              "entity": "webshop",
+              "predicate": "package_manager",
+              "value": "pnpm",
+              "quote": "en webshop usamos pnpm"
+            }
+          ],
+          "agent_reply": "Sí, lo tengo: en webshop se usa pnpm. Todo lo que instale va con pnpm.",
+          "expect_after": {
+            "current": {
+              "webshop.package_manager": "pnpm"
+            }
+          }
+        },
+        {
+          "user": "Agregá date-fns.",
+          "agent_captures": [],
+          "agent_reply": "Listo: corrí pnpm add date-fns. El lockfile quedó actualizado."
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "Again, webshop uses pnpm: someone ran npm install yesterday and broke the lockfile.",
+          "agent_captures": [
+            {
+              "entity": "webshop",
+              "predicate": "package_manager",
+              "value": "pnpm",
+              "quote": "webshop uses pnpm"
+            }
+          ],
+          "agent_reply": "Got it. I can restore pnpm-lock.yaml from main and delete the package-lock.json that npm created.",
+          "expect_after": {
+            "current": {
+              "webshop.package_manager": "pnpm"
+            },
+            "standing": [
+              "webshop.package_manager"
+            ]
+          }
+        },
+        {
+          "user": "Do it.",
+          "agent_captures": [],
+          "agent_reply": "Done: pnpm-lock.yaml is restored from main and package-lock.json is gone. pnpm install --frozen-lockfile passes."
+        }
+      ]
+    },
+    {
+      "days_later": 6,
+      "turns": [
+        {
+          "user": "¿Cómo configuro Prettier para que ordene los imports?",
+          "agent_captures": [],
+          "agent_reply": "Instalá el plugin con pnpm add -D @trivago/prettier-plugin-sort-imports y agregalo en .prettierrc junto con un importOrder. Después corré pnpm prettier --write . para aplicarlo a todo el repo.",
+          "expect_packet": {
+            "delivered": [
+              "webshop.package_manager"
+            ]
+          }
+        },
+        {
+          "user": "Perfecto, gracias.",
+          "agent_captures": [],
+          "agent_reply": "De nada. Si querés, agrego el formateo al hook de pre-commit.",
+          "expect_after": {
+            "standing": [
+              "webshop.package_manager"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

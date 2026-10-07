@@ -44,9 +44,11 @@ memory --db /abs/memory.sqlite --scope work policy
 memory --db /abs/memory.sqlite --scope work policy --enable personal_attributes
 memory --db /abs/memory.sqlite --scope work policy --threshold affirmed=0.75 --allow-remote-judge no
 memory --db /abs/memory.sqlite --scope work policy --repository off
+memory --db /abs/memory.sqlite --scope work policy --repository-commits on
+memory --db /abs/memory.sqlite --scope work policy --keep-alive 2h
 ```
 
-`--repository off` stops the background pass that reads decision records and decision commits. You can also ask in chat ("you can remember personal things too", "don't read the repository's decisions"). The agent then calls `memory_policy`, which takes effect only if the message you typed asks for that change.
+`--repository off` stops the background pass that reads decision records. Commit messages are read only with `--repository-commits on`; turning them off again retires what was read from them. `--keep-alive` sets how long Ollama keeps the local judge loaded after each turn (`off` leaves Ollama's own default, five minutes). Setting a threshold clears the judge's canary verdict, and the next session start checks it again. You can also ask in chat ("you can remember personal things too", "don't read the repository's decisions"). The agent then calls `memory_policy`, which takes effect only if the message you typed asks for that change.
 
 ## Removing
 

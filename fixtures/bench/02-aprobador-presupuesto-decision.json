@@ -1,0 +1,85 @@
+{
+  "id": "02-aprobador-presupuesto-decision",
+  "title": "An approver, a budget and a decision stated in Spanish are stored and come back for reworded questions",
+  "tags": [
+    "capture",
+    "paraphrase"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Las releases de la app de facturación las aprueba Irene Sosa.",
+          "agent_captures": [
+            {
+              "entity": "facturacion",
+              "predicate": "release_approver",
+              "value": "Irene Sosa",
+              "quote": "Las releases de la app de facturación las aprueba Irene Sosa"
+            }
+          ],
+          "agent_reply": "Anotado: Irene Sosa aprueba las releases de la app de facturación. Lo voy a tener en cuenta cuando preparemos una versión.",
+          "expect_after": {
+            "current": {
+              "facturacion.release_approver": "Irene Sosa"
+            }
+          }
+        },
+        {
+          "user": "El presupuesto para migrar facturación a Postgres es de 18.000 euros, y decidimos hacer la migración en dos fases.",
+          "agent_captures": [
+            {
+              "entity": "facturacion",
+              "predicate": "migration_budget",
+              "value": "18.000 euros",
+              "quote": "El presupuesto para migrar facturación a Postgres es de 18.000 euros"
+            },
+            {
+              "entity": "facturacion",
+              "predicate": "migration_plan",
+              "value": "migración en dos fases",
+              "quote": "decidimos hacer la migración en dos fases"
+            }
+          ],
+          "agent_reply": "Queda registrado: 18.000 euros de presupuesto para la migración a Postgres. También anoté que se hace en dos fases.",
+          "expect_after": {
+            "current": {
+              "facturacion.release_approver": "Irene Sosa",
+              "facturacion.migration_budget": "18.000 euros",
+              "facturacion.migration_plan": "migración en dos fases"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "¿A quién le tengo que pedir el visto bueno para publicar la versión 2.4?",
+          "agent_captures": [],
+          "agent_reply": "A Irene Sosa: ella aprueba las releases de facturación. La 2.4 necesita su visto bueno antes de publicarse.",
+          "expect_packet": {
+            "delivered": [
+              "facturacion.release_approver"
+            ],
+            "not_delivered": [
+              "facturacion.migration_budget"
+            ]
+          }
+        },
+        {
+          "user": "¿Nos alcanza la plata para sumar un DBA externo dos semanas mientras pasamos a Postgres?",
+          "agent_captures": [],
+          "agent_reply": "Depende de la tarifa. Con 18.000 euros para toda la migración, dos semanas de un DBA externo entran si cobra menos de unos 4.000 euros por semana, pero te dejaría poco margen para la segunda fase.",
+          "expect_packet": {
+            "delivered": [
+              "facturacion.migration_budget"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,103 @@
+{
+  "id": "15-deadline-moved-no-date",
+  "title": "\"The deadline moved\" without a new date stores nothing and keeps the old date until the new one is given",
+  "tags": [
+    "ambiguous",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "The Orion API migration is due on March 14.",
+          "agent_captures": [
+            {
+              "entity": "orion",
+              "predicate": "migration_deadline",
+              "value": "March 14",
+              "quote": "The Orion API migration is due on March 14"
+            }
+          ],
+          "agent_reply": "Noted: the Orion API migration is due on March 14. I'll track the remaining endpoints against it."
+        },
+        {
+          "user": "List the endpoints that still use the v1 serializer.",
+          "agent_captures": [],
+          "agent_reply": "Seven endpoints still use the v1 serializer: /orders, /orders/{id}, /refunds, /customers, /customers/{id}, /invoices and /webhooks. The rest already use v2."
+        }
+      ]
+    },
+    {
+      "days_later": 9,
+      "turns": [
+        {
+          "user": "Heads up: the Orion migration deadline moved.",
+          "agent_captures": [
+            {
+              "entity": "orion",
+              "predicate": "migration_deadline",
+              "value": "moved, new date not set",
+              "quote": "the Orion migration deadline moved",
+              "replaces": "orion.migration_deadline"
+            }
+          ],
+          "agent_reply": "Thanks for the heads-up. Do you know the new date? Until you tell me, I'll treat March 14 as unconfirmed.",
+          "expect_packet": {
+            "delivered": [
+              "orion.migration_deadline"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "orion.migration_deadline": "March 14"
+            }
+          }
+        },
+        {
+          "user": "Not yet, I'll find out tomorrow.",
+          "agent_captures": [],
+          "agent_reply": "Ok. Tell me when you know and I'll update it.",
+          "expect_after": {
+            "current": {
+              "orion.migration_deadline": "March 14"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 1,
+      "turns": [
+        {
+          "user": "Update: the Orion migration is now due on April 4.",
+          "agent_captures": [
+            {
+              "entity": "orion",
+              "predicate": "migration_deadline",
+              "value": "April 4",
+              "quote": "the Orion migration is now due on April 4",
+              "replaces": "orion.migration_deadline"
+            }
+          ],
+          "agent_reply": "Updated: the Orion migration is now due on April 4. March 14 no longer applies.",
+          "expect_after": {
+            "current": {
+              "orion.migration_deadline": "April 4"
+            }
+          }
+        },
+        {
+          "user": "How many endpoints are left to move before the deadline?",
+          "agent_captures": [],
+          "agent_reply": "Seven endpoints still use the v1 serializer, and the deadline is April 4. Moving two a week gets us there with time to spare.",
+          "expect_packet": {
+            "delivered": [
+              "orion.migration_deadline"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

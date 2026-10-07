@@ -1,0 +1,126 @@
+{
+  "id": "08-mail-reenviado-e-incertidumbre",
+  "title": "A forwarded email and an unsure meeting date are not saved; the facts the user types afterwards are",
+  "tags": [
+    "false_capture",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "¿Me ayudás a contestar este mail?\n\n> De: Carla Méndez\n> Asunto: Export de clientes\n> El cliente quiere el export solo en XLSX, nada de CSV.\n> Lo necesitan para el viernes.",
+          "agent_captures": [
+            {
+              "entity": "export_clientes",
+              "predicate": "format",
+              "value": "solo XLSX",
+              "quote": "El cliente quiere el export solo en XLSX, nada de CSV."
+            },
+            {
+              "entity": "export_clientes",
+              "predicate": "deadline",
+              "value": "el viernes",
+              "quote": "Lo necesitan para el viernes."
+            }
+          ],
+          "agent_reply": "Claro. Propuesta: \"Hola Carla, gracias por el detalle. Confirmamos el export en XLSX y lo revisamos con el equipo para ver si llegamos al viernes; te confirmo mañana.\" ¿Querés que suene más formal?",
+          "expect_after": {
+            "absent": [
+              "export_clientes.format",
+              "export_clientes.deadline"
+            ]
+          }
+        },
+        {
+          "user": "Así está bien. Para que sepas: el export de clientes lo mantiene el equipo de Datos.",
+          "agent_captures": [
+            {
+              "entity": "export_clientes",
+              "predicate": "owner",
+              "value": "el equipo de Datos",
+              "quote": "el export de clientes lo mantiene el equipo de Datos"
+            }
+          ],
+          "agent_reply": "Anotado: el export de clientes lo mantiene el equipo de Datos. Si hay dudas sobre el export, les pregunto a ellos.",
+          "expect_after": {
+            "current": {
+              "export_clientes.owner": "el equipo de Datos"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "Creo que la reunión con Logística Norte es el jueves, pero no estoy seguro.",
+          "agent_captures": [
+            {
+              "entity": "logistica_norte",
+              "predicate": "meeting_date",
+              "value": "el jueves",
+              "quote": "la reunión con Logística Norte es el jueves"
+            }
+          ],
+          "agent_reply": "Ok, no lo doy por confirmado. Cuando sepas la fecha, avisame y la anoto.",
+          "expect_after": {
+            "absent": [
+              "logistica_norte.meeting_date"
+            ]
+          }
+        },
+        {
+          "user": "Confirmado: la reunión con Logística Norte es el jueves 9 a las 11.",
+          "agent_captures": [
+            {
+              "entity": "logistica_norte",
+              "predicate": "meeting_date",
+              "value": "jueves 9 a las 11",
+              "quote": "la reunión con Logística Norte es el jueves 9 a las 11"
+            }
+          ],
+          "agent_reply": "Perfecto, anotado: la reunión con Logística Norte es el jueves 9 a las 11. Te aviso si choca con algo.",
+          "expect_after": {
+            "current": {
+              "logistica_norte.meeting_date": "jueves 9 a las 11"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 1,
+      "turns": [
+        {
+          "user": "¿En qué formato tenemos que entregar el export de clientes?",
+          "agent_captures": [],
+          "agent_reply": "No tengo guardado un formato acordado. El mail de Carla pedía XLSX, pero eso lo escribió ella y no lo confirmaste; conviene preguntarle al equipo de Datos, que mantiene el export.",
+          "expect_packet": {
+            "not_delivered": [
+              "export_clientes.format"
+            ]
+          },
+          "expect_after": {
+            "absent": [
+              "export_clientes.format",
+              "export_clientes.deadline"
+            ]
+          }
+        },
+        {
+          "user": "¿Cuándo es la reunión con Logística Norte?",
+          "agent_captures": [],
+          "agent_reply": "El jueves 9 a las 11. ¿Querés que te arme una agenda para esa reunión?",
+          "expect_packet": {
+            "delivered": [
+              "logistica_norte.meeting_date"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

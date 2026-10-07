@@ -1,0 +1,104 @@
+{
+  "id": "19-cambio-ajeno-sin-revision",
+  "title": "A change to an unrelated fact of the same project does not flag the earlier recommendation for review",
+  "tags": [
+    "stale",
+    "correction",
+    "paraphrase"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Tenemos cinco semanas hasta el lanzamiento de cobros. ¿Pasamos los PDF de facturas al nuevo renderizador antes del lanzamiento?",
+          "agent_captures": [
+            {
+              "entity": "cobros",
+              "predicate": "deadline",
+              "value": "cinco semanas",
+              "quote": "Tenemos cinco semanas hasta el lanzamiento de cobros"
+            }
+          ],
+          "agent_reply": "Sí: con cinco semanas, pasá los PDF de facturas al nuevo renderizador antes del lanzamiento. Es alrededor de una semana de trabajo y te evita lanzar con dos caminos de renderizado."
+        },
+        {
+          "user": "Por cierto, las novedades de cobros van al canal de Slack #cobros-lanzamiento.",
+          "agent_captures": [
+            {
+              "entity": "cobros",
+              "predicate": "slack_channel",
+              "value": "#cobros-lanzamiento",
+              "quote": "las novedades de cobros van al canal de Slack #cobros-lanzamiento"
+            }
+          ],
+          "agent_reply": "Anotado: las novedades de cobros van a #cobros-lanzamiento. Ahí aviso cuando haya algo.",
+          "expect_after": {
+            "current": {
+              "cobros.deadline": "cinco semanas",
+              "cobros.slack_channel": "#cobros-lanzamiento"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "Movimos las conversaciones de cobros al canal #cobros-urgente.",
+          "agent_captures": [
+            {
+              "entity": "cobros",
+              "predicate": "slack_channel",
+              "value": "#cobros-urgente",
+              "quote": "Movimos las conversaciones de cobros al canal #cobros-urgente",
+              "replaces": "cobros.slack_channel"
+            }
+          ],
+          "agent_reply": "Actualizado: las novedades de cobros ahora van a #cobros-urgente. El canal anterior ya no lo uso.",
+          "expect_after": {
+            "current": {
+              "cobros.slack_channel": "#cobros-urgente",
+              "cobros.deadline": "cinco semanas"
+            }
+          }
+        },
+        {
+          "user": "Después del lanzamiento vamos a necesitar una página de estado; dejá un TODO en el README de cobros.",
+          "agent_captures": [],
+          "agent_reply": "Agregué una sección Después del lanzamiento al README de cobros. Tiene un TODO para la página de estado."
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "¿Seguimos pasando los PDF de facturas al nuevo renderizador antes del lanzamiento?",
+          "agent_captures": [],
+          "agent_reply": "Sí: no cambió nada de lo que sostenía esa recomendación. Seguimos con cinco semanas y la migración del renderizador lleva una, así que conviene arrancarla en este sprint.",
+          "expect_packet": {
+            "delivered": [
+              "cobros.deadline"
+            ],
+            "not_delivered": [
+              "cobros.slack_channel"
+            ],
+            "review": false
+          }
+        },
+        {
+          "user": "¿Dónde aviso cuando esté listo?",
+          "agent_captures": [],
+          "agent_reply": "En #cobros-urgente. Ahí están ahora las novedades de cobros.",
+          "expect_packet": {
+            "delivered": [
+              "cobros.slack_channel"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "id": "23-forget-legacy-host",
+  "title": "Forgetting where the legacy database was hosted keeps its name, and the host never comes back",
+  "tags": [
+    "forget"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "The old orders database is called orders-legacy and it's hosted on Hetzner.",
+          "agent_captures": [
+            {
+              "entity": "legacy_orders_db",
+              "predicate": "name",
+              "value": "orders-legacy",
+              "quote": "The old orders database is called orders-legacy"
+            },
+            {
+              "entity": "legacy_orders_db",
+              "predicate": "host",
+              "value": "Hetzner",
+              "quote": "it's hosted on Hetzner"
+            }
+          ],
+          "agent_reply": "Noted: the old orders database is orders-legacy, hosted on Hetzner. I'll use that when we plan the cutover.",
+          "expect_after": {
+            "current": {
+              "legacy_orders_db.name": "orders-legacy",
+              "legacy_orders_db.host": "Hetzner"
+            }
+          }
+        },
+        {
+          "user": "Write a one-off script that copies the 2019 orders from orders-legacy into the new schema.",
+          "agent_captures": [],
+          "agent_reply": "Added scripts/copy_2019_orders.py: it reads from orders-legacy in batches of 5,000 and maps the old status codes to the new enum. Each batch is written to the new orders table in its own transaction."
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "Forget the legacy orders database host, that server is gone.",
+          "agent_captures": [],
+          "agent_calls": [
+            {
+              "tool": "memory_forget",
+              "key": "legacy_orders_db.host"
+            }
+          ],
+          "agent_reply": "Done: I no longer remember where the legacy orders database was hosted. I still have its name, orders-legacy.",
+          "expect_after": {
+            "current": {
+              "legacy_orders_db.name": "orders-legacy"
+            },
+            "absent": [
+              "legacy_orders_db.host"
+            ]
+          }
+        },
+        {
+          "user": "What's still left to migrate off orders-legacy?",
+          "agent_captures": [],
+          "agent_reply": "The 2019 orders are covered by the copy script. Orders from 2020 on and the customer addresses table still live in orders-legacy.",
+          "expect_packet": {
+            "delivered": [
+              "legacy_orders_db.name"
+            ],
+            "not_delivered": [
+              "legacy_orders_db.host"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 8,
+      "turns": [
+        {
+          "user": "Where was the old orders database hosted? If you don't know, say so.",
+          "agent_captures": [],
+          "agent_reply": "I don't know: you asked me to forget where it was hosted. I only remember that it's called orders-legacy.",
+          "expect_packet": {
+            "not_delivered": [
+              "legacy_orders_db.host"
+            ]
+          },
+          "expect_after": {
+            "absent": [
+              "legacy_orders_db.host"
+            ]
+          }
+        },
+        {
+          "user": "Fine. Is orders-legacy still referenced anywhere in the code?",
+          "agent_captures": [],
+          "agent_reply": "Yes, in two places: scripts/copy_2019_orders.py and the read-only fallback in services/orders/history.py. Both can go once the remaining tables are moved.",
+          "expect_after": {
+            "current": {
+              "legacy_orders_db.name": "orders-legacy"
+            },
+            "absent": [
+              "legacy_orders_db.host"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

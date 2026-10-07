@@ -1,0 +1,100 @@
+{
+  "id": "21-adr-queue-superseded",
+  "title": "An accepted ADR backs a queue recommendation and a superseding ADR flags it; routine and local commits never become facts",
+  "tags": [
+    "repository",
+    "stale"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "repository_commits": [
+        {
+          "message": "Record the job queue decision",
+          "files": {
+            "docs/adr/0003-use-sqlite-for-the-job-queue.md": "# 3. Use SQLite for the job queue\n\nDate: 2026-08-20\n\n## Status\n\nAccepted\n\n## Context\n\nThe app runs on a single VM and background jobs are few: emails, exports and nightly reports.\n\n## Decision\n\nWe will keep background jobs in a SQLite table next to the app database, processed by one worker.\n\n## Consequences\n\nNo extra infrastructure to run. Throughput is limited to one worker process.\n"
+          }
+        },
+        {
+          "message": "Fix typo in README",
+          "files": {
+            "README.md": "# benchrepo\n\nInternal tools for the Fernwood operations team: email digests, exports and nightly reports.\n"
+          }
+        },
+        {
+          "message": "Bump eslint from 9.10.0 to 9.12.0",
+          "files": {
+            "package.json": "{\n  \"name\": \"benchrepo\",\n  \"private\": true,\n  \"scripts\": {\n    \"lint\": \"eslint .\"\n  },\n  \"devDependencies\": {\n    \"eslint\": \"9.12.0\"\n  }\n}\n"
+          }
+        }
+      ],
+      "turns": [
+        {
+          "user": "Which queue should the new email digest worker use?",
+          "agent_captures": [],
+          "agent_reply": "Use the SQLite job queue for the email digest worker, as ADR 3 decided: jobs stay in a SQLite table next to the app database, processed by one worker. A daily digest is light enough for that single worker.",
+          "expect_packet": {
+            "delivered": [
+              "benchrepo.adr_0003"
+            ]
+          },
+          "expect_after": {
+            "absent": [
+              "benchrepo.decision_record_the_job_queue_decision",
+              "benchrepo.decision_fix_typo_in_readme",
+              "benchrepo.decision_bump_eslint_from_9_10_0_to_9_12_0"
+            ]
+          }
+        },
+        {
+          "user": "Ok. Scaffold the worker.",
+          "agent_captures": [],
+          "agent_reply": "Created workers/email_digest.py: it claims due jobs from the jobs table, renders the digest and sends it through the existing mailer. Failed sends are retried three times with backoff."
+        }
+      ]
+    },
+    {
+      "days_later": 10,
+      "repository_commits": [
+        {
+          "message": "Use early returns in parse_invoice",
+          "files": {
+            "src/invoices/parse.py": "def parse_invoice(raw):\n    if not raw:\n        return None\n    if raw.get(\"status\") == \"void\":\n        return None\n    return {\"number\": raw[\"number\"], \"total\": raw[\"total\"], \"currency\": raw.get(\"currency\", \"EUR\")}\n"
+          }
+        },
+        {
+          "message": "Move the job queue to Redis",
+          "files": {
+            "docs/adr/0003-use-sqlite-for-the-job-queue.md": "# 3. Use SQLite for the job queue\n\nDate: 2026-08-20\n\n## Status\n\nSuperseded by [ADR-0004](0004-use-redis-for-the-job-queue.md)\n\n## Context\n\nThe app runs on a single VM and background jobs are few: emails, exports and nightly reports.\n\n## Decision\n\nWe will keep background jobs in a SQLite table next to the app database, processed by one worker.\n\n## Consequences\n\nNo extra infrastructure to run. Throughput is limited to one worker process.\n",
+            "docs/adr/0004-use-redis-for-the-job-queue.md": "# 4. Use Redis for the job queue\n\nDate: 2026-09-01\n\n## Status\n\nAccepted\n\nSupersedes [ADR-0003](0003-use-sqlite-for-the-job-queue.md)\n\n## Context\n\nExports now take minutes and block the single SQLite worker.\n\n## Decision\n\nWe will run background jobs on Redis with several workers.\n\n## Consequences\n\nRedis becomes part of the production stack.\n"
+          }
+        }
+      ],
+      "turns": [
+        {
+          "user": "Should the email digest worker still use the queue you recommended?",
+          "agent_captures": [],
+          "agent_reply": "That recommendation rested on ADR 3, which ADR 4 has superseded: background jobs now run on Redis. The email digest worker should move to the Redis queue; the job handler stays the same, only the enqueue and claim calls change.",
+          "expect_packet": {
+            "delivered": [
+              "benchrepo.adr_0004"
+            ],
+            "review": true
+          },
+          "expect_after": {
+            "absent": [
+              "benchrepo.adr_0003",
+              "benchrepo.decision_use_early_returns_in_parse_invoice",
+              "benchrepo.decision_move_the_job_queue_to_redis"
+            ]
+          }
+        },
+        {
+          "user": "Do it.",
+          "agent_captures": [],
+          "agent_reply": "Done: the digest worker now enqueues and consumes through the Redis queue client, and the SQLite claim query is gone. The tests pass with the fake Redis fixture."
+        }
+      ]
+    }
+  ]
+}

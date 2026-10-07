@@ -201,3 +201,26 @@
 {"kind": "decision_replaces", "message": "Deprecate the v1 API", "fact": "Move authentication to the API gateway", "label": false}
 {"kind": "decision_replaces", "message": "Store sessions in Redis", "fact": "Use Redis for the job queue", "label": false}
 {"kind": "decision_replaces", "message": "Use Vite for the frontend build", "fact": "Use pnpm for the frontend packages", "label": false}
+{"kind": "affirmed", "label": true, "message": "From now on, run the linter before every commit.", "fact": "user preference: run the linter before every commit"}
+{"kind": "affirmed", "label": true, "message": "Nunca hagas push directo a main.", "fact": "repository policy: never push directly to main"}
+{"kind": "affirmed", "label": true, "message": "Recuerda que el staging se llama kite-stg.", "fact": "staging cluster name: kite-stg"}
+{"kind": "affirmed", "label": true, "message": "Our on-call week starts on Tuesdays.", "fact": "on-call week start: Tuesday"}
+{"kind": "affirmed", "label": true, "message": "Siempre usamos UTC en los logs.", "fact": "logging convention: UTC timestamps"}
+{"kind": "affirmed", "label": true, "message": "Please keep in mind that Marta signs off on pricing changes.", "fact": "pricing approver: Marta"}
+{"kind": "affirmed", "label": true, "message": "We're moving the launch to March 3rd, it's final.", "fact": "launch date: March 3"}
+{"kind": "affirmed", "label": true, "message": "El cliente paga por hito, no por hora.", "fact": "client billing: per milestone"}
+{"kind": "affirmed", "label": false, "message": "Write a migration that sets every invoice to PDF only.", "fact": "invoice format: PDF only"}
+{"kind": "affirmed", "label": false, "message": "Add a test asserting the staging cluster is kite-stg.", "fact": "staging cluster name: kite-stg"}
+{"kind": "affirmed", "label": false, "message": "Genera un script que borre los logs de más de 30 días.", "fact": "log retention: 30 days"}
+{"kind": "affirmed", "label": false, "message": "Explain how a three-week deadline changes a migration plan.", "fact": "migration deadline: three weeks"}
+{"kind": "affirmed", "label": false, "message": "yeah right, and I'm the CEO of Google", "fact": "user role: CEO of Google"}
+{"kind": "affirmed", "label": false, "message": "Claro, como si tuviéramos presupuesto infinito, jaja.", "fact": "project budget: unlimited"}
+{"kind": "affirmed", "label": false, "message": "lol, our tests always pass on the first try", "fact": "test suite status: always passes"}
+{"kind": "affirmed", "label": false, "message": "Antes usábamos MySQL, ahora estamos en Postgres.", "fact": "main database: MySQL"}
+{"kind": "affirmed", "label": false, "message": "I used to work nights until last year.", "fact": "user work schedule: nights"}
+{"kind": "facts_present", "label": true, "message": "Nunca hagas push directo a main."}
+{"kind": "facts_present", "label": true, "message": "From now on, run the linter before every commit."}
+{"kind": "facts_present", "label": false, "message": "Implementa todos los puntos y deja la herramienta impecable."}
+{"kind": "facts_present", "label": false, "message": "Write a migration that sets every invoice to PDF only."}
+{"kind": "facts_present", "label": false, "message": "Claro, como si tuviéramos presupuesto infinito, jaja."}
+{"kind": "facts_present", "label": false, "message": "Sigue con lo siguiente y avísame al terminar."}

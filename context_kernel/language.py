@@ -42,6 +42,61 @@ TRANSLATIONS = {
 }
 
 
+# Words a later question uses when a kind of fact matters, for facts stored without the agent's own cues
+# (older captures, the owner CLI, decision records). Keyed by a word of the predicate; matched lexically only.
+CONCEPTS = {
+    "deadline": "deadline due date ship release launch timeline schedule plazo entrega lanzamiento fecha",
+    "due": "deadline due date ship release timeline plazo entrega fecha",
+    "plazo": "deadline due date ship release timeline plazo entrega fecha",
+    "launch": "release launch ship go live date lanzamiento salida publicar",
+    "release": "release launch ship version publish lanzamiento version publicar",
+    "budget": "budget cost spend money price afford presupuesto coste gasto dinero",
+    "cost": "budget cost spend money price presupuesto coste gasto",
+    "presupuesto": "budget cost spend money presupuesto coste gasto dinero",
+    "approver": "approve approval sign off review permission aprobar aprobacion firma visto bueno",
+    "owner": "owner responsible handles contact maintainer responsable encargado",
+    "manager": "manager boss lead reports jefe responsable",
+    "region": "region residency hosting datacenter deploy cloud region alojamiento servidor",
+    "residency": "region residency hosting datacenter deploy cloud privacy region alojamiento",
+    "database": "database db sql storage data migration schema base datos",
+    "db": "database db sql storage data migration base datos",
+    "framework": "framework stack library frontend backend tecnologia libreria",
+    "stack": "framework stack library language tecnologia",
+    "ci": "ci pipeline build tests deploy integracion",
+    "schedule": "schedule hours available meeting time calendar horario disponible reunion",
+    "horario": "schedule hours available meeting time horario disponible reunion",
+    "allergy": "food eat meal snack restaurant dinner lunch comida comer cena restaurante alergia dieta",
+    "alergia": "food eat meal snack restaurant dinner comida comer cena restaurante alergia",
+    "diet": "food eat meal snack restaurant dinner lunch comida comer cena dieta",
+    "language": "language spanish english reply answer idioma espanol ingles responder",
+    "idioma": "language spanish english reply answer idioma espanol ingles responder",
+    "deploy": "deploy release production ship rollout desplegar produccion",
+    "call": "on call pager incident outage weekend guardia incidente",
+    "guardia": "on call pager incident outage weekend guardia incidente",
+    "package": "install dependency dependencies npm yarn pnpm package dependencias instalar",
+    "commit": "commit git message push branch pull request mensaje rama",
+    "client": "client customer invoice contract cliente factura contrato",
+    "cliente": "client customer invoice contract cliente factura contrato",
+    "invoice": "invoice billing payment charge factura cobro pago",
+    "billing": "invoice billing payment charge pricing factura cobro pago",
+    "team": "team people capacity headcount hire equipo personas capacidad",
+    "capacity": "team people capacity headcount availability equipo capacidad",
+    "compliance": "privacy gdpr personal data compliance legal audit privacidad datos personales",
+    "gdpr": "privacy gdpr personal data compliance legal privacidad datos personales",
+    "policy": "rule policy allowed forbidden must regla politica permitido prohibido",
+}
+
+
+def concept_cues(predicate):
+    """Default cues for a predicate, from CONCEPTS; empty when no word of it is known."""
+    words = [w for w in re.split(r"[_\W]+", fold(predicate)) if w]
+    found = []
+    for word in words:
+        if word in CONCEPTS:
+            found.extend(CONCEPTS[word].split())
+    return list(dict.fromkeys(found))
+
+
 def predicate_name(value):
     return _CANONICAL.get(fold(value), fold(value))
 

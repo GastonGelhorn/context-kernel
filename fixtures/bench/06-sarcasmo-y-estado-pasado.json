@@ -1,0 +1,124 @@
+{
+  "id": "06-sarcasmo-y-estado-pasado",
+  "title": "Sarcasm about the budget and a deploy setup that ended in August are not saved; the real values are",
+  "tags": [
+    "false_capture",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "El presupuesto de infraestructura del proyecto Brújula es de 1.500 dólares por mes.",
+          "agent_captures": [
+            {
+              "entity": "brujula",
+              "predicate": "infra_budget",
+              "value": "1.500 dólares por mes",
+              "quote": "El presupuesto de infraestructura del proyecto Brújula es de 1.500 dólares por mes"
+            }
+          ],
+          "agent_reply": "Anotado: Brújula tiene 1.500 dólares por mes para infraestructura. Lo uso como techo para lo que diseñemos."
+        },
+        {
+          "user": "Proponeme una arquitectura para procesar las imágenes que suben los usuarios.",
+          "agent_captures": [],
+          "agent_reply": "Con 1.500 dólares por mes, propongo una cola en SQS con funciones Lambda que redimensionan cada imagen y la guardan en S3: no hay nada corriendo cuando no hay trabajo. Si el volumen crece mucho, un par de instancias spot con autoescalado sale más barato."
+        },
+        {
+          "user": "Sí, claro, como tenemos presupuesto infinito, metamos un cluster de GPUs, jaja.",
+          "agent_captures": [
+            {
+              "entity": "brujula",
+              "predicate": "infra_budget",
+              "value": "infinito",
+              "quote": "como tenemos presupuesto infinito",
+              "replaces": "brujula.infra_budget"
+            }
+          ],
+          "agent_reply": "Jaja, entendido: nada de GPUs. Con el presupuesto que tenemos, la opción con Lambda es la que entra.",
+          "expect_after": {
+            "current": {
+              "brujula.infra_budget": "1.500 dólares por mes"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 7,
+      "turns": [
+        {
+          "user": "Hasta agosto el deploy de Brújula era manual, con un script de Mateo.",
+          "agent_captures": [
+            {
+              "entity": "brujula",
+              "predicate": "deploy_method",
+              "value": "manual, con un script de Mateo",
+              "quote": "el deploy de Brújula era manual, con un script de Mateo"
+            }
+          ],
+          "agent_reply": "Entendido, eso era hasta agosto. ¿Cómo se despliega ahora?",
+          "expect_after": {
+            "absent": [
+              "brujula.deploy_method"
+            ]
+          }
+        },
+        {
+          "user": "Ahora lo despliega GitHub Actions en cada merge a main.",
+          "agent_captures": [
+            {
+              "entity": "brujula",
+              "predicate": "deploy_method",
+              "value": "GitHub Actions en cada merge a main",
+              "quote": "lo despliega GitHub Actions en cada merge a main"
+            }
+          ],
+          "agent_reply": "Perfecto: el deploy de Brújula lo hace GitHub Actions en cada merge a main. Lo anoto así.",
+          "expect_after": {
+            "current": {
+              "brujula.deploy_method": "GitHub Actions en cada merge a main"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "¿Cuánto podemos gastar por mes en la nube para Brújula?",
+          "agent_captures": [],
+          "agent_reply": "1.500 dólares por mes para infraestructura. Lo del presupuesto infinito lo tomé como un chiste.",
+          "expect_packet": {
+            "delivered": [
+              "brujula.infra_budget"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "brujula.infra_budget": "1.500 dólares por mes"
+            }
+          }
+        },
+        {
+          "user": "¿Y cómo llega el código a producción?",
+          "agent_captures": [],
+          "agent_reply": "Lo despliega GitHub Actions en cada merge a main. El script manual de Mateo quedó en el pasado.",
+          "expect_packet": {
+            "delivered": [
+              "brujula.deploy_method"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "brujula.deploy_method": "GitHub Actions en cada merge a main"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

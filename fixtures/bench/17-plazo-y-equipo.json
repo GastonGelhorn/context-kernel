@@ -1,0 +1,100 @@
+{
+  "id": "17-plazo-y-equipo",
+  "title": "Advice resting on a deadline and a team size is flagged when only the team size changes",
+  "tags": [
+    "stale",
+    "multi_premise",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Tenemos seis semanas para el rediseño del onboarding y somos cuatro desarrolladores. ¿Construimos nuestro propio servicio de feature flags o contratamos uno?",
+          "agent_captures": [
+            {
+              "entity": "onboarding",
+              "predicate": "deadline",
+              "value": "seis semanas",
+              "quote": "Tenemos seis semanas para el rediseño del onboarding"
+            },
+            {
+              "entity": "onboarding",
+              "predicate": "team_size",
+              "value": "cuatro desarrolladores",
+              "quote": "somos cuatro desarrolladores"
+            }
+          ],
+          "agent_reply": "Con seis semanas y cuatro desarrolladores, contratá un servicio de feature flags en lugar de construirlo: uno propio con segmentación y auditoría se comería al menos dos semanas de una persona. Usá el SDK del proveedor detrás de una interfaz chica para poder cambiarlo más adelante.",
+          "expect_after": {
+            "current": {
+              "onboarding.deadline": "seis semanas",
+              "onboarding.team_size": "cuatro desarrolladores"
+            }
+          }
+        },
+        {
+          "user": "Listame tres proveedores para comparar.",
+          "agent_captures": [],
+          "agent_reply": "Para comparar: LaunchDarkly, Flagsmith y Unleash en su versión gestionada. Los tres tienen SDK para React y Node y permiten segmentar por organización."
+        }
+      ]
+    },
+    {
+      "days_later": 7,
+      "turns": [
+        {
+          "user": "Se fueron dos personas del equipo de onboarding: ahora somos dos desarrolladores.",
+          "agent_captures": [
+            {
+              "entity": "onboarding",
+              "predicate": "team_size",
+              "value": "dos desarrolladores",
+              "quote": "ahora somos dos desarrolladores",
+              "replaces": "onboarding.team_size"
+            }
+          ],
+          "agent_reply": "Anotado: el equipo de onboarding ahora son dos desarrolladores. Actualicé el dato.",
+          "expect_packet": {
+            "delivered": [
+              "onboarding.team_size"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "onboarding.team_size": "dos desarrolladores",
+              "onboarding.deadline": "seis semanas"
+            }
+          }
+        },
+        {
+          "user": "Actualizá el README del onboarding con el equipo actual.",
+          "agent_captures": [],
+          "agent_reply": "Listo: la sección Equipo del README ahora lista dos desarrolladores. Saqué a las dos personas que se fueron."
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "¿Seguimos con la idea de contratar el servicio de feature flags para el onboarding?",
+          "agent_captures": [],
+          "agent_reply": "Esa recomendación partía de cuatro desarrolladores y ahora son dos, así que hay que revisarla. Con menos gente, contratar el servicio tiene todavía más sentido que construirlo; lo que cambia es cuánto de la integración entra en las seis semanas.",
+          "expect_packet": {
+            "delivered": [
+              "onboarding.team_size"
+            ],
+            "review": true
+          }
+        },
+        {
+          "user": "Ok, lo charlo con el equipo.",
+          "agent_captures": [],
+          "agent_reply": "Dale. Si querés, te preparo una comparación de costos de los tres proveedores para esa charla."
+        }
+      ]
+    }
+  ]
+}

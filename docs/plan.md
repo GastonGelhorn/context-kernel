@@ -1,6 +1,6 @@
 # Plan and status
 
-The project started from a public hypothesis about continuity across conversations and agents. The kernel should connect each recommendation to the assumptions behind it and flag what needs review when one of those assumptions changes, without asking the user to maintain another layer of documentation. v0.3 proved the mechanism with owner commands, and v0.4 removed the commands. v0.5 packages the kernel as a Claude Code plugin, with an installer and a setup wizard for the terminal and Codex. v0.6 reads the decisions a repository already records, and hands the facts a user keeps repeating to every session. It runs on Python 3.9 or later.
+The project started from a public hypothesis about continuity across conversations and agents. The kernel should connect each recommendation to the assumptions behind it and flag what needs review when one of those assumptions changes, without asking the user to maintain another layer of documentation. v0.3 proved the mechanism with owner commands, and v0.4 removed the commands. v0.5 packages the kernel as a Claude Code plugin, with an installer and a setup wizard for the terminal and Codex. v0.6 reads the decisions a repository already records, and hands the facts a user keeps repeating to every session. v0.7 compared jevmate alone, the kernel alone and both. v0.8 works on trust and scale: fewer false memories, selection that holds up as memory grows and fits the hook's time, a judge checked per model, and measurements anyone can rerun. It runs on Python 3.9 or later.
 
 ## Principles
 
@@ -21,7 +21,8 @@ The project started from a public hypothesis about continuity across conversatio
 | 3 Inferred dependencies | `depend` | Done; premises delivered or captured in the same turn; review notices without text |
 | 4 Calibration and decay | Periodic cleanup, guessing thresholds | Done; `calibrate --score`, confirmation by use, 180-day eligibility, 90-day digest |
 | 5 One experience, two components | Installing two things | In progress: v0.5 lists the kernel as its own plugin in jevmate's marketplace; merging the two plugins waits for a three-way comparison |
-| 6 What is already written down | Restating decision records and commit decisions; repeating the same rule in every session | Done in v0.6; decision records parsed, commits filtered and judged one by one, standing facts after three sessions or a rule |
+| 6 What is already written down | Restating decision records and commit decisions; repeating the same rule in every session | Done in v0.6; decision records parsed, commits filtered and judged one by one, standing facts after three sessions or a rule. v0.8 reads commits only when turned on |
+| 7 Trustworthy at scale | Checking what memory saved; waiting for the judge; re-measuring after a model change | v0.8: cited quotes, holds for jokes and requests for work, safe mode with a canary per model, cues and a time-fitted selection, warm-up and keep-alive, precision measured from real use, a public benchmark and a compatibility matrix |
 
 ## Acceptance
 
@@ -69,6 +70,12 @@ So the combination wins on continuity, but not without adding wait. The decision
 - **Work on the cost before revisiting the merge.** The cost is the 3 s prompt hook (cold judgments) and the extra tool round trip per save. Revisit when a cold prompt costs under 1 s.
 
 A shared repository is a maintenance question for later.
+
+v0.8 confirmed the split after an external review, and changed how the two are presented. Context Kernel is the product: what users see is memory that notices when advice goes stale. jev is the engine underneath, and the jevmate plugin is a separate tool for decisions inside a session (sift, tests and diff, triage), whose surface is frozen until its three main uses have external users. What shipped instead of a merge is one install: the kernel is in jevmate's marketplace, and the session-start warm-up loads jev's model so the first prompt does not pay for it.
+
+## Before widening capture
+
+The gate in [Acceptance](#acceptance) asks for capture precision on real use. `memory metrics` now reports it: of the captures made in the last 30 days, the share the user took back soon after (undone, forgotten or revoked within a week, replaced within an hour). Capture widens beyond `work` only when that stays above 0.9 over a month of daily use by more than one person.
 
 ## Out of scope
 

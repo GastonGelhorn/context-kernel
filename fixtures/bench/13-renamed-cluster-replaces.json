@@ -1,0 +1,103 @@
+{
+  "id": "13-renamed-cluster-replaces",
+  "title": "A rename the agent passes with replaces under a different key name updates the stored staging cluster",
+  "tags": [
+    "correction",
+    "key_drift"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Our staging cluster is called heron-stg.",
+          "agent_captures": [
+            {
+              "entity": "infra",
+              "predicate": "staging_cluster",
+              "value": "heron-stg",
+              "quote": "Our staging cluster is called heron-stg"
+            }
+          ],
+          "agent_reply": "Noted: staging runs on heron-stg. I'll use that context for staging commands."
+        },
+        {
+          "user": "Give me the kubectl command to list the pods in staging.",
+          "agent_captures": [],
+          "agent_reply": "Run kubectl --context heron-stg get pods --all-namespaces. Drop --all-namespaces if you only need the default namespace.",
+          "expect_packet": {
+            "delivered": [
+              "infra.staging_cluster"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 6,
+      "turns": [
+        {
+          "user": "We renamed the staging cluster to osprey-stg last night.",
+          "agent_captures": [
+            {
+              "entity": "infra",
+              "predicate": "staging_cluster_name",
+              "value": "osprey-stg",
+              "quote": "We renamed the staging cluster to osprey-stg",
+              "replaces": "infra.staging_cluster"
+            }
+          ],
+          "agent_reply": "Updated: the staging cluster is now osprey-stg. heron-stg no longer applies.",
+          "expect_packet": {
+            "delivered": [
+              "infra.staging_cluster"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "infra.staging_cluster": "osprey-stg"
+            },
+            "absent": [
+              "infra.staging_cluster_name"
+            ]
+          }
+        },
+        {
+          "user": "Give me the command to follow the logs of the api deployment in staging.",
+          "agent_captures": [],
+          "agent_reply": "Run kubectl --context osprey-stg logs -f deployment/api. Add --since=10m if you only want recent lines.",
+          "expect_packet": {
+            "delivered": [
+              "infra.staging_cluster"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "Point the smoke tests at staging. Which kube context goes in the config?",
+          "agent_captures": [],
+          "agent_reply": "osprey-stg. Set KUBE_CONTEXT=osprey-stg in tests/smoke/.env and the runner picks it up.",
+          "expect_packet": {
+            "delivered": [
+              "infra.staging_cluster"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "infra.staging_cluster": "osprey-stg"
+            }
+          }
+        },
+        {
+          "user": "Thanks!",
+          "agent_captures": [],
+          "agent_reply": "You're welcome. The smoke tests will run against osprey-stg from now on."
+        }
+      ]
+    }
+  ]
+}

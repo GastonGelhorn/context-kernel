@@ -1,0 +1,112 @@
+{
+  "id": "09-dont-remember-this",
+  "title": "\"Don't remember this\" and \"off the record\" keep whole messages out of memory while the next message is saved",
+  "tags": [
+    "privacy",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Don't remember this, but I'm interviewing with another company on Thursday afternoon, so I'll be offline from 2 to 4.",
+          "agent_captures": [
+            {
+              "entity": "user",
+              "predicate": "job_interview",
+              "value": "another company on Thursday afternoon",
+              "quote": "I'm interviewing with another company on Thursday afternoon"
+            },
+            {
+              "entity": "user",
+              "predicate": "availability",
+              "value": "offline Thursday from 2 to 4",
+              "quote": "I'll be offline from 2 to 4"
+            }
+          ],
+          "agent_reply": "Understood, I won't save any of that. Good luck on Thursday.",
+          "expect_after": {
+            "absent": [
+              "user.job_interview",
+              "user.availability"
+            ]
+          }
+        },
+        {
+          "user": "Our release train for the Helios app leaves every second Wednesday.",
+          "agent_captures": [
+            {
+              "entity": "helios",
+              "predicate": "release_cadence",
+              "value": "every second Wednesday",
+              "quote": "Our release train for the Helios app leaves every second Wednesday"
+            }
+          ],
+          "agent_reply": "Noted: Helios releases go out every second Wednesday. I'll keep that in mind when we plan merges.",
+          "expect_after": {
+            "current": {
+              "helios.release_cadence": "every second Wednesday"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "Am I free on Thursday afternoon for a pairing session with Ravi?",
+          "agent_captures": [],
+          "agent_reply": "I have nothing about your Thursday in memory, so I can't tell. Check your calendar before you book it.",
+          "expect_packet": {
+            "not_delivered": [
+              "user.job_interview",
+              "user.availability"
+            ]
+          }
+        },
+        {
+          "user": "Off the record: finance wants to cut the Helios budget to 40k next quarter.",
+          "agent_captures": [
+            {
+              "entity": "helios",
+              "predicate": "budget",
+              "value": "40k next quarter",
+              "quote": "finance wants to cut the Helios budget to 40k next quarter"
+            }
+          ],
+          "agent_reply": "Understood, I'm not saving that. It stays out of memory.",
+          "expect_after": {
+            "absent": [
+              "helios.budget"
+            ]
+          }
+        },
+        {
+          "user": "When does the next Helios release go out?",
+          "agent_captures": [],
+          "agent_reply": "Helios ships every second Wednesday. If the last train left this week, the next one leaves in two weeks.",
+          "expect_packet": {
+            "delivered": [
+              "helios.release_cadence"
+            ],
+            "not_delivered": [
+              "helios.budget"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "helios.release_cadence": "every second Wednesday"
+            },
+            "absent": [
+              "user.job_interview",
+              "user.availability",
+              "helios.budget"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

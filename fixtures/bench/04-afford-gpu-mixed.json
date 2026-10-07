@@ -1,0 +1,76 @@
+{
+  "id": "04-afford-gpu-mixed",
+  "title": "A budget and a meeting time stated in Spanish reach English questions that share none of their words",
+  "tags": [
+    "capture",
+    "paraphrase"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "El límite de gasto mensual en AWS para el equipo de datos es de 3.000 dólares.",
+          "agent_captures": [
+            {
+              "entity": "datos",
+              "predicate": "aws_monthly_budget",
+              "value": "3.000 dólares",
+              "quote": "El límite de gasto mensual en AWS para el equipo de datos es de 3.000 dólares"
+            }
+          ],
+          "agent_reply": "Anotado: el equipo de datos tiene un límite de 3.000 dólares por mes en AWS. Lo tengo en cuenta para lo que levantemos ahí."
+        },
+        {
+          "user": "La daily del equipo de datos es a las 9:30.",
+          "agent_captures": [
+            {
+              "entity": "datos",
+              "predicate": "daily_time",
+              "value": "9:30",
+              "quote": "La daily del equipo de datos es a las 9:30"
+            }
+          ],
+          "agent_reply": "Perfecto, la daily del equipo de datos es a las 9:30. No voy a programar nada pesado a esa hora.",
+          "expect_after": {
+            "current": {
+              "datos.aws_monthly_budget": "3.000 dólares",
+              "datos.daily_time": "9:30"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "Can we afford to keep a second GPU box running for the staging experiments?",
+          "agent_captures": [],
+          "agent_reply": "Not full time: a second GPU instance running around the clock costs roughly 730 dollars a month, a big slice of the 3.000-dollar monthly AWS limit. If the experiments only run during working hours, schedule it to stop at night and on weekends and it fits.",
+          "expect_packet": {
+            "delivered": [
+              "datos.aws_monthly_budget"
+            ],
+            "not_delivered": [
+              "datos.daily_time"
+            ]
+          }
+        },
+        {
+          "user": "When do we meet every morning?",
+          "agent_captures": [],
+          "agent_reply": "The data team's daily is at 9:30. Want me to keep the GPU jobs out of that slot?",
+          "expect_packet": {
+            "delivered": [
+              "datos.daily_time"
+            ],
+            "not_delivered": [
+              "datos.aws_monthly_budget"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

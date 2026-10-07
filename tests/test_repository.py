@@ -45,6 +45,8 @@ class RepositoryTests(unittest.TestCase):
         self.root.mkdir()
         self.now = "2026-10-05T12:00:00+00:00"
         self.store = Store(Path(self.temp.name) / "memory.sqlite", scope="work", clock=lambda: timestamp(self.now), create=True)
+        # Most of these tests are about decision commits, which v0.8 reads only when the owner turns them on.
+        self.store.set_policy({"repository_commits": True})
         self.judge = FakeJudge(ask=lambda qid, state, spec: 0.9 if "Postgres" in state.get("commit", "") else 0.2)
         self.git("init", "-q", "-b", "main")
 

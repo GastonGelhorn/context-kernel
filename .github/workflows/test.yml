@@ -22,3 +22,17 @@ jobs:
       - name: SQLite has FTS5
         run: python -c "import sqlite3; sqlite3.connect(':memory:').execute('CREATE VIRTUAL TABLE t USING fts5(x)')"
       - run: make test PYTHON=python
+
+  replay:
+    # Selection and the multi-session benchmark on answers recorded from the real local judge (tev1-32k): no
+    # model, deterministic, and a drop below the recorded quality fails the build. See docs/benchmark.md.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Relevance on 60 labelled questions (saved judge scores)
+        run: python -m tests.relevance_check --scores fixtures/relevance_scores.json --min-delivered 0.55 > /dev/null
+      - name: 30 multi-session scenarios (recorded judge answers; 193 of 211 checks when recorded)
+        run: python -m tests.bench --replay fixtures/bench/recorded.json --min-rate 0.9

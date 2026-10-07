@@ -1,0 +1,108 @@
+{
+  "id": "05-questions-and-hypotheticals",
+  "title": "Questions and a hypothetical about the launch are not saved and never overwrite the real date",
+  "tags": [
+    "false_capture",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "The partner portal launches on March 3.",
+          "agent_captures": [
+            {
+              "entity": "partner_portal",
+              "predicate": "launch_date",
+              "value": "March 3",
+              "quote": "The partner portal launches on March 3"
+            }
+          ],
+          "agent_reply": "Noted: the partner portal launches on March 3. I'll plan the remaining work against that date.",
+          "expect_after": {
+            "current": {
+              "partner_portal.launch_date": "March 3"
+            }
+          }
+        },
+        {
+          "user": "What if we moved the launch to January?",
+          "agent_captures": [
+            {
+              "entity": "partner_portal",
+              "predicate": "launch_date",
+              "value": "January",
+              "quote": "moved the launch to January",
+              "replaces": "partner_portal.launch_date"
+            }
+          ],
+          "agent_reply": "Moving to January would cut about five weeks. The SSO integration and the partner onboarding emails would not make it, so January only works if both ship after launch.",
+          "expect_after": {
+            "current": {
+              "partner_portal.launch_date": "March 3"
+            }
+          }
+        },
+        {
+          "user": "Is the staging URL still portal-stg.tallowbird.dev?",
+          "agent_captures": [
+            {
+              "entity": "partner_portal",
+              "predicate": "staging_url",
+              "value": "portal-stg.tallowbird.dev",
+              "quote": "the staging URL still portal-stg.tallowbird.dev"
+            }
+          ],
+          "agent_reply": "I don't have the staging URL in memory, so I can't confirm it. The deploy config in infra/portal.tf would tell us; want me to check it?",
+          "expect_after": {
+            "absent": [
+              "partner_portal.staging_url"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "If we had two more engineers, we could ship partner SSO by launch.",
+          "agent_captures": [
+            {
+              "entity": "partner_portal",
+              "predicate": "sso_target",
+              "value": "ship partner SSO by launch",
+              "quote": "we could ship partner SSO by launch"
+            }
+          ],
+          "agent_reply": "Probably, if they could start this week: the SSO work is roughly two engineer-months. Without them, SSO lands a few weeks after the March 3 launch.",
+          "expect_after": {
+            "absent": [
+              "partner_portal.sso_target"
+            ]
+          }
+        },
+        {
+          "user": "When does the partner portal launch?",
+          "agent_captures": [],
+          "agent_reply": "On March 3. Nothing you have told me since has changed that date.",
+          "expect_packet": {
+            "delivered": [
+              "partner_portal.launch_date"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "partner_portal.launch_date": "March 3"
+            },
+            "absent": [
+              "partner_portal.staging_url",
+              "partner_portal.sso_target"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

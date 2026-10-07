@@ -1,0 +1,89 @@
+{
+  "id": "24-olvida-presupuesto",
+  "title": "A forgotten budget is not delivered later, and the recommendation that rested on it is not raised for review",
+  "tags": [
+    "forget",
+    "stale"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "El presupuesto de marketing para la landing de Pampa es de 5.000 euros. ¿Contratamos un diseñador freelance o usamos una plantilla?",
+          "agent_captures": [
+            {
+              "entity": "pampa_landing",
+              "predicate": "marketing_budget",
+              "value": "5.000 euros",
+              "quote": "El presupuesto de marketing para la landing de Pampa es de 5.000 euros"
+            }
+          ],
+          "agent_reply": "Con 5.000 euros, contratá un diseñador freelance para la landing de Pampa: alcanza para unas dos semanas de trabajo y el resultado se va a diferenciar mucho más que con una plantilla. Pedile el diseño en Figma con componentes reutilizables.",
+          "expect_after": {
+            "current": {
+              "pampa_landing.marketing_budget": "5.000 euros"
+            }
+          }
+        },
+        {
+          "user": "Escribí el brief para el diseñador en cinco puntos.",
+          "agent_captures": [],
+          "agent_reply": "Brief en cinco puntos. Objetivo: que el visitante pida una demo. Público: pymes del agro. Tono: cercano y directo. Estructura y entrega: tres secciones (problema, producto y precios) en Figma, en dos semanas."
+        }
+      ]
+    },
+    {
+      "days_later": 6,
+      "turns": [
+        {
+          "user": "Olvidate del presupuesto de marketing de la landing, eso lo maneja finanzas y no quiero que lo tengas.",
+          "agent_captures": [],
+          "agent_calls": [
+            {
+              "tool": "memory_forget",
+              "key": "pampa_landing.marketing_budget"
+            }
+          ],
+          "agent_reply": "Hecho: borré el presupuesto de marketing de la landing. De ahora en más eso queda en manos de finanzas.",
+          "expect_after": {
+            "absent": [
+              "pampa_landing.marketing_budget"
+            ]
+          }
+        },
+        {
+          "user": "Seguí con el texto del hero de la landing.",
+          "agent_captures": [],
+          "agent_reply": "Propuesta para el hero: \"Tus pedidos del campo, sin planillas\". Subtítulo: \"Pampa ordena pedidos, entregas y cobros en un solo lugar\"."
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "¿Cuánta plata tenemos para la landing? ¿Seguimos con el diseñador freelance?",
+          "agent_captures": [],
+          "agent_reply": "No tengo guardado un presupuesto para la landing: me pediste que lo olvidara porque lo maneja finanzas. Antes de contratar al diseñador freelance, conviene confirmar el monto con ellos.",
+          "expect_packet": {
+            "not_delivered": [
+              "pampa_landing.marketing_budget"
+            ],
+            "review": false
+          },
+          "expect_after": {
+            "absent": [
+              "pampa_landing.marketing_budget"
+            ]
+          }
+        },
+        {
+          "user": "Ok, les pregunto.",
+          "agent_captures": [],
+          "agent_reply": "Dale. Cuando tengas la respuesta, seguimos con el brief."
+        }
+      ]
+    }
+  ]
+}

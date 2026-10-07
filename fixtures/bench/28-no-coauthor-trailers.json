@@ -1,0 +1,101 @@
+{
+  "id": "28-no-coauthor-trailers",
+  "title": "A rule about commit trailers reaches later sessions on unrelated questions until the user takes it off the list",
+  "tags": [
+    "standing"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Never add Co-Authored-By trailers to my commit messages.",
+          "agent_captures": [
+            {
+              "entity": "user",
+              "predicate": "commit_trailers",
+              "value": "never add Co-Authored-By trailers",
+              "quote": "Never add Co-Authored-By trailers to my commit messages"
+            }
+          ],
+          "agent_reply": "Understood: no Co-Authored-By trailers in your commit messages. That goes for every commit I make.",
+          "expect_after": {
+            "current": {
+              "user.commit_trailers": "never add Co-Authored-By trailers"
+            },
+            "standing": [
+              "user.commit_trailers"
+            ]
+          }
+        },
+        {
+          "user": "Commit the README fix with a short message.",
+          "agent_captures": [],
+          "agent_reply": "Committed as \"Fix broken link in README\". No trailers added."
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "Can you write a regex that matches ISO 8601 dates like 2026-10-06?",
+          "agent_captures": [],
+          "agent_reply": "Use ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ for the basic shape. To reject impossible months and days, use ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$.",
+          "expect_packet": {
+            "delivered": [
+              "user.commit_trailers"
+            ]
+          }
+        },
+        {
+          "user": "Great, add it to utils/dates.ts and commit.",
+          "agent_captures": [],
+          "agent_reply": "Added ISO_DATE to utils/dates.ts with two tests and committed it as \"Add ISO date regex\". No trailers."
+        },
+        {
+          "user": "You don't need to keep the trailer rule in mind every session anymore; a git hook strips them now.",
+          "agent_captures": [],
+          "agent_calls": [
+            {
+              "tool": "memory_standing",
+              "key": "user.commit_trailers",
+              "standing": false
+            }
+          ],
+          "agent_reply": "Ok, I'll stop bringing the trailer rule into every session. The git hook takes care of it."
+        }
+      ]
+    },
+    {
+      "days_later": 6,
+      "turns": [
+        {
+          "user": "Write a SQL query that counts orders per day for the last 30 days.",
+          "agent_captures": [],
+          "agent_reply": "SELECT date(created_at) AS day, count(*) AS orders FROM orders WHERE created_at >= date('now', '-30 days') GROUP BY day ORDER BY day; is the SQLite version. In Postgres, use created_at >= now() - interval '30 days'.",
+          "expect_packet": {
+            "not_delivered": [
+              "user.commit_trailers"
+            ]
+          }
+        },
+        {
+          "user": "Commit that query as a view in migrations/.",
+          "agent_captures": [],
+          "agent_reply": "Added migrations/0042_orders_per_day_view.sql and committed it as \"Add orders per day view\". No trailers.",
+          "expect_packet": {
+            "delivered": [
+              "user.commit_trailers"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "user.commit_trailers": "never add Co-Authored-By trailers"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

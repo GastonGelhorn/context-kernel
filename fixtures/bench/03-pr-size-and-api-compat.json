@@ -1,0 +1,70 @@
+{
+  "id": "03-pr-size-and-api-compat",
+  "title": "A preference and a constraint come back for later questions that share none of their words",
+  "tags": [
+    "capture",
+    "paraphrase"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Quick context before we start: I prefer small PRs, under 400 changed lines each.",
+          "agent_captures": [
+            {
+              "entity": "user",
+              "predicate": "pr_size",
+              "value": "small PRs, under 400 changed lines",
+              "quote": "I prefer small PRs, under 400 changed lines each"
+            }
+          ],
+          "agent_reply": "Got it: I will keep pull requests small, under 400 changed lines each. Larger changes get split."
+        },
+        {
+          "user": "Also, the public REST API must stay backwards compatible until v3 ships.",
+          "agent_captures": [
+            {
+              "entity": "public_api",
+              "predicate": "compatibility",
+              "value": "backwards compatible until v3",
+              "quote": "the public REST API must stay backwards compatible until v3 ships"
+            }
+          ],
+          "agent_reply": "Understood: no breaking changes to the public REST API until v3. Removals and renames wait for that release.",
+          "expect_after": {
+            "current": {
+              "user.pr_size": "small PRs, under 400 changed lines",
+              "public_api.compatibility": "backwards compatible until v3"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 4,
+      "turns": [
+        {
+          "user": "I want to rename customer_id to account_id in the JSON we return from GET /orders to partners. Anything to watch out for?",
+          "agent_captures": [],
+          "agent_reply": "Yes: partners read that JSON, and the rename would break them while the API has to stay backwards compatible until v3. Add account_id next to customer_id, mark customer_id as deprecated in the OpenAPI spec, and remove it in v3.",
+          "expect_packet": {
+            "delivered": [
+              "public_api.compatibility"
+            ]
+          }
+        },
+        {
+          "user": "Fine. Break the move of the whole orders module to the new ORM into pieces I can review.",
+          "agent_captures": [],
+          "agent_reply": "Here is a split into five pieces of under 400 changed lines each: models, read paths, write paths, data migrations, and removal of the old ORM code. The GET /orders response stays the same in every step.",
+          "expect_packet": {
+            "delivered": [
+              "user.pr_size"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

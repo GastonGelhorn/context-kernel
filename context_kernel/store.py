@@ -8,6 +8,8 @@ import sqlite3
 from .common import KernelError, canonical, checked_value, identifier, key, reject_secrets, text, timestamp, timestamp_offset
 
 
+# Additive changes (a new nullable column, a new table) keep the version: an older kernel still reads and
+# writes the same rows, so a database shared by two installs (the plugin and a checkout) works with both.
 SCHEMA_VERSION = "6"
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS metadata(key TEXT PRIMARY KEY, value TEXT NOT NULL);
@@ -27,7 +29,7 @@ CREATE TABLE IF NOT EXISTS statements(
  lifecycle TEXT NOT NULL CHECK(lifecycle IN ('active','superseded','revoked')),
  superseded_by TEXT REFERENCES statements(id),
  trust TEXT NOT NULL DEFAULT 'confirmed' CHECK(trust IN ('confirmed','captured','quarantined')),
- category TEXT, last_confirmed_at TEXT,
+ category TEXT, last_confirmed_at TEXT, cues TEXT,
  CHECK(valid_until IS NULL OR valid_until > valid_from
        OR (lifecycle='superseded' AND valid_until=valid_from)));
 CREATE INDEX IF NOT EXISTS statement_lookup ON statements(scope,entity_id,predicate,lifecycle);
@@ -92,6 +94,9 @@ CREATE TABLE IF NOT EXISTS repositories(
 CREATE TABLE IF NOT EXISTS repo_sources(
  scope TEXT NOT NULL, root TEXT NOT NULL, source TEXT NOT NULL, version TEXT NOT NULL,
  statement_id TEXT, seen_at TEXT NOT NULL, PRIMARY KEY(scope,root,source));
+CREATE TABLE IF NOT EXISTS judges(
+ scope TEXT NOT NULL, model_key TEXT NOT NULL, status TEXT NOT NULL CHECK(status IN ('passed','failed','running')),
+ detail TEXT NOT NULL, checked_at TEXT NOT NULL, PRIMARY KEY(scope,model_key));
 """
 
 # Columns added after the tables first shipped; a migration adds whichever are missing.
@@ -106,7 +111,11 @@ ADDED_COLUMNS = (
     ("captures_log", "label", "TEXT"),
     ("sessions", "standing_sent", "TEXT"),
     ("sessions", "notice", "TEXT"),
+    ("statements", "cues", "TEXT"),
 )
+# What counts as regret about a capture: taken back, forgotten or revoked within a week, or replaced by the
+# user within the hour. A later change of mind is a change, not a misreading.
+REGRET_SECONDS = {"undone": 7 * 86400, "forgotten": 7 * 86400, "revoked": 7 * 86400, "corrected": 3600}
 RELATION_COLUMNS = "id,scope,kind,from_statement,to_statement,from_entity,to_entity"
 
 
@@ -138,11 +147,35 @@ class Store:
             if os.name == "posix":
                 self.path.chmod(0o600)
         version = self.db.execute("SELECT value FROM metadata WHERE key='schema_version'").fetchone()
+        if version and version[0] == "7":
+            # A development build of v0.8 stamped 7 for additive changes only; 6 describes the same tables,
+            # and an installed v0.7 refuses anything else.
+            with self.db:
+                self.db.execute("UPDATE metadata SET value='6' WHERE key='schema_version'")
+            version = ("6",)
         if version and version[0] in {"1", "2", "3", "4", "5"}:
             self._migrate(version[0])
             version = (SCHEMA_VERSION,)
         if not version or version[0] != SCHEMA_VERSION:
             raise KernelError("Unsupported memory schema.")
+        self._additive()
+
+    def _additive(self):
+        """Tables and columns newer than the database, added in place. Idempotent and cheap; two processes
+        opening the same database at once may both try, and the second finds the column there."""
+        missing = [(t, c, d) for t, c, d in ADDED_COLUMNS
+                   if c not in {r[1] for r in self.db.execute(f"PRAGMA table_info({t})")}]
+        tables = {r[0] for r in self.db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        if not missing and "judges" in tables:
+            return
+        with self.db:
+            self._schema()
+            for table, column, ddl in missing:
+                try:
+                    self.db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {ddl}")
+                except sqlite3.OperationalError as exc:
+                    if "duplicate column" not in str(exc):
+                        raise
 
     def _migrate(self, version):
         """Copy-based and additive: no row is dropped. v1 -> v2 rebuilds `relations` (SQLite
@@ -255,11 +288,12 @@ class Store:
 
     def _insert(self, entity, predicate, value, evidence, valid_from=None, valid_until=None,
                 assertion_kind="user_statement", source_kind="user_statement", label=None, kind="person", source_ref=None,
-                trust="confirmed", category=None):
+                trust="confirmed", category=None, cues=None):
         predicate = key(predicate, "predicate")
         encoded = checked_value(value)
         evidence = text(evidence)
-        reject_secrets(evidence + " " + encoded)
+        cues = canonical(list(cues)) if cues else None
+        reject_secrets(evidence + " " + encoded + " " + (cues or ""))
         if assertion_kind not in {"user_statement", "observed", "hypothesis", "inference"}:
             raise KernelError("Invalid assertion kind.")
         start = timestamp(valid_from) if valid_from else self.clock()
@@ -273,11 +307,17 @@ class Store:
         if trust not in {"confirmed", "captured", "quarantined"}:
             raise KernelError("Invalid trust level.")
         self.db.execute("""INSERT INTO statements(id,scope,entity_id,predicate,value,assertion_kind,evidence_id,valid_from,
-                           valid_until,recorded_at,lifecycle,superseded_by,trust,category,last_confirmed_at)
-                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                           valid_until,recorded_at,lifecycle,superseded_by,trust,category,last_confirmed_at,cues)
+                           VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
                         (statement_id, self.scope, entity_id, predicate, encoded, assertion_kind, evidence_id, start, end,
-                         self.clock(), "active", None, trust, category, self.clock() if trust == "confirmed" else None))
+                         self.clock(), "active", None, trust, category, self.clock() if trust == "confirmed" else None, cues))
         return statement_id
+
+    def set_cues(self, statement_id, cues):
+        """Words a later question may use when this fact matters, written by the agent that captured it."""
+        with self.db:
+            self.db.execute("UPDATE statements SET cues=? WHERE scope=? AND id=?",
+                            (canonical(list(cues)) if cues else None, self.scope, statement_id))
 
     def remember(self, entity, predicate, value, evidence, **kwargs):
         with self.db:
@@ -301,6 +341,7 @@ class Store:
         row = dict(row)
         row["value"] = json.loads(row["value"])
         row["aliases"] = json.loads(row["aliases"])
+        row["cues"] = json.loads(row["cues"]) if row.get("cues") else []
         at = timestamp(as_of) if as_of else self.clock()
         state = row["lifecycle"]
         if state != "revoked":
@@ -445,6 +486,9 @@ class Store:
         start = timestamp(valid_from) if valid_from else self.clock()
         if start < old["valid_from"]:
             raise KernelError("Correction cannot start before its target.")
+        # A new value of the same attribute is asked about in the same words: the cues carry over.
+        if not origin.get("cues") and old.get("cues"):
+            origin["cues"] = json.loads(old["cues"])
         new_id = self._insert(old["entity_key"], old["predicate"], value, evidence,
                               valid_from=start, valid_until=valid_until, **origin)
         end = min(start, old["valid_until"]) if old["valid_until"] else start
@@ -463,8 +507,39 @@ class Store:
             row = self._row(statement_id)
             self.db.execute("UPDATE statements SET lifecycle='revoked' WHERE id=?", (statement_id,))
             self._tombstone(row["entity_key"], row["predicate"])
+            self._log_regret([statement_id], "revoked")
             self._event("revoke", {"statement_id": statement_id})
         return {"status": "revoked", "id": statement_id}
+
+    def retire(self, statement_id):
+        """Stop using a statement the kernel itself derived (a commit decision once commit learning is off),
+        without a tombstone: turning the source back on may read it again."""
+        with self.db:
+            self.db.execute("UPDATE statements SET lifecycle='revoked' WHERE scope=? AND id=? AND lifecycle='active'",
+                            (self.scope, statement_id))
+            self._event("retire", {"statement_id": statement_id})
+
+    def _log_regret(self, statement_ids, outcome):
+        """Inside the caller's transaction: a capture the user took back. `soon` when it happened within
+        REGRET_SECONDS of the capture, which is what the precision estimate counts."""
+        if not statement_ids:
+            return
+        from datetime import datetime
+        now = datetime.fromisoformat(self.clock())
+        marks = ",".join("?" * len(statement_ids))
+        rows = self.db.execute(f"""SELECT statement_id, session_id, min(recorded_at) FROM captures_log WHERE scope=?
+                                   AND outcome IN ('captured','quarantined') AND statement_id IN ({marks})
+                                   GROUP BY statement_id, session_id""", (self.scope, *statement_ids)).fetchall()
+        for statement_id, session_id, captured_at in rows:
+            age = (now - datetime.fromisoformat(captured_at)).total_seconds()
+            self.db.execute("""INSERT INTO captures_log(scope,session_id,turn_key,statement_id,outcome,reason,recorded_at,label)
+                               VALUES(?,?,?,?,?,?,?,?)""", (self.scope, session_id, None, statement_id, outcome,
+                                                            "soon" if age <= REGRET_SECONDS[outcome] else "later",
+                                                            self.clock(), None))
+
+    def log_correction(self, old_id):
+        """Inside the caller's transaction: the user replaced a captured value (see REGRET_SECONDS)."""
+        self._log_regret([old_id], "corrected")
 
     def relate(self, child, parent):
         with self.db:
@@ -498,6 +573,10 @@ class Store:
             # forgotten value ("with three months, don't rewrite"): they go too. The user's own
             # statements that were linked to it stay; only their links are removed.
             marks = ",".join("?" * len(ids))
+            self._log_regret(ids, "forgotten")
+            # The capture log keeps outcomes for the metrics, not the name of a forgotten property.
+            self.db.execute("UPDATE captures_log SET label=NULL WHERE scope=? AND label=?",
+                            (self.scope, f"{row['entity_key']}.{row['predicate']}"))
             derived = [r[0] for r in self.db.execute(f"""SELECT DISTINCT s.id FROM relations r JOIN statements s
                 ON s.id=r.from_statement WHERE r.scope=? AND r.kind='depends_on' AND s.assertion_kind='inference'
                 AND r.to_statement IN ({marks})""", (self.scope, *ids))]
@@ -717,11 +796,22 @@ class Store:
         rows = self.db.execute("SELECT session_id, chain, seen_at FROM sessions WHERE scope=? ORDER BY seen_at DESC", (self.scope,))
         return [r["session_id"] for r in rows if list(parent) in json.loads(r["chain"])]
 
-    def open_turn(self, session_id, turn_key, token, origin, prompt_digest, excerpt, expires_at):
+    def open_turn(self, session_id, turn_key, token, origin, prompt_digest, excerpt, expires_at, fresh_since=None):
+        """Open (or reopen) a turn. Returns False when the same prompt was opened at or after `fresh_since`:
+        a second install of the hooks racing the first, which keeps the first one's token. One statement,
+        so two processes cannot both win."""
         with self.db:
-            self.db.execute("""INSERT OR REPLACE INTO turns(scope,session_id,turn_key,token,origin,prompt_digest,prompt_excerpt,
-                               opened_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)""",
-                            (self.scope, session_id, turn_key, token, origin, prompt_digest, excerpt, self.clock(), expires_at))
+            changed = self.db.execute("""INSERT INTO turns(scope,session_id,turn_key,token,origin,prompt_digest,prompt_excerpt,
+                               opened_at,expires_at) VALUES(?,?,?,?,?,?,?,?,?)
+                               ON CONFLICT(scope,session_id,turn_key) DO UPDATE SET token=excluded.token,
+                               origin=excluded.origin, prompt_digest=excluded.prompt_digest, prompt_excerpt=excluded.prompt_excerpt,
+                               opened_at=excluded.opened_at, expires_at=excluded.expires_at, projection_id=NULL,
+                               delivered_ids='[]', captured_ids='[]', gate_count=0, flags='[]', reply_excerpt=NULL,
+                               closed_at=NULL, notes=NULL
+                               WHERE turns.prompt_digest IS NOT excluded.prompt_digest OR turns.opened_at < ?""",
+                            (self.scope, session_id, turn_key, token, origin, prompt_digest, excerpt, self.clock(), expires_at,
+                             fresh_since or "")).rowcount
+        return changed > 0
 
     def update_turn(self, session_id, turn_key, **fields):
         allowed = {"projection_id", "delivered_ids", "captured_ids", "gate_count", "flags", "closed_at", "prompt_excerpt",
@@ -828,6 +918,53 @@ class Store:
         rows = self.db.execute("SELECT outcome, reason, count(*) FROM captures_log WHERE scope=? GROUP BY outcome, reason", (self.scope,))
         return [{"outcome": r[0], "reason": r[1], "count": r[2]} for r in rows]
 
+    def regret_metrics(self, days=None):
+        """How often the user took back what memory saved: the precision of automatic capture in real use.
+        Counts distinct captured statements; `days` limits it to captures made in that window."""
+        since = timestamp_offset(self.clock(), -days * 86400) if days else ""
+
+        def ids(where, *args):
+            return {r[0] for r in self.db.execute(f"""SELECT statement_id FROM captures_log WHERE scope=?
+                    AND statement_id IS NOT NULL {where}""", (self.scope, *args))}
+        captured = ids("AND outcome='captured' AND recorded_at>=?", since)
+        held = ids("AND outcome='quarantined' AND recorded_at>=?", since)
+        regret = {name: len(ids("AND outcome=? AND reason='soon'", name) & (captured | held)) for name in REGRET_SECONDS}
+        confirmed = ids("AND (outcome='confirmed' OR (outcome='duplicate' AND reason='restated_by_user'))") & captured
+        taken_back = ids("AND outcome IN ('undone','forgotten','revoked','corrected') AND reason='soon'") & captured
+        return {"window_days": days, "captured": len(captured), "held_for_review": len(held), "taken_back": regret,
+                "confirmed_by_restating": len(confirmed),
+                "precision_estimate": round(1 - len(taken_back) / len(captured), 3) if captured else None,
+                "note": "taken back = undone, forgotten or revoked within 7 days, or replaced by the user within an hour"}
+
+    def judge_record(self, model_key):
+        row = self.db.execute("SELECT * FROM judges WHERE scope=? AND model_key=?", (self.scope, model_key)).fetchone()
+        return dict(row) | {"detail": json.loads(row["detail"])} if row else None
+
+    def judge_records(self):
+        return [dict(r) | {"detail": json.loads(r["detail"])} for r in self.db.execute(
+            "SELECT * FROM judges WHERE scope=? ORDER BY checked_at DESC", (self.scope,))]
+
+    def set_judge_record(self, model_key, status, detail):
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO judges VALUES(?,?,?,?,?)",
+                            (self.scope, model_key, status, canonical(detail), self.clock()))
+
+    def clear_judge_records(self, model_key=None):
+        with self.db:
+            if model_key:
+                self.db.execute("DELETE FROM judges WHERE scope=? AND model_key=?", (self.scope, model_key))
+            else:
+                self.db.execute("DELETE FROM judges WHERE scope=?", (self.scope,))
+
+    def meta(self, name, value=None):
+        """Machine-local metadata (the judge's measured cost per pair, when a warm-up last ran)."""
+        if value is None:
+            row = self.db.execute("SELECT value FROM metadata WHERE key=?", (name,)).fetchone()
+            return row[0] if row else None
+        with self.db:
+            self.db.execute("INSERT OR REPLACE INTO metadata VALUES(?,?)", (name, str(value)))
+        return value
+
     def confirm(self, statement_id):
         """Owner (or a validated chat turn) promotes a capture to confirmed."""
         with self.db:
@@ -846,6 +983,7 @@ class Store:
                 raise KernelError("Only captured or quarantined statements can be undone; use revoke for confirmed facts.")
             previous = self.db.execute("""SELECT to_statement FROM relations WHERE scope=? AND kind='corrects'
                                           AND from_statement=?""", (self.scope, statement_id)).fetchone()
+            self._log_regret([statement_id], "undone")
             self.db.execute("UPDATE statements SET superseded_by=NULL WHERE scope=? AND superseded_by=?", (self.scope, statement_id))
             self.db.execute("DELETE FROM statements WHERE scope=? AND id=?", (self.scope, statement_id))
             self.db.execute("DELETE FROM evidence WHERE scope=? AND id=?", (self.scope, row["evidence_id"]))

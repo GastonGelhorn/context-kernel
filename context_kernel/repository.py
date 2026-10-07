@@ -527,6 +527,19 @@ def _learn_commits(store, judge, root, entity, label, deadline, allow_remote, su
         store.save_repo_source(root, "commit:" + commit["sha"], commit["sha"], statement)
 
 
+def _retire_commits(store, root, entity, summary):
+    """Commit learning is off: decisions read from commit messages stop counting, without a tombstone, and
+    their commits are forgotten as seen, so turning it back on reads them again. On this repository the
+    pass had kept three subjects as project decisions (a license, a test runner's options, a release note)
+    that no one had decided for the whole project."""
+    for row in _repository_rows(store, entity):
+        if (row.get("source_ref") or "").startswith("commit "):
+            store.retire(row["id"])
+            summary["unused_commits"] = summary.get("unused_commits", 0) + 1
+    for source in [s for s in store.repo_sources(root) if s.startswith("commit:")]:
+        store.drop_repo_source(root, source)
+
+
 def describe(summary):
     learned = summary["learned"] + summary["changed"]
     gone = summary["superseded"] + summary["retired"]
@@ -536,6 +549,9 @@ def describe(summary):
                      + (", …" if len(learned) > 3 else "") + ")")
     if gone:
         parts.append(f"{len(gone)} earlier one(s) no longer apply ({', '.join(gone[:3])}" + (", …" if len(gone) > 3 else "") + ")")
+    if summary.get("unused_commits"):
+        parts.append(f"stopped using {summary['unused_commits']} decision(s) read from commit messages; decision records "
+                     "still count (`memory policy --repository-commits on` reads commits again)")
     return "Memory: " + "; ".join(parts) + "." if parts else ""
 
 
@@ -546,9 +562,12 @@ def learn(store, judge, root, deadline=None, session=None, if_changed=False):
     if not rules.get("repository", True) or not rules["categories"].get("project_decisions", False):
         return {"skipped": ["policy"]}
     root = str(Path(root).resolve())
+    commits = bool(rules.get("repository_commits", False))
+    # The signature names the sources read, so a change of policy is a change worth a pass.
+    marked = lambda value: value and value + ("+commits" if commits else "+records")
     if if_changed:
         row = store.repository(root)
-        if row and row["signature"] and row["signature"] == signature(root, PASS_TIMEOUT):
+        if row and row["signature"] and row["signature"] == marked(signature(root, PASS_TIMEOUT)):
             return {"skipped": ["unchanged"]}
     entity = entity_for(store, root)
     if not store.claim_scan(root, entity, timestamp_offset(store.clock(), SCAN_SECONDS)):
@@ -556,10 +575,13 @@ def learn(store, judge, root, deadline=None, session=None, if_changed=False):
     summary = {"repository": entity, "learned": [], "changed": [], "superseded": [], "retired": [], "judged": 0, "skipped": []}
     complete, current = False, None
     try:
-        current = signature(root, PASS_TIMEOUT)
+        current = marked(signature(root, PASS_TIMEOUT))
         label = Path(root).name
         _learn_records(store, root, entity, label, summary)
-        _learn_commits(store, judge, root, entity, label, deadline, rules.get("allow_remote_judge", False), summary)
+        if commits:
+            _learn_commits(store, judge, root, entity, label, deadline, rules.get("allow_remote_judge", False), summary)
+        else:
+            _retire_commits(store, root, entity, summary)
         # Commits left unjudged (no time, too many) leave the signature unset: the next session tries again.
         complete = current is not None and "judge_unavailable" not in summary["skipped"] and not summary.get("more")
     finally:
@@ -571,10 +593,21 @@ def learn(store, judge, root, deadline=None, session=None, if_changed=False):
 
 
 def learn_command(db, scope, workspace, session=None, jev=None):
-    """The session-start pass, as a command line and environment for `start_background`."""
+    """The repository pass alone, as a command line and environment for `start_background`."""
     package = str(Path(__file__).resolve().parent.parent)
     argv = [sys.executable, "-m", "context_kernel", "--db", str(db), "--scope", scope, "learn", "--workspace", str(workspace),
             "--if-changed"]
+    argv += (["--session", session] if session else []) + (["--jev-command", jev] if jev else [])
+    path = os.environ.get("PYTHONPATH")
+    return argv, dict(os.environ, PYTHONPATH=package + (os.pathsep + path if path else ""))
+
+
+def warm_command(db, scope, workspace=None, session=None, jev=None, learn_repository=False):
+    """The session-start background pass (`memory warm`): load the local model, check the judge's
+    calibration when needed, and read the repository's decisions when `learn_repository`."""
+    package = str(Path(__file__).resolve().parent.parent)
+    argv = [sys.executable, "-m", "context_kernel", "--db", str(db), "--scope", scope, "warm"]
+    argv += (["--workspace", str(workspace)] if workspace else []) + (["--learn"] if learn_repository else [])
     argv += (["--session", session] if session else []) + (["--jev-command", jev] if jev else [])
     path = os.environ.get("PYTHONPATH")
     return argv, dict(os.environ, PYTHONPATH=package + (os.pathsep + path if path else ""))

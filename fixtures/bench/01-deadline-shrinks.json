@@ -1,0 +1,92 @@
+{
+  "id": "01-deadline-shrinks",
+  "title": "A three-month deadline becomes three weeks; the rewrite advice that rested on it is flagged for review",
+  "tags": [
+    "capture",
+    "correction",
+    "stale"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "We have three months to deliver the checkout project. Should we rewrite the payment module?",
+          "agent_captures": [
+            {
+              "entity": "checkout",
+              "predicate": "deadline",
+              "value": "three months",
+              "quote": "We have three months to deliver the checkout project"
+            }
+          ],
+          "agent_reply": "Yes. With three months, rewriting the payment module is realistic: you can replace the legacy gateway client, add contract tests against the provider sandbox, and still keep a few weeks for a staged rollout. I would start with the refund flow, which has the most open bugs.",
+          "expect_after": {
+            "current": {
+              "checkout.deadline": "three months"
+            }
+          }
+        },
+        {
+          "user": "Ok. Before we start, list the files the new payment module would have.",
+          "agent_captures": [],
+          "agent_reply": "It would have payment/gateway_client.py, payment/refunds.py, payment/webhooks.py, payment/models.py and payment/tests/test_contract.py. Only gateway_client.py talks to the provider; everything else goes through it."
+        }
+      ]
+    },
+    {
+      "days_later": 6,
+      "turns": [
+        {
+          "user": "Update: the checkout deadline changed, we now have three weeks.",
+          "agent_captures": [
+            {
+              "entity": "checkout",
+              "predicate": "deadline",
+              "value": "three weeks",
+              "quote": "the checkout deadline changed, we now have three weeks",
+              "replaces": "checkout.deadline"
+            }
+          ],
+          "agent_reply": "Noted: the checkout deadline is now three weeks instead of three months. I have updated it.",
+          "expect_packet": {
+            "delivered": [
+              "checkout.deadline"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "checkout.deadline": "three weeks"
+            }
+          }
+        },
+        {
+          "user": "Rename PaymentGatewayV1 to LegacyGatewayClient across the repo.",
+          "agent_captures": [],
+          "agent_reply": "Done: PaymentGatewayV1 is now LegacyGatewayClient in 14 files, imports included. The test suite still passes."
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "Should we still go ahead with the payment module rewrite?",
+          "agent_captures": [],
+          "agent_reply": "That plan assumed three months, and the deadline is now three weeks, so it needs review before we commit. A full rewrite no longer fits; I would limit it to the refund flow and keep LegacyGatewayClient for the rest.",
+          "expect_packet": {
+            "delivered": [
+              "checkout.deadline"
+            ],
+            "review": true
+          }
+        },
+        {
+          "user": "Makes sense. I'll talk it through with the team tomorrow.",
+          "agent_captures": [],
+          "agent_reply": "Sounds good. I can put both options and their risks on one page for that conversation if it helps."
+        }
+      ]
+    }
+  ]
+}

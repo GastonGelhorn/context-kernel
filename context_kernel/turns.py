@@ -113,26 +113,37 @@ def turn_key(event, prompt, now):
     return str(event.get("prompt_id") or event.get("turn_id") or digest({"prompt": prompt, "at": now})[:32])
 
 
+DUPLICATE_SECONDS = 30     # the same prompt opened again this soon is a second install of the hooks
+
+
 def open_turn(store, event, client, prompt):
-    """Register the session's host binding and open this prompt's turn. Returns the turn row."""
+    """Register the session's host binding and open this prompt's turn. Returns the turn row; its
+    `duplicate` key is true when another install of the hooks already opened this very prompt (the
+    plugin and a project's own hook entries, say), which must then deliver nothing a second time."""
     session = str(event.get("session_id") or "unknown-session")
     now = store.clock()
     store.register_session(session, client, ancestors(depth=2))
     previous = next(iter(store.recent_turns(session, 1)), None)
     key = turn_key(event, prompt, now)
+    if previous and previous["turn_key"] == key and previous["prompt_digest"] == digest(prompt):
+        previous = next(iter(store.recent_turns(session, 2)[1:]), None)  # the turn before this prompt's own row
     kind = origin(dict(event, _now=now), prompt, previous)
     kept = None if do_not_remember(prompt) else excerpt(prompt)
-    store.open_turn(session, key, secrets.token_urlsafe(18), kind, digest(prompt), kept,
-                    timestamp_offset(now, EXCERPT_SECONDS))
+    opened = store.open_turn(session, key, secrets.token_urlsafe(18), kind, digest(prompt), kept,
+                             timestamp_offset(now, EXCERPT_SECONDS), fresh_since=timestamp_offset(now, -DUPLICATE_SECONDS))
+    if not opened:
+        return store.turn(session, key) | {"duplicate": True}
     store.expire_turns()
     return store.turn(session, key)
 
 
 def close_turn(store, event):
+    """Close the event's turn. The row's `already_closed` key is true when it was closed before this call:
+    a second install's Stop hook, which must not report or infer twice."""
     session = str(event.get("session_id") or "unknown-session")
     key = event.get("prompt_id") or event.get("turn_id")
     turn = store.turn(session, str(key)) if key else next(iter(store.recent_turns(session, 1)), None)
     if turn and not turn["closed_at"]:
         store.update_turn(session, turn["turn_key"], closed_at=store.clock())
-        turn = store.turn(session, turn["turn_key"])
-    return turn
+        return store.turn(session, turn["turn_key"])
+    return turn | {"already_closed": True} if turn else None

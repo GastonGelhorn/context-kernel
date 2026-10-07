@@ -1,0 +1,971 @@
+{
+ "note": "Cues for each fact of fixtures/relevance.json, written by Claude Sonnet from the fact alone (it never saw the queries), as an agent writes them when it saves a fact.",
+ "cues": {
+  "saas-f01": [
+   "when does checkout ship",
+   "EU launch date",
+   "go-live target",
+   "release deadline",
+   "launch timeline",
+   "fecha de lanzamiento"
+  ],
+  "saas-f02": [
+   "which payment processor",
+   "payment gateway choice",
+   "Stripe integration",
+   "why not Adyen",
+   "card payments provider",
+   "pasarela de pago"
+  ],
+  "saas-f03": [
+   "who signs off the release",
+   "approval to ship",
+   "release sign-off",
+   "who approves go-live",
+   "checkout release gate"
+  ],
+  "saas-f04": [
+   "what's left on checkout",
+   "checkout progress",
+   "SEPA direct debit",
+   "3D Secure retry",
+   "remaining payment work",
+   "estado del checkout"
+  ],
+  "saas-f05": [
+   "feature flag rollout",
+   "percentage rollout",
+   "canary EU traffic",
+   "checkout_v2",
+   "gradual release",
+   "how many users see new checkout"
+  ],
+  "saas-f06": [
+   "invoice number generation",
+   "sequential invoices",
+   "gaps in invoice numbers",
+   "tax authority requirement",
+   "numeración de facturas",
+   "legal entity invoicing"
+  ],
+  "saas-f07": [
+   "who owns billing",
+   "billing team",
+   "who to ask about payments",
+   "Payments squad lead",
+   "billing questions owner"
+  ],
+  "saas-f08": [
+   "plan downgrade behavior",
+   "prorated refund",
+   "mid-cycle plan change",
+   "subscription downgrade",
+   "cambio de plan",
+   "renewal date change"
+  ],
+  "saas-f09": [
+   "supported currencies",
+   "add USD",
+   "multi-currency",
+   "dollar pricing",
+   "price in pounds",
+   "when USD support"
+  ],
+  "saas-f10": [
+   "search backend choice",
+   "Elasticsearch removal",
+   "full-text search Postgres",
+   "tsvector",
+   "search migration",
+   "motor de búsqueda"
+  ],
+  "saas-f11": [
+   "search performance target",
+   "query latency SLO",
+   "p95 budget",
+   "search speed requirement",
+   "slow search"
+  ],
+  "saas-f12": [
+   "who owns search",
+   "search team contact",
+   "who to ask about search",
+   "responsable de búsqueda"
+  ],
+  "saas-f13": [
+   "add Redis",
+   "job queue choice",
+   "background jobs",
+   "caching layer",
+   "pg-boss",
+   "queue backend"
+  ],
+  "saas-f14": [
+   "cloud provider",
+   "AWS region",
+   "multi-region",
+   "hosting setup",
+   "where is it deployed",
+   "data center location"
+  ],
+  "saas-f15": [
+   "when can I deploy",
+   "Friday deploy",
+   "release window",
+   "deploy schedule",
+   "shipping on Friday afternoon",
+   "viernes despliegue"
+  ],
+  "saas-f16": [
+   "API breaking change",
+   "v2 endpoints",
+   "API versioning",
+   "backwards compatibility",
+   "deprecate API field",
+   "v3 release"
+  ],
+  "saas-f17": [
+   "who is my manager",
+   "escalate to manager",
+   "boss name",
+   "reporting line",
+   "who do I report to"
+  ],
+  "saas-f18": [
+   "team capacity",
+   "who's on holiday",
+   "staffing",
+   "engineers out of office",
+   "sprint planning",
+   "how many devs available"
+  ],
+  "saas-f19": [
+   "commit message format",
+   "write a commit",
+   "conventional commits",
+   "commit prefix feat fix",
+   "git history style",
+   "mensaje de commit"
+  ],
+  "saas-f20": [
+   "merge a PR",
+   "code owner approval",
+   "pull request review requirements",
+   "who must approve",
+   "branch protection"
+  ],
+  "saas-f21": [
+   "write unit tests",
+   "test framework",
+   "snapshot testing",
+   "Jest vs Vitest",
+   "add tests",
+   "testing preferences"
+  ],
+  "saas-f22": [
+   "review feedback format",
+   "code review comments",
+   "suggest changes",
+   "how to give feedback",
+   "sugerencias como diff",
+   "suggestion style"
+  ],
+  "saas-f23": [
+   "frontend state",
+   "data fetching",
+   "Redux",
+   "React Query",
+   "client cache",
+   "global state store"
+  ],
+  "saas-f24": [
+   "change pricing page",
+   "UI sign-off",
+   "design approval",
+   "landing page tweak",
+   "who approves design",
+   "pricing UI"
+  ],
+  "saas-f25": [
+   "add tracking script",
+   "Google Analytics",
+   "tag manager",
+   "pixel on checkout",
+   "third-party scripts",
+   "enterprise customer privacy"
+  ],
+  "saas-f26": [
+   "schema migration",
+   "drop column",
+   "rename column",
+   "database change deploy",
+   "destructive migration",
+   "zero downtime migration"
+  ],
+  "saas-f27": [
+   "onboarding work",
+   "onboarding redesign",
+   "what is paused",
+   "when resume onboarding",
+   "prioridades",
+   "onboarding flow"
+  ],
+  "saas-f28": [
+   "time zone",
+   "local time",
+   "meeting times",
+   "where am I based",
+   "Spain timezone",
+   "CET"
+  ],
+  "saas-f29": [
+   "staging deploy",
+   "how to deploy to prod",
+   "release tags",
+   "deploy from main",
+   "CI/CD pipeline",
+   "promote to production"
+  ],
+  "saas-f30": [
+   "incident communication",
+   "outage",
+   "where to report an incident",
+   "on-call channel",
+   "production issue",
+   "Slack incident"
+  ],
+  "freelance-f01": [
+   "who is Brisa",
+   "bakery app",
+   "Zaragoza client",
+   "click and collect",
+   "order-ahead app",
+   "panadería",
+   "client background"
+  ],
+  "freelance-f02": [
+   "Brisa price",
+   "project fee",
+   "fixed price quote",
+   "payment milestones",
+   "presupuesto",
+   "three payments"
+  ],
+  "freelance-f03": [
+   "unpaid invoice",
+   "overdue payment",
+   "chase payment",
+   "late payment reminder",
+   "pago pendiente",
+   "outstanding balance"
+  ],
+  "freelance-f04": [
+   "Brisa tech stack",
+   "Dart",
+   "cross-platform framework",
+   "Flutter app code",
+   "which framework for bakery app"
+  ],
+  "freelance-f05": [
+   "minimum Android version",
+   "old tablets",
+   "device compatibility",
+   "API level",
+   "Samsung tablet testing",
+   "minSdk"
+  ],
+  "freelance-f06": [
+   "contact the client",
+   "message the owner",
+   "WhatsApp",
+   "who to email at Brisa",
+   "comunicación con la clienta"
+  ],
+  "freelance-f07": [
+   "publish to Play Store",
+   "App Store account",
+   "developer account",
+   "app distribution",
+   "Apple signing",
+   "TestFlight for bakery"
+  ],
+  "freelance-f08": [
+   "what's left to build",
+   "loyalty program",
+   "project progress",
+   "remaining features",
+   "fidelización",
+   "orders and payments done"
+  ],
+  "freelance-f09": [
+   "who is Kinetik",
+   "Berlin client",
+   "fitness app",
+   "gym workout planner",
+   "German startup client"
+  ],
+  "freelance-f10": [
+   "hourly rate",
+   "what to charge Kinetik",
+   "billing rate",
+   "monthly invoice amount",
+   "tarifa por hora"
+  ],
+  "freelance-f11": [
+   "hours limit",
+   "overtime approval",
+   "exceed hours",
+   "budget cap",
+   "how many hours per month",
+   "extra hours"
+  ],
+  "freelance-f12": [
+   "invoice Kinetik",
+   "VAT on German client",
+   "reverse charge",
+   "invoice language",
+   "factura a Alemania",
+   "VAT ID"
+  ],
+  "freelance-f13": [
+   "Expo",
+   "React Native setup",
+   "native modules",
+   "eject",
+   "prebuild",
+   "Kinetik tech stack"
+  ],
+  "freelance-f14": [
+   "who to contact at Kinetik",
+   "CTO",
+   "approve hours",
+   "client decision maker",
+   "Jonas"
+  ],
+  "freelance-f15": [
+   "when to ship",
+   "App Store submission",
+   "release schedule",
+   "sprint end",
+   "release day",
+   "biweekly release"
+  ],
+  "freelance-f16": [
+   "which phones to test on",
+   "QA devices",
+   "device matrix",
+   "simulator vs real device",
+   "test on iOS"
+  ],
+  "freelance-f17": [
+   "add analytics",
+   "tracking SDK",
+   "Firebase",
+   "event tracking",
+   "GDPR privacy",
+   "DPO"
+  ],
+  "freelance-f18": [
+   "who is Mareas",
+   "ferry client",
+   "Cádiz",
+   "Canary Islands tickets",
+   "shipping company",
+   "booking app"
+  ],
+  "freelance-f19": [
+   "Android version",
+   "Kotlin",
+   "iOS-only",
+   "SwiftUI vs UIKit",
+   "cross-platform",
+   "which platform for ferry app"
+  ],
+  "freelance-f20": [
+   "deployment target",
+   "minimum iOS",
+   "iOS compatibility",
+   "older iPhones",
+   "API availability"
+  ],
+  "freelance-f21": [
+   "project deadline",
+   "launch date",
+   "App Store submission date",
+   "summer season",
+   "fecha de entrega",
+   "timeline"
+  ],
+  "freelance-f22": [
+   "accessibility",
+   "VoiceOver",
+   "dynamic type",
+   "contrast",
+   "public tender requirements",
+   "a11y",
+   "accesibilidad"
+  ],
+  "freelance-f23": [
+   "who to contact at Mareas",
+   "product manager",
+   "requirements questions",
+   "client approval",
+   "Ainhoa"
+  ],
+  "freelance-f24": [
+   "payment integration",
+   "Stripe",
+   "in-app purchase",
+   "checkout flow",
+   "card processing",
+   "ticket purchase"
+  ],
+  "freelance-f25": [
+   "invoice Mareas",
+   "payment terms",
+   "net 60",
+   "factura PDF",
+   "order number on invoice",
+   "cobro a 60 días"
+  ],
+  "freelance-f26": [
+   "schedule a meeting",
+   "availability Friday",
+   "what day can I work",
+   "Monday work",
+   "plan my week",
+   "días libres"
+  ],
+  "freelance-f27": [
+   "VAT rate",
+   "IVA",
+   "tax invoice Spain",
+   "self-employed",
+   "autonomous taxes",
+   "Spanish client invoice"
+  ],
+  "freelance-f28": [
+   "vacation",
+   "time off",
+   "Christmas break",
+   "availability in January",
+   "deadline during holidays",
+   "vacaciones"
+  ],
+  "freelance-f29": [
+   "which phone to test on",
+   "own devices",
+   "physical device testing",
+   "real device",
+   "simulators"
+  ],
+  "freelance-f30": [
+   "take new project",
+   "accept new client",
+   "quote a new job",
+   "new fixed-price proposal",
+   "new work",
+   "nuevo encargo"
+  ],
+  "freelance-f31": [
+   "build pipeline",
+   "CI for mobile",
+   "cloud build",
+   "release build",
+   "code signing",
+   "compile app"
+  ],
+  "freelance-f32": [
+   "schedule a call",
+   "meeting request",
+   "video call",
+   "morning meeting",
+   "standup",
+   "reuniones"
+  ],
+  "platform-f01": [
+   "failover",
+   "disaster recovery",
+   "primary region",
+   "DR plan",
+   "where is production",
+   "standby cluster"
+  ],
+  "platform-f02": [
+   "GDPR",
+   "data residency",
+   "cross-region backup",
+   "replicate to US",
+   "data sovereignty",
+   "backup location"
+  ],
+  "platform-f03": [
+   "ISO 27001",
+   "security audit",
+   "certification",
+   "auditor evidence",
+   "compliance prep",
+   "surveillance audit"
+  ],
+  "platform-f04": [
+   "access review",
+   "IAM permissions audit",
+   "quarterly review",
+   "user access recertification",
+   "least privilege check"
+  ],
+  "platform-f05": [
+   "who is on call",
+   "pager rotation",
+   "shift handover",
+   "on-call schedule",
+   "secondary on-call"
+  ],
+  "platform-f06": [
+   "my on-call week",
+   "am I on call",
+   "pager duty dates",
+   "next shift",
+   "guardia"
+  ],
+  "platform-f07": [
+   "escalate incident",
+   "nobody answers page",
+   "escalation path",
+   "unacknowledged alert",
+   "who to call",
+   "escalado"
+  ],
+  "platform-f08": [
+   "orders database",
+   "RDS",
+   "Postgres version",
+   "database failover",
+   "order data store"
+  ],
+  "platform-f09": [
+   "Postgres upgrade",
+   "major version upgrade",
+   "PG 16",
+   "database upgrade timeline",
+   "upgrade orders DB"
+  ],
+  "platform-f10": [
+   "database maintenance",
+   "schedule migration",
+   "downtime window",
+   "patching RDS",
+   "ventana de mantenimiento"
+  ],
+  "platform-f11": [
+   "analytics database",
+   "ClickHouse",
+   "OLAP",
+   "reporting store",
+   "ClickHouse cluster",
+   "data warehouse"
+  ],
+  "platform-f12": [
+   "CI pipelines",
+   "build runners",
+   "GitHub Actions",
+   "self-hosted runners",
+   "workflow runs",
+   "pipeline setup"
+  ],
+  "platform-f13": [
+   "Jenkins",
+   "legacy pipelines",
+   "migrate jobs",
+   "decommission CI",
+   "CI migration",
+   "apagado"
+  ],
+  "platform-f14": [
+   "runner capacity",
+   "CI queue",
+   "parallel jobs",
+   "concurrency limit",
+   "builds waiting",
+   "scale runners"
+  ],
+  "platform-f15": [
+   "buy a new tool",
+   "new SaaS subscription",
+   "budget approval",
+   "purchase",
+   "recurring cost",
+   "spend sign-off",
+   "FinOps"
+  ],
+  "platform-f16": [
+   "past outage",
+   "postmortem",
+   "expired certificate",
+   "TLS incident",
+   "INC-482",
+   "previous incident"
+  ],
+  "platform-f17": [
+   "cert renewal",
+   "TLS expiry",
+   "certificate monitoring",
+   "SSL alerts",
+   "who owns certs"
+  ],
+  "platform-f18": [
+   "Kubernetes upgrade",
+   "EKS",
+   "cluster version",
+   "k8s version bump",
+   "node upgrade",
+   "API deprecations"
+  ],
+  "platform-f19": [
+   "Helm chart",
+   "chart migration",
+   "deprecated chart",
+   "platform chart v2",
+   "deployment templates",
+   "deadline for teams"
+  ],
+  "platform-f20": [
+   "secrets management",
+   "store credentials",
+   "API keys in CI",
+   "Vault",
+   "GitHub secrets",
+   "production secrets"
+  ],
+  "platform-f21": [
+   "infrastructure as code",
+   "state file",
+   "remote backend",
+   "state locking",
+   "terraform layout",
+   "tfstate"
+  ],
+  "platform-f22": [
+   "Terraform upgrade",
+   "OpenTofu",
+   "provider pinning",
+   "tf version",
+   "upgrade terraform"
+  ],
+  "platform-f23": [
+   "log storage",
+   "retention policy",
+   "log archive",
+   "Loki or ELK",
+   "how long keep logs",
+   "cold storage"
+  ],
+  "platform-f24": [
+   "holiday freeze",
+   "deploy blackout",
+   "Black Friday",
+   "peak season",
+   "schedule rollout late November",
+   "change window",
+   "congelación"
+  ],
+  "platform-f25": [
+   "my role",
+   "networking questions",
+   "VPC",
+   "DNS ownership",
+   "who handles network",
+   "ingeniero de plataforma"
+  ],
+  "platform-f26": [
+   "DNS records",
+   "hosted zone",
+   "internal name resolution",
+   "split-horizon",
+   "domain setup",
+   "add a record"
+  ],
+  "platform-f27": [
+   "terraform PR",
+   "infra change review",
+   "terraform plan output",
+   "plan in pull request",
+   "how to present changes"
+  ],
+  "platform-f28": [
+   "Python base image",
+   "Dockerfile",
+   "upgrade Python",
+   "container image removal",
+   "python 3.9",
+   "registry cleanup"
+  ],
+  "platform-f29": [
+   "staging environment",
+   "staging cost",
+   "staging availability",
+   "night or weekend testing",
+   "cluster scaling schedule",
+   "staging down"
+  ],
+  "platform-f30": [
+   "who is my manager",
+   "escalation",
+   "boss",
+   "reports to",
+   "one-on-one",
+   "jefa"
+  ],
+  "personal-f01": [
+   "recipe",
+   "restaurant",
+   "cooking",
+   "nuts",
+   "food allergy",
+   "what to eat",
+   "snack",
+   "alergia"
+  ],
+  "personal-f02": [
+   "meal plan",
+   "dinner ideas",
+   "menu",
+   "meat-free",
+   "what to cook",
+   "restaurant choice",
+   "vegetariano"
+  ],
+  "personal-f03": [
+   "cook for partner",
+   "dinner with Lea",
+   "shared meals",
+   "dairy-free",
+   "menu for two",
+   "vegana"
+  ],
+  "personal-f04": [
+   "kids",
+   "family plans",
+   "children's activities",
+   "son and daughter",
+   "school age",
+   "hijos"
+  ],
+  "personal-f05": [
+   "schedule meeting afternoon",
+   "school run",
+   "availability late afternoon",
+   "child pickup",
+   "recoger a los niños",
+   "calendar"
+  ],
+  "personal-f06": [
+   "city",
+   "local weather",
+   "nearby places",
+   "timezone",
+   "where I live",
+   "weekend plans",
+   "Basque Country"
+  ],
+  "personal-f07": [
+   "working hours",
+   "meeting scheduling",
+   "availability",
+   "Friday afternoon",
+   "horario laboral",
+   "when am I free"
+  ],
+  "personal-f08": [
+   "my job",
+   "employer",
+   "logistics company",
+   "developer role",
+   "work context",
+   "career"
+  ],
+  "personal-f09": [
+   "my boss",
+   "manager",
+   "performance review",
+   "who to report to",
+   "jefa"
+  ],
+  "personal-f10": [
+   "learn German",
+   "translate",
+   "practice sentences",
+   "Deutsch",
+   "language learning",
+   "B1 exercises",
+   "alemán"
+  ],
+  "personal-f11": [
+   "evening plans Tuesday",
+   "Thursday evening",
+   "class",
+   "language lessons",
+   "free evening",
+   "clase de alemán"
+  ],
+  "personal-f12": [
+   "side project",
+   "urban garden",
+   "gardening app",
+   "allotment",
+   "mobile app idea",
+   "hobby project"
+  ],
+  "personal-f13": [
+   "hosting cost",
+   "cloud budget",
+   "server choice",
+   "free tier",
+   "backend for hobby app",
+   "cheap hosting"
+  ],
+  "personal-f14": [
+   "when to work on side project",
+   "free time",
+   "weekend coding",
+   "Sunday",
+   "hobby hours",
+   "tiempo libre"
+  ],
+  "personal-f15": [
+   "next feature",
+   "project progress",
+   "irrigation",
+   "notifications",
+   "what to build next",
+   "garden planner status"
+  ],
+  "personal-f16": [
+   "weather forecast",
+   "rain data",
+   "API choice",
+   "weather integration",
+   "free API",
+   "meteorología"
+  ],
+  "personal-f17": [
+   "editor setup",
+   "IDE",
+   "config",
+   "keybindings",
+   "Vim plugin",
+   "text editor"
+  ],
+  "personal-f18": [
+   "terminal",
+   "command line",
+   "shell script",
+   "search tool",
+   "dotfiles",
+   "CLI tools",
+   "grep alternative"
+  ],
+  "personal-f19": [
+   "note-taking",
+   "knowledge base",
+   "write notes",
+   "markdown notes",
+   "second brain",
+   "personal wiki",
+   "apuntes"
+  ],
+  "personal-f20": [
+   "back pain",
+   "exercise routine",
+   "daily stretch",
+   "physiotherapy",
+   "sitting too long",
+   "posture",
+   "espalda"
+  ],
+  "personal-f21": [
+   "API rewrite",
+   "Django",
+   "FastAPI",
+   "framework migration",
+   "shipping service",
+   "Python web framework"
+  ],
+  "personal-f22": [
+   "migration deadline",
+   "go-live",
+   "switch over",
+   "cutover",
+   "release plan",
+   "fecha límite"
+  ],
+  "personal-f23": [
+   "weekend trips",
+   "last weekend of the month",
+   "family visit",
+   "travel to Valladolid",
+   "calendar availability",
+   "fin de semana"
+  ],
+  "personal-f24": [
+   "commute",
+   "get around",
+   "driving",
+   "parking",
+   "public transport",
+   "how to get there",
+   "bicicleta"
+  ],
+  "personal-f25": [
+   "girlfriend or wife",
+   "significant partner",
+   "couple",
+   "who I live with",
+   "spouse",
+   "pareja"
+  ],
+  "personal-f26": [
+   "partner's schedule",
+   "childcare at night",
+   "evening availability",
+   "who watches the kids",
+   "shift work",
+   "turnos de noche"
+  ],
+  "personal-f27": [
+   "daughter's food",
+   "birthday party snacks",
+   "cake recipe",
+   "school lunch",
+   "egg-free",
+   "baking",
+   "alergia al huevo"
+  ],
+  "personal-f28": [
+   "write to school",
+   "reply to teacher",
+   "school email",
+   "Euskera",
+   "translation",
+   "draft message to school",
+   "idioma"
+  ],
+  "personal-f29": [
+   "write documentation",
+   "README",
+   "wiki page",
+   "documentation language",
+   "comments",
+   "technical writing"
+  ],
+  "personal-f30": [
+   "Wednesday evening",
+   "football practice",
+   "son's sport",
+   "kids activities",
+   "afternoon plans",
+   "pick-up time",
+   "fútbol"
+  ]
+ }
+}

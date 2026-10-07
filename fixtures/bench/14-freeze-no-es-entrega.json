@@ -1,0 +1,91 @@
+{
+  "id": "14-freeze-no-es-entrega",
+  "title": "A code-freeze date shares words with the delivery date but is a different fact: both stay current",
+  "tags": [
+    "key_drift",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "La fecha de entrega del proyecto Atlas es el 30 de noviembre.",
+          "agent_captures": [
+            {
+              "entity": "atlas",
+              "predicate": "delivery_date",
+              "value": "30 de noviembre",
+              "quote": "La fecha de entrega del proyecto Atlas es el 30 de noviembre"
+            }
+          ],
+          "agent_reply": "Anotado: Atlas se entrega el 30 de noviembre. Lo uso para ordenar los tickets."
+        },
+        {
+          "user": "Haceme un resumen de los tickets abiertos de Atlas.",
+          "agent_captures": [],
+          "agent_reply": "Hay 23 tickets abiertos: 9 bugs, 11 features y 3 de infraestructura. Los dos bloqueantes son la exportación a PDF y el login con SSO."
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "El code freeze de Atlas es el 20 de noviembre.",
+          "agent_captures": [
+            {
+              "entity": "atlas",
+              "predicate": "code_freeze_date",
+              "value": "20 de noviembre",
+              "quote": "El code freeze de Atlas es el 20 de noviembre"
+            }
+          ],
+          "agent_reply": "Anotado: el code freeze de Atlas es el 20 de noviembre. La entrega sigue siendo el 30.",
+          "expect_after": {
+            "current": {
+              "atlas.delivery_date": "30 de noviembre",
+              "atlas.code_freeze_date": "20 de noviembre"
+            }
+          }
+        },
+        {
+          "user": "Agregá las dos fechas al README del proyecto.",
+          "agent_captures": [],
+          "agent_reply": "Listo: agregué una sección Fechas al README. Tiene el code freeze del 20 de noviembre y la entrega del 30."
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "¿Hasta cuándo puedo mergear features nuevas en Atlas?",
+          "agent_captures": [],
+          "agent_reply": "Hasta el 20 de noviembre, que es el code freeze. Después, solo correcciones hasta la entrega del 30.",
+          "expect_packet": {
+            "delivered": [
+              "atlas.code_freeze_date"
+            ]
+          }
+        },
+        {
+          "user": "¿Y cuándo lo tiene que recibir el cliente?",
+          "agent_captures": [],
+          "agent_reply": "El 30 de noviembre. Esa es la fecha de entrega de Atlas.",
+          "expect_packet": {
+            "delivered": [
+              "atlas.delivery_date"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "atlas.delivery_date": "30 de noviembre",
+              "atlas.code_freeze_date": "20 de noviembre"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

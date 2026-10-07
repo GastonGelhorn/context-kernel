@@ -181,9 +181,10 @@ class JevTests(unittest.TestCase):
         os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.467, "user favorite color": 0.467})
         manager, colour = self.add("manager", "Dani"), self.add("favorite_color", "Blue")
         result = self.compiler.project("quien es mi manager?", strategy="jev")
-        self.assertEqual(result.trace["reasons"][manager["id"]], "supporting_need")
+        # v0.8: the question's words and jev's band agree, which counts as much as a high score alone.
+        self.assertEqual(result.trace["reasons"][manager["id"]], "critical_need")
         self.assertNotIn(colour["id"], result.trace["selected"])
-        self.assertEqual(result.trace["usage"]["lexical_rescues"], ["user.manager"])
+        self.assertEqual(result.trace["usage"]["lexical_matches"], ["user.manager"])
         os.environ["FAKE_JEV_SCORES"] = json.dumps({"user manager": 0.2})
         # A new question is judged afresh (the first answer is cached for its own wording only).
         self.assertEqual(self.compiler.project("y mi manager actual?", strategy="jev").trace["selected"], [])

@@ -1,0 +1,84 @@
+{
+  "id": "29-commits-en-ingles",
+  "title": "\"A partir de ahora\" makes a commit-language preference standing, delivered at the start of every later session",
+  "tags": [
+    "standing"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "A partir de ahora, escribí los mensajes de commit en inglés aunque te hable en español.",
+          "agent_captures": [
+            {
+              "entity": "user",
+              "predicate": "commit_message_language",
+              "value": "mensajes de commit en inglés",
+              "quote": "A partir de ahora, escribí los mensajes de commit en inglés"
+            }
+          ],
+          "agent_reply": "Entendido: los mensajes de commit van en inglés aunque hablemos en español. Lo aplico en todos los commits.",
+          "expect_after": {
+            "current": {
+              "user.commit_message_language": "mensajes de commit en inglés"
+            },
+            "standing": [
+              "user.commit_message_language"
+            ]
+          }
+        },
+        {
+          "user": "Commiteá los cambios del formulario de alta.",
+          "agent_captures": [],
+          "agent_reply": "Listo: hice el commit \"Validate required fields in the signup form\". Quedó en la rama actual."
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "¿Me armás un script de bash que borre las ramas locales ya mergeadas?",
+          "agent_captures": [],
+          "agent_reply": "Acá va: git branch --merged main | grep -vE '^[*]|main$' | xargs git branch -d. Corré primero la parte sin xargs para ver qué ramas borraría.",
+          "expect_packet": {
+            "delivered": [
+              "user.commit_message_language"
+            ]
+          }
+        },
+        {
+          "user": "Guardalo en scripts/limpiar-ramas.sh y commitealo.",
+          "agent_captures": [],
+          "agent_reply": "Listo: scripts/limpiar-ramas.sh tiene permisos de ejecución y está en el commit \"Add script to delete merged local branches\". Lo podés correr con ./scripts/limpiar-ramas.sh."
+        }
+      ]
+    },
+    {
+      "days_later": 9,
+      "turns": [
+        {
+          "user": "Explicame qué hace el middleware de autenticación de nuestra API.",
+          "agent_captures": [],
+          "agent_reply": "Lee el token Bearer del header, lo valida contra las claves públicas del proveedor y deja el usuario en req.user. Si el token venció devuelve 401, y si le falta el scope requerido, 403.",
+          "expect_packet": {
+            "delivered": [
+              "user.commit_message_language"
+            ]
+          }
+        },
+        {
+          "user": "Gracias, clarísimo.",
+          "agent_captures": [],
+          "agent_reply": "De nada. Si querés, le agrego tests para el caso del scope faltante.",
+          "expect_after": {
+            "standing": [
+              "user.commit_message_language"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

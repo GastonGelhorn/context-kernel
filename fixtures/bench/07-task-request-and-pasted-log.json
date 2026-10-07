@@ -1,0 +1,109 @@
+{
+  "id": "07-task-request-and-pasted-log",
+  "title": "A request for a test and a pasted CI error are not saved as facts; the region the user states is",
+  "tags": [
+    "false_capture",
+    "capture"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Write a test that checks invoices are PDF only.",
+          "agent_captures": [
+            {
+              "entity": "invoices",
+              "predicate": "format",
+              "value": "PDF only",
+              "quote": "invoices are PDF only"
+            }
+          ],
+          "agent_reply": "Added tests/test_invoice_format.py: it renders an invoice with each template and checks for the application/pdf content type and a valid PDF header. It fails today for the credit-note template, which still returns HTML.",
+          "expect_after": {
+            "absent": [
+              "invoices.format"
+            ]
+          }
+        },
+        {
+          "user": "Then make the credit-note template render PDF too.",
+          "agent_captures": [],
+          "agent_reply": "Done: the credit-note template now goes through the same PDF pipeline. The new test passes for every template."
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "CI is red with this, what does it mean?\n```\nERROR deploy: DEPLOY_REGION must be eu-west-1 for production\n```",
+          "agent_captures": [
+            {
+              "entity": "deploy",
+              "predicate": "production_region",
+              "value": "eu-west-1",
+              "quote": "DEPLOY_REGION must be eu-west-1 for production"
+            }
+          ],
+          "agent_reply": "The deploy step checks DEPLOY_REGION against an allowed value, and the production job sets something else. Look at the environment block of the production job in .github/workflows/deploy.yml.",
+          "expect_after": {
+            "absent": [
+              "deploy.production_region"
+            ]
+          }
+        },
+        {
+          "user": "Right. For the record, our production cluster runs in us-east-2, so the check itself is wrong.",
+          "agent_captures": [
+            {
+              "entity": "deploy",
+              "predicate": "production_region",
+              "value": "us-east-2",
+              "quote": "our production cluster runs in us-east-2"
+            }
+          ],
+          "agent_reply": "Got it: production runs in us-east-2. I will change the allowed value in the deploy check to us-east-2.",
+          "expect_after": {
+            "current": {
+              "deploy.production_region": "us-east-2"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "days_later": 5,
+      "turns": [
+        {
+          "user": "Which region does production live in?",
+          "agent_captures": [],
+          "agent_reply": "us-east-2. The eu-west-1 in that CI error came from the old deploy check, not from you.",
+          "expect_packet": {
+            "delivered": [
+              "deploy.production_region"
+            ]
+          }
+        },
+        {
+          "user": "And what format do our invoices have to be in?",
+          "agent_captures": [],
+          "agent_reply": "I have no stored requirement for invoice formats. The test we wrote checks for PDF, but that came from a task you gave me, not from a rule you stated; want me to record it as one?",
+          "expect_packet": {
+            "not_delivered": [
+              "invoices.format"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "deploy.production_region": "us-east-2"
+            },
+            "absent": [
+              "invoices.format"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

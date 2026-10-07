@@ -11,7 +11,7 @@ from .common import KernelError, canonical, digest, identifier, text, timestamp,
 from .planner import NeedPlan, jev_plan, rules_plan
 from .capture import segments
 from .inference import stale_recommendations
-from .language import GENERIC_ENTITIES, STOPWORDS, fold, query_terms
+from .language import GENERIC_ENTITIES, STOPWORDS, concept_cues, fold, query_terms
 
 
 POLICY_VERSION = "5"
@@ -56,6 +56,9 @@ def snapshot_digest(records, relations, selected):
 
 
 def lexical_scores(query, records):
+    """bm25 keyword scores (higher is better) of records the question matches by entity, key, value, or
+    cues: the words the agent said a later question would use when the fact matters, or, for a fact
+    saved without them, the defaults for its kind (language.concept_cues)."""
     tokens = query_terms(query)
     if not tokens or not records:
         return {}
@@ -66,7 +69,8 @@ def lexical_scores(query, records):
         generic = lambda name: "" if (name or "").casefold() in GENERIC_ENTITIES else name
         index.executemany("INSERT INTO candidates VALUES(?,?)", [(r["id"], canonical({
             "entity": generic(r["entity_key"]), "label": generic(r["label"]), "aliases": r["aliases"],
-            "predicate": r["predicate"].replace("_", " "), "value": r["value"]})) for r in records])
+            "predicate": r["predicate"].replace("_", " "), "value": r["value"],
+            "cues": r.get("cues") or concept_cues(r["predicate"])})) for r in records])
         return {r[0]: -r[1] for r in index.execute("SELECT id,bm25(candidates) FROM candidates WHERE candidates MATCH ?", (expression,))}
 
 
@@ -110,7 +114,11 @@ class Compiler:
                 if self.jev is None:
                     raise KernelError("jev selection requires a configured jev client.")
                 hits = lexical_scores(query, records)
-                lexical = {(r["entity_key"], r["predicate"]) for r in records if r["id"] in hits}
+                lexical = {}
+                for r in records:
+                    if r["id"] in hits:
+                        pair = (r["entity_key"], r["predicate"])
+                        lexical[pair] = max(lexical.get(pair, 0.0), hits[r["id"]])
                 # The judge reads what the user wrote, bounded: a pasted log is not the question, and a
                 # 10 KB prompt judged against every pair outlives the hook's budget.
                 authored, _ = segments(query)
@@ -215,9 +223,12 @@ class Compiler:
             packet["reader_rules"] = rules_for([by_id[i] for i in ordered], standing, reviews)
 
         def entry(row):
+            # Dates, not microseconds, and no evidence id (the trace keeps it): a claim used to take ~240 bytes
+            # before its value, which left room for about six in the 2 KB packet.
             claim = {"id": row["id"], "entity": row["entity_key"], "predicate": row["predicate"],
-                    "value": row["value"], "attribution": row["source_kind"], "evidence_id": row["evidence_id"],
-                    "valid_from": row["valid_from"], "valid_until": row["valid_until"]}
+                    "value": row["value"], "attribution": row["source_kind"], "valid_from": row["valid_from"][:10]}
+            if row["valid_until"]:
+                claim["valid_until"] = row["valid_until"][:10]
             value = row["value"]
             if type(value) in {int, float} or isinstance(value, dict) and value.get("type") == "quantity":
                 claim["quantity_metadata"] = {k: value.get(k) if isinstance(value, dict) else None

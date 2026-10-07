@@ -1,0 +1,97 @@
+{
+  "id": "11-key-drift-deadline-stale",
+  "title": "A deadline saved as delivery_timeline and changed as deadline stays one fact, and the advice built on it is flagged",
+  "tags": [
+    "key_drift",
+    "correction",
+    "stale"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "The analytics dashboard has a delivery timeline of two months. Should we build the charts with D3 from scratch?",
+          "agent_captures": [
+            {
+              "entity": "analytics_dashboard",
+              "predicate": "delivery_timeline",
+              "value": "two months",
+              "quote": "The analytics dashboard has a delivery timeline of two months"
+            }
+          ],
+          "agent_reply": "Yes, with two months you can build the charts with D3 from scratch and get exactly the interactions product asked for. Plan about three weeks for the chart components and keep the rest for the data layer and testing.",
+          "expect_after": {
+            "current": {
+              "analytics_dashboard.delivery_timeline": "two months"
+            }
+          }
+        },
+        {
+          "user": "Good. Create a charts folder with an empty component for each chart type: line, bar and heatmap.",
+          "agent_captures": [],
+          "agent_reply": "Created charts/LineChart.tsx, charts/BarChart.tsx and charts/Heatmap.tsx. Each one exports an empty component with typed props."
+        }
+      ]
+    },
+    {
+      "days_later": 8,
+      "turns": [
+        {
+          "user": "Change of plans: the analytics dashboard deadline is now three weeks.",
+          "agent_captures": [
+            {
+              "entity": "analytics_dashboard",
+              "predicate": "deadline",
+              "value": "three weeks",
+              "quote": "the analytics dashboard deadline is now three weeks"
+            }
+          ],
+          "agent_reply": "Noted: the analytics dashboard now has three weeks. I have updated the deadline.",
+          "expect_after": {
+            "current": {
+              "analytics_dashboard.delivery_timeline": "three weeks"
+            },
+            "absent": [
+              "analytics_dashboard.deadline"
+            ]
+          }
+        },
+        {
+          "user": "Add a loading skeleton to the heatmap.",
+          "agent_captures": [],
+          "agent_reply": "Added a skeleton state to Heatmap.tsx. It renders a grey grid while the data loads."
+        }
+      ]
+    },
+    {
+      "days_later": 2,
+      "turns": [
+        {
+          "user": "Are we still building the dashboard charts with D3 from scratch?",
+          "agent_captures": [],
+          "agent_reply": "That plan assumed two months, and the dashboard now has three weeks, so it needs review. Building every chart from scratch in D3 is risky now; I would use a charting library for line and bar charts and keep D3 for the heatmap.",
+          "expect_packet": {
+            "delivered": [
+              "analytics_dashboard.delivery_timeline"
+            ],
+            "review": true
+          }
+        },
+        {
+          "user": "Which charting libraries would you look at?",
+          "agent_captures": [],
+          "agent_reply": "Recharts and Chart.js are the quickest for line and bar charts in React. visx is closer to D3 if you want more control.",
+          "expect_after": {
+            "current": {
+              "analytics_dashboard.delivery_timeline": "three weeks"
+            },
+            "absent": [
+              "analytics_dashboard.deadline"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

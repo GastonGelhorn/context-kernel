@@ -1,0 +1,92 @@
+{
+  "id": "12-deriva-del-aprobador",
+  "title": "The release approver saved as release_approver and later changed as release_signoff: the new person is current",
+  "tags": [
+    "key_drift",
+    "correction"
+  ],
+  "sessions": [
+    {
+      "days_later": 0,
+      "turns": [
+        {
+          "user": "Las releases de Nimbus las aprueba Pablo Ortiz.",
+          "agent_captures": [
+            {
+              "entity": "nimbus",
+              "predicate": "release_approver",
+              "value": "Pablo Ortiz",
+              "quote": "Las releases de Nimbus las aprueba Pablo Ortiz"
+            }
+          ],
+          "agent_reply": "Anotado: Pablo Ortiz aprueba las releases de Nimbus. Lo sumo cuando preparemos la próxima.",
+          "expect_after": {
+            "current": {
+              "nimbus.release_approver": "Pablo Ortiz"
+            }
+          }
+        },
+        {
+          "user": "Preparame las notas de la versión 3.1 a partir de los PRs mergeados.",
+          "agent_captures": [],
+          "agent_reply": "Listo: armé las notas de la 3.1 con 12 PRs agrupados en novedades, correcciones y cambios internos. Están en docs/releases/3.1.md."
+        }
+      ]
+    },
+    {
+      "days_later": 10,
+      "turns": [
+        {
+          "user": "Desde hoy las releases de Nimbus las firma Irene Vidal; Pablo se pasó a infraestructura.",
+          "agent_captures": [
+            {
+              "entity": "nimbus",
+              "predicate": "release_signoff",
+              "value": "Irene Vidal",
+              "quote": "las releases de Nimbus las firma Irene Vidal"
+            }
+          ],
+          "agent_reply": "Anotado: desde hoy Irene Vidal firma las releases de Nimbus. Actualicé el dato.",
+          "expect_after": {
+            "current": {
+              "nimbus.release_approver": "Irene Vidal"
+            },
+            "absent": [
+              "nimbus.release_signoff"
+            ]
+          }
+        },
+        {
+          "user": "¿Podés revisar si el pipeline de release todavía lo menciona a Pablo?",
+          "agent_captures": [],
+          "agent_reply": "Sí: lo nombran .github/CODEOWNERS y el paso de aprobación del workflow de release. ¿Los cambio por Irene?"
+        }
+      ]
+    },
+    {
+      "days_later": 3,
+      "turns": [
+        {
+          "user": "¿A quién le pido el visto bueno para sacar Nimbus 3.2?",
+          "agent_captures": [],
+          "agent_reply": "A Irene Vidal: ella firma las releases de Nimbus. Pablo se pasó a infraestructura.",
+          "expect_packet": {
+            "delivered": [
+              "nimbus.release_approver"
+            ]
+          },
+          "expect_after": {
+            "current": {
+              "nimbus.release_approver": "Irene Vidal"
+            }
+          }
+        },
+        {
+          "user": "Perfecto, gracias.",
+          "agent_captures": [],
+          "agent_reply": "De nada. Si querés, le dejo a Irene el borrador de las notas de la 3.2."
+        }
+      ]
+    }
+  ]
+}
