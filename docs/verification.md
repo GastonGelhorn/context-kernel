@@ -238,6 +238,49 @@ Both clients have now passed the same pre-registered scenario once each, with no
 
 We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
+## v0.9: facts that end
+
+Checked on 2026-10-07 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`) and Claude Code 2.1.287, on macOS arm64.
+
+The owner's own memory showed the gap. A day after the joint jevmate and kernel test was run, the kernel still delivered "next step: after restarting Claude Code, test jevmate together with Context Kernel…", and with v0.8 out, "decision: publish v0.3 on GitHub this week". Both had been right. Forgetting them would have counted as captures the user took back (the regret window is a week), and nothing else could end them.
+
+### The question that checks a close
+
+Scored on the 35 labelled rows (`memory calibrate close_asked --score`; 19 closes, 16 messages that close nothing, in English and Spanish), at 0.70:
+
+| Question | Closes accepted (of 19) | Others accepted (of 16) | Highest other |
+| --- | --- | --- | --- |
+| "…say that `fact` is done, finished, cancelled, or over?" | 13 | 0 | 0.670 |
+| "…has already been done?" | 11 | 0 | 0.530 |
+| "…was cancelled, dropped, or has ended?" | 14 | 0 | 0.639 |
+| The higher of the last two (shipped) | 17; 16 through `calibrate` | 0 | 0.639; 0.660 |
+
+A third question for explicit requests ("ask to mark `fact` as done") added one close and put three non-closes between 0.65 and 0.69, among them "Marca como hecha la migración a Stripe." against another step, so it was left out. The two closes refused in both runs are "La release de la v0.3 salió el lunes" (0.51 to 0.55) and "Close the security review item" (0.68 to 0.69). The nearest non-close, at 0.66, is the owner's own "ya he reiniciado, ¿qué queda ahora?" against the step that begins "tras reiniciar Claude Code". The 0.70 bar is the one every owner action uses.
+
+### Periods
+
+The unit tests cover each period in both languages, the exclusions (starts, habits, idioms, "el viernes pasado"), local midnight stored in UTC (the week said in Madrid ends at 22:00 UTC on Sunday), month and year boundaries, and the rule that the fact and the user's words must both name the period. A fact the user dated by when they decided ("Esta semana decidimos usar Postgres", value "Postgres") gets no end.
+
+### Native check
+
+`python3 -m tests.native_close_check` runs four fresh headless Claude Code sessions, with no memory commands, and judges from the database. It is now part of the compatibility matrix (`claude-v09`).
+
+| Check | Result |
+| --- | --- |
+| "Our next step for the billing service is migrating it to Stripe." is captured | pass ("Memory: saved billing_service.next_step.") |
+| "Decidimos publicar la v0.3 del portal esta semana." ends with its week | pass ("Memory: saved portal.release_v0_3 until 2026-10-11.", stored until 22:00 UTC on Sunday) |
+| "We shipped the billing migration to Stripe yesterday." closes the step, and nothing is forgotten | pass (the agent called `memory_close`; the step is expired, one close, no forget, revoke or undo) |
+| The close is not counted as regret | pass |
+| A later "What is the next step for the billing service?" gets nothing about it | pass ("I don't have a next step on record; memory only notes, unconfirmed, that the … Stripe migration shipped yesterday") |
+
+5 of 5 on the first run, in 75 s; Claude Code reported $0.92 for the four sessions.
+
+### Suite
+
+329 tests pass on Python 3.14.3 and 3.9.6, 24 of them new (`tests/test_v09.py`). The schema stays at version 6: a closed fact keeps lifecycle `active` with `valid_until` set, which v0.8 reads as expired. The recorded benchmark replays at 193 of 211 checks, as in v0.8, and the relevance check passes.
+
+The two facts in the owner's memory were closed with `memory close ID --outcome done`. The installed v0.8, reading the same database, lists the same two current facts as v0.9 (the manager and the release approver).
+
 ## v0.8: trust and scale
 
 Checked on 2026-10-06 with jev 1.9.3 on its local backend (tev1-32k through Ollama, weights `527084f384df0682`), on macOS arm64 with 48 GB, with no paid API. An external review asked for five things: a public, reproducible benchmark; fewer false memories; less dependence on host behaviour, watched by a compatibility matrix; latency handled as part of the product; and a narrower story for jevmate. Cues, safe mode, warm-up and the metrics below answer it.

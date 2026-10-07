@@ -46,7 +46,7 @@ def parser():
     policy.add_argument("--threshold", action="append", default=[], help="name=value, e.g. affirmed=0.72 after jev tune")
     calibrate = commands.add_parser("calibrate", help="Check the judge against the thresholds, or export labelled fixtures for `jev tune`")
     calibrate.add_argument("kind", nargs="?", choices=("affirmed", "facts_present", "forget_asked", "standing_on", "standing_off",
-                                                       "decision_commit", "decision_replaces"))
+                                                       "close_asked", "decision_commit", "decision_replaces"))
     calibrate.add_argument("--check", action="store_true",
                            help="Run the canary with this scope's thresholds and record whether this judge may save facts")
     calibrate.add_argument("--fixtures", default=str(Path(__file__).resolve().parent.parent / "fixtures" / "calibration.jsonl"))
@@ -95,6 +95,12 @@ def parser():
         item.add_argument("id")
         if name in {"inspect", "dependents"}:
             item.add_argument("--as-of")
+    close = commands.add_parser("close", help="End a fact that was right and is over (done, cancelled, ended); kept in history")
+    close.add_argument("id")
+    close.add_argument("--outcome", choices=("done", "cancelled", "ended"), default="done")
+    close.add_argument("--at", help="When it ended (default now)")
+    reopen = commands.add_parser("reopen", help="Take back a close: the fact is current again")
+    reopen.add_argument("id")
     stale = commands.add_parser("stale", help="Current statements whose declared assumptions changed")
     stale.add_argument("--as-of")
     depend = commands.add_parser("depend", help="Declare that a decision rests on another statement")
@@ -172,6 +178,10 @@ def execute(args, store):
         return store.records(args.as_of, args.history)
     if command in {"revoke", "forget", "approve", "reject", "reaffirm", "confirm"}:
         return getattr(store, command)(args.id)
+    if command == "close":
+        return store.conclude(args.id, args.outcome, args.at)
+    if command == "reopen":
+        return store.reopen(args.id)
     if command == "undo":
         return store.undo_capture(args.id)
     if command == "inventory":
@@ -198,7 +208,7 @@ def execute(args, store):
         return {"precision": {"last_30_days": store.regret_metrics(30), "all_time": store.regret_metrics()},
                 "latency": latency_metrics(store), "judges": [{k: r[k] for k in ("model_key", "status", "checked_at")}
                                                                | {"model": r["detail"].get("model")} for r in store.judge_records()],
-                "captures": store.capture_metrics(), "status": store.status()}
+                "captures": store.capture_metrics(), "closed": store.close_metrics(), "status": store.status()}
     if command == "policy":
         stored = store.policy() or {}
         if args.enable or args.disable:

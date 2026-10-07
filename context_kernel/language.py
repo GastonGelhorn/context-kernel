@@ -1,7 +1,11 @@
 """Small bilingual vocabulary, not unrestricted language understanding."""
 
+import calendar
+from datetime import date, datetime, time, timedelta
 import re
 import unicodedata
+
+from .common import timestamp
 
 
 def fold(value):
@@ -145,3 +149,84 @@ def related_entities(seeds, relations, depth=2):
         found.update(parents)
         frontier = parents
     return found
+
+
+# Relative periods. A fact whose own words name a period that ends ("publish v0.3 this week", "mañana trabajo desde
+# casa") stops being current when the period does: read a month later, "this week" names the wrong week. Explicit
+# dates are values and never end a fact. A start ("desde hoy", "from next week on"), a habit ("cada semana", "los
+# viernes") and an idiom ("hoy en día") are not bounds.
+_PERIODS = (  # earlier patterns win over the words inside them: "pasado mañana" is not also "mañana"
+    (r"pasado manana|day after tomorrow", ("day", 2)),
+    (r"esta (?:manana|tarde|noche)|this (?:morning|afternoon|evening)|tonight|hoy|today", ("day", 0)),
+    (r"manana|tomorrow", ("day", 1)),
+    (r"(?:la )?semana que viene|(?:la )?proxima semana|(?:la )?semana proxima|next week", ("week", 1)),
+    (r"esta semana|this week|este fin de semana|this weekend", ("week", 0)),
+    (r"(?:el )?mes que viene|(?:el )?proximo mes|(?:el )?mes proximo|next month", ("month", 1)),
+    (r"este mes|this month", ("month", 0)),
+    (r"(?:el )?ano que viene|(?:el )?proximo ano|next year", ("year", 1)),
+    (r"este ano|this year", ("year", 0)),
+)
+_WEEKDAYS = {"lunes": 0, "martes": 1, "miercoles": 2, "jueves": 3, "viernes": 4, "sabado": 5, "domingo": 6,
+             "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3, "friday": 4, "saturday": 5, "sunday": 6}
+# The word before a weekday: "this" includes today; "next" is read as the later of its two meanings, so a fact
+# never ends early; a bare "el viernes" / "on Friday" is the next one to come.
+_WEEKDAY_WORDS = ((r"el proximo|proximo|next", "next"), (r"este|this|hasta el|antes del|until|by|before", "this"),
+                  (r"el|on", "coming"))
+_NOT_A_PERIOD_BEFORE = re.compile(r" (?:desde|a partir de|from|starting|as of|since|beginning|empezando|comenzando|"
+                                  r"cada|every|each|todos los|todas las|hoy por) $")
+_NOT_A_PERIOD_AFTER = re.compile(r" (?:en dia|dia|por hoy|en adelante|onwards|forward|pasad[oa]|anterior)(?= )")
+_MORNING = re.compile(r" (?:la|una|cada) $")  # "por la mañana", "una mañana": the morning, not tomorrow
+
+
+def periods(value):
+    """The relative periods `value` names: ("day" | "week" | "month" | "year", how many ahead), or ("weekday",
+    0-6, "this" | "next" | "coming")."""
+    words = " " + " ".join(re.findall(r"[^\W_]+", fold(value))) + " "
+    found = set()
+
+    def scan(pattern, period_of, morning=False):
+        nonlocal words
+        for match in re.finditer(rf"(?<= )(?:{pattern})(?= )", words):
+            before, after = words[:match.start()], words[match.end():]
+            if not (_NOT_A_PERIOD_BEFORE.search(before) or _NOT_A_PERIOD_AFTER.match(after)
+                    or (morning and _MORNING.search(before))):
+                found.add(period_of(match))
+        # Consumed either way: the words inside a longer phrase are not read again on their own.
+        words = re.sub(rf"(?<= )(?:{pattern})(?= )", lambda m: "#" * len(m.group(0)), words)
+
+    for pattern, period in _PERIODS:
+        scan(pattern, lambda m, period=period: period, morning=period == ("day", 1))
+    names = "|".join(_WEEKDAYS)
+    for before, mode in _WEEKDAY_WORDS:
+        scan(rf"(?:{before}) (?:{names})", lambda m, mode=mode: ("weekday", _WEEKDAYS[m.group(0).split()[-1]], mode))
+    return found
+
+
+def period_end(value, said, anchor, tz=None):
+    """When a fact stops being current because its own words name a relative period: the end of a period that both
+    the fact (`value`) and the user's message (`said`) name, in either language, counted from `anchor` (when it was
+    said) in local time (`tz`, default this machine's). The latest end when they share several; None for none."""
+    shared = periods(value) & periods(said)
+    if not shared:
+        return None
+    local = datetime.fromisoformat(timestamp(anchor)).astimezone(tz)
+    today, ends = local.date(), []
+    for unit, amount, *mode in shared:
+        if unit == "day":
+            last = today + timedelta(days=amount)
+        elif unit == "week":
+            last = today + timedelta(days=6 - today.weekday() + 7 * amount)
+        elif unit == "month":
+            year, month = today.year + (today.month + amount - 1) // 12, (today.month + amount - 1) % 12 + 1
+            last = date(year, month, calendar.monthrange(year, month)[1])
+        elif unit == "year":
+            last = date(today.year + amount, 12, 31)
+        else:
+            ahead = (amount - today.weekday()) % 7
+            if mode[0] == "next":
+                ahead += 7
+            elif mode[0] == "coming" and ahead == 0:
+                ahead = 7
+            last = today + timedelta(days=ahead)
+        ends.append(datetime.combine(last + timedelta(days=1), time(0), tzinfo=local.tzinfo))
+    return timestamp(max(ends))

@@ -23,6 +23,7 @@ The project started from a public hypothesis about continuity across conversatio
 | 5 One experience, two components | Installing two things | In progress: v0.5 lists the kernel as its own plugin in jevmate's marketplace; merging the two plugins waits for a three-way comparison |
 | 6 What is already written down | Restating decision records and commit decisions; repeating the same rule in every session | Done in v0.6; decision records parsed, commits filtered and judged one by one, standing facts after three sessions or a rule. v0.8 reads commits only when turned on |
 | 7 Trustworthy at scale | Checking what memory saved; waiting for the judge; re-measuring after a model change | v0.8: cited quotes, holds for jokes and requests for work, safe mode with a canary per model, cues and a time-fitted selection, warm-up and keep-alive, precision measured from real use, a public benchmark and a compatibility matrix |
+| 8 Facts that end | Forgetting a plan once it is done; cleaning out "this week" after the week | v0.9: `memory_close` (done, cancelled, ended; kept in history, not regret) checked against the user's words, `reopen`, a request when a message says something is over, and facts that end with the relative period they name |
 
 ## Acceptance
 

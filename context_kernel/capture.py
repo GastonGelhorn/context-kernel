@@ -6,12 +6,13 @@ at which trust level, and what must wait for the user. A judgment is a signal fo
 never the policy itself: correctness, authorization, and session origin are checked separately.
 """
 
+from datetime import datetime, timedelta
 import json
 import re
 
 from .common import KernelError, canonical, key, reject_secrets
 from .judge import JudgeError
-from .language import fold, query_terms
+from .language import fold, period_end, query_terms
 from .turns import do_not_remember
 
 
@@ -563,8 +564,14 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None, q
     if safe and status == "captured":
         status, reason = "quarantined", "judge_unverified"
     evidence = evidence_sentence(source, proposed)
+    # "Publicar v0.3 esta semana": a fact whose own words name a relative period, which the user said too, ends with
+    # that period (language.period_end).
+    until = period_end(value if isinstance(value, str) else canonical(value), segments(turn["prompt_excerpt"] or "")[0],
+                       turn["opened_at"])
+    if until and until <= store.clock():
+        return done("rejected", "expired")
     origin = {"source_kind": "captured_prompt", "source_ref": f"turn:{turn['token'][:8]}", "trust": status, "category": category,
-              "cues": list(cues) or None}
+              "cues": list(cues) or None, "valid_until": until}
     # The judge ran outside any transaction; a forget that arrived meanwhile wins.
     if store.tombstoned_since(entity, predicate, turn["opened_at"]):
         return done("rejected", "forgotten")
@@ -591,10 +598,11 @@ def _capture_one(store, judge, turn, proposed, rules, deadline, replaces=None, q
             for row in held:
                 store._supersede(row["id"], new_id)
         store._event("capture", {"statement_id": new_id, "trust": status})
+    bounded = {"until": until} if until else {}
     if live and live[0]["trust"] == "confirmed" and status == "captured":
-        result = done(status, reason, new_id, category=category, previous=live[0]["value"])
+        result = done(status, reason, new_id, category=category, previous=live[0]["value"], **bounded)
     else:
-        result = done(status, reason, new_id, category=category)
+        result = done(status, reason, new_id, category=category, **bounded)
     return _standing(store, turn, result, value, category) if status == "captured" else result
 
 
@@ -636,6 +644,11 @@ def _kind(category):
     return "project" if category in {"project_state", "project_decisions", "constraints"} else "person"
 
 
+def last_day(until):
+    """The last local day a fact ending at `until` (exclusive) is current."""
+    return (datetime.fromisoformat(until) - timedelta(microseconds=1)).astimezone().date().isoformat()
+
+
 def _short(value, limit=40):
     shown = value if isinstance(value, str) else canonical(value)
     return json.dumps(shown if len(shown) <= limit else shown[:limit - 1] + "…", ensure_ascii=False)
@@ -644,7 +657,7 @@ def _short(value, limit=40):
 def describe_results(results):
     """One line for the user: what was stored, what is waiting, what was set aside."""
     saved = [f"{r['entity']}.{r['predicate']}" + (f" (was {_short(r['previous'])})" if "previous" in r else "")
-             for r in results if r["status"] == "captured"]
+             + (f" until {last_day(r['until'])}" if r.get("until") else "") for r in results if r["status"] == "captured"]
     held = [f"{r['entity']}.{r['predicate']}" + (f" ({WHY[r.get('reason')]})" if r.get("reason") in WHY else "")
             for r in results if r["status"] == "quarantined"]
     asks = [f"{r['entity']}.{r['predicate']}" for r in results if r["status"] == "needs_confirmation"]
@@ -653,9 +666,12 @@ def describe_results(results):
     dropped = [f"{r['entity']}.{r['predicate']}" + (f" ({WHY[r.get('reason')]})" if r.get("reason") in WHY else "")
                for r in results if r["status"] == "rejected" and r.get("entity") and r.get("reason") != "do_not_remember"]
     standing = [f"{r['entity']}.{r['predicate']}" for r in results if r.get("standing")]
+    closed = [f"{r['entity']}.{r['predicate']} ({r.get('reason') or 'done'})" for r in results if r["status"] == "closed"]
     parts = []
     if saved:
         parts.append("saved " + ", ".join(saved))
+    if closed:
+        parts.append("closed " + ", ".join(closed))
     if standing:
         parts.append("will keep in mind in every session " + ", ".join(standing))
     if held:

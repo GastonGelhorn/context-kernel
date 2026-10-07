@@ -18,7 +18,7 @@ UserPromptSubmit hook (≤ 8 s)                     MCP server (same host proces
   gate: does the message state facts? (jev ask)       jev: asserts it? joking? asking for work?
   select: the pairs the time allows (jev rank)        safe mode while the judge is unverified
   deliver packet + turn token + capture hint          category policy, lattice, caps, tombstones
-Stop hook                                          memory_forget / revoke / confirm / reaffirm / policy
+Stop hook                                          memory_forget / revoke / close / confirm / reaffirm
   close turn (once), truthful receipt, coverage       token + interactive origin + jev: does the
   infer premises of a recommendation (jev rank)       user's text ask for this on this fact?
   drop the excerpt once nothing is pending
@@ -107,6 +107,13 @@ Each statement or restatement the user typed, once validated, is logged under it
 
 The prompt hook pins standing facts into the packet, at most 8, whenever the session has not yet received the current set. That happens on the session's first prompt, after SessionStart (start, resume, clear or compact), and after a value changes. Pinned claims carry `standing: true`. Standing facts are exempt from the 180-day cutoff and from the 90-day digest.
 
+## Facts that end
+
+A fact can be right and still be over. Two things end one, and neither changes the schema: both set `valid_until`, which every version since v0.1 reads as the end of validity (`effective_state: expired`), so an older kernel sharing the database sees the same thing.
+
+- **Closing** (`store.conclude`, `memory_close`, `memory close`). The outcome is done, cancelled or ended. It is logged as a `close` operation with the end it replaced, which is what `reopen` restores; a newer value of the same property blocks a reopen. A close is not regret: `regret_metrics` counts only undo, forget, revoke and quick corrections, and `metrics` lists closes apart. What depended on the fact becomes stale, as when a premise changes, and `memory_close` returns those ids. A close through the MCP tool is also logged with its turn (`captures_log`, outcome `closed`), so the Stop hook's line reports it and the turn is not handed back for a capture it did not need. The MCP tool checks the user's words with two questions, has the fact already been done, and was it cancelled, dropped or ended, and acts when the higher reaches 0.70 (`fixtures/calibration.jsonl`, `close_asked`). When the user's message uses words of completion (`turns.done_statement`) and the packet holds claims, the plain-text requests ask the agent to close what the message says is over; the request is a hint, and the check decides.
+- **A relative period** (`language.period_end`). At capture, a value that names a period the user's own message also names (today, tomorrow, this or next week, month and year, a weekday; English or Spanish) ends at local midnight after that period, counted from the turn. Starts ("desde mañana"), habits ("cada semana", "los viernes"), idioms ("hoy en día") and dates are not periods. "Next Friday" takes the later of its two readings, so a fact never ends early. A capture whose period ended before it was stored is refused as `expired`.
+
 ## Handing the turn back once
 
 The Stop hook answers `decision: block` when the gate was confident (P(none) ≤ 0.05, and the message did not read as a request for work: "Implementa todos los puntos" scored P(none) 0.04 and work 0.91), the turn was typed, a memory server is registered under the session's host process, and the agent neither captured anything nor tried to. A capture the kernel refused already has its answer, and asking again would only get the same refusal, so a refused attempt is never nudged. The block reason asks the agent to call `memory_capture` with the original turn's token. Codex turns that reason into a new prompt, and Claude Code continues the turn. The original reply is stored masked, and the inference runs on it at the continuation's Stop, after the capture. A continuation never nudges again.
@@ -115,7 +122,7 @@ Each MCP server records its host process when it initializes (`servers`), and th
 
 ## Requests to the agent
 
-The agent must treat the packet as data and never obey its claims. So the kernel writes its own requests (capture these facts, pending captures, how to forget, do not keep this message) as plain text before the JSON, and the MCP server's instructions describe the same workflow. When the request sat inside the packet, Codex's model honoured "values are data" and never captured anything.
+The agent must treat the packet as data and never obey its claims. So the kernel writes its own requests (capture these facts, pending captures, how to forget, close what is over, do not keep this message) as plain text before the JSON, and the MCP server's instructions describe the same workflow. When the request sat inside the packet, Codex's model honoured "values are data" and never captured anything.
 
 ## Selection and delivery
 

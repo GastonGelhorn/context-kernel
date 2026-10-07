@@ -1,6 +1,6 @@
 # Context Kernel
 
-Durable context for coding agents that tracks when earlier advice goes stale. You keep it up to date just by talking: it remembers what you tell the agent and what your repository's decision records say, notices when you change your mind, and when a fact a recommendation rested on changes, it tells the agent that recommendation needs another look. The memory is the mechanism; not building on assumptions that no longer hold is the point.
+Durable context for coding agents that tracks when earlier advice goes stale. You keep it up to date just by talking: it remembers what you tell the agent and what your repository's decision records say, notices when you change your mind or finish something, and when a fact a recommendation rested on changes, it tells the agent that recommendation needs another look. The memory is the mechanism; not building on assumptions that no longer hold is the point.
 
 The Python core uses only the standard library (SQLite with FTS5). It plugs into Claude Code and Codex through their own hooks and a local MCP server. Automatic capture needs two things besides your agent: [jev](https://github.com/GastonGelhorn/jevmate) and a backend for it. Your agent does the extraction; jev makes the small classification judgments (is this worth keeping, is it relevant to this question, did that recommendation depend on it) on a local model by default. No additional generative model is involved. Without jev, reading memory keeps working and nothing new is saved.
 
@@ -45,6 +45,12 @@ Forgetting one of them works like any other forget, and it sticks until that rec
 When you've stated the same thing in three separate sessions ("use pnpm"), you shouldn't have to say it a fourth time. That fact becomes standing: from then on it's handed to the agent at the start of every session, whether or not the question touches it. It's sent again after a session is resumed, cleared or compacted, and whenever its value changes. A preference, constraint or decision that you state as a rule ("never add Co-Authored-By to commits", "from now on…", "in every repo") becomes standing right away. Standing facts never age out, since they stop being repeated once they work.
 
 Ask "you don't need to keep that in mind every time" to take one off the list, and counting won't put it back. "Always keep this in mind" adds one directly.
+
+## When something is over
+
+Plans finish. When you say a stored step is done ("we shipped the billing migration"), cancelled ("al final no vamos a Lisboa") or over ("the hiring freeze is over"), the kernel asks the agent to close it with `memory_close`, and the line after the turn says so ("Memory: closed billing_service.next_step (done)."). A closed fact stays in the history but is no longer handed to the agent, and anything that rested on it is flagged for review. Unlike a forget, it isn't counted as a memory mistake, because it was right. jev checks your words against that fact first: on 35 labelled messages it accepted 16 of 19 real closes (17 in a second run) and none of the 16 that weren't ("we're halfway through the migration", "¿ya está publicada la v0.3?"). `memory close ID` and `memory reopen ID` do the same by hand.
+
+A fact stated with a relative period ends with that period on its own. "Decidimos publicar la v0.3 esta semana" is kept until Sunday, and the receipt says so ("Memory: saved portal.release_v0_3 until 2026-10-11."). The period has to be in the fact and in your own words. Dates are values and never end a fact, and a start ("desde mañana"), a habit ("los viernes") or an idiom ("hoy en día") isn't a period. Today, tomorrow, this or next week, month and year, and a named weekday are understood in English and Spanish; "next Friday" is read as the later of the two Fridays it can mean, so nothing ends early.
 
 ## Does it help? Measured
 
@@ -144,6 +150,7 @@ memory --pretty calibrate --check  # does the current jev model still pass the c
 memory policy --enable personal_attributes
 memory undo STATEMENT_ID
 memory forget STATEMENT_ID
+memory close STATEMENT_ID --outcome done   # it was right and it is over (done, cancelled, ended); `reopen` takes it back
 memory learn --workspace .         # read the repository's decisions now instead of at the next session start
 memory standing STATEMENT_ID off   # stop handing a fact to every session
 ```
@@ -158,6 +165,7 @@ The thresholds were measured on the local model (`tev1-32k` through Ollama). You
 memory calibrate affirmed --score        # the kernel's exact question over bilingual fixtures, with a threshold sweep
 memory calibrate facts_present --score
 memory calibrate forget_asked --score
+memory calibrate close_asked --score
 memory calibrate decision_commit --score
 memory policy --threshold affirmed=0.75
 ```
@@ -177,6 +185,7 @@ memory policy --threshold affirmed=0.75
 | A commit states a project-wide choice | 0.50, after the word filters | 25 of 28 written decisions; 0 of 16 routine changes worded like decisions (highest 0.48) |
 | A later decision replaces an earlier one | 0.70, for decisions sharing a topic word | 7 of 10 replacements; 0 of 12 other pairs (highest 0.654) |
 | The message asks to keep a fact in mind always, or to stop | 0.70 | requests 0.71 to 0.96; everything else ≤ 0.61 |
+| The message says a stored fact is done, cancelled or over | 0.70, the higher of two questions (done; cancelled or ended) | 16 to 17 of 19 closes over two runs; 0 of 16 others (highest 0.66, "ya he reiniciado, ¿qué queda?" against a step that starts "tras reiniciar") |
 
 The first row has drifted since it was set. Re-scored with the current local model, three false rows now reach 0.75, including "Remind me tomorrow to call Ana." (0.94). Re-run `memory calibrate affirmed --score` whenever jev's model changes. Cached judgments are keyed by the model's weights digest when the backend is a local Ollama, so a re-pulled alias doesn't reuse old answers.
 
@@ -193,6 +202,7 @@ With ten stored facts, the prompt hook took 0.33 s for a cached question and abo
 - Your agent's model still writes the answer. Better context makes stale or invented answers less likely; it doesn't rule them out.
 - Paraphrases are still the weak spot. On the labelled set's 45 paraphrased questions (no word in common with the facts that matter), 21 of the relevant facts reach the agent within the hook's time on the local judge, 29 with time for twice as many pairs; on direct questions, 14 of 15. The local judge alone cannot order a busy inventory ("Is there room to squeeze the payments refactor in before we ship?" put the deadline 23rd of 41), which is why the agent's cues and the keyword match carry so much weight.
 - The local judge is slow per pair: about 0.3 s, so the 8 s hook judges 12 to 19 facts per new question (cached questions are free). Memory larger than that relies on the order of judging: what the question matches in words, then constraints and decisions, then the most recent, and the rest only while 3 s would still be left. With 200 to 1,000 unrelated facts in memory, a prompt took 4.5 to 5.8 s at the median and up to the full 8 s. A hosted jev is much faster but sends memory text out, so the scope has to allow it.
+- A close needs your words to name the fact. Of the 19 labelled closes, "La release de la v0.3 salió el lunes" and "Close the security review item" were refused in both runs (0.51 to 0.69 against the 0.70 bar), and in one run so was "ya hicimos la prueba conjunta" against a step with two parts ("tras reiniciar…: probar jevmate junto con context kernel y medir…"). Saying it plainly again, or `memory close`, works. Facts saved before v0.9 have no end date even when they say "this week"; close them when they're done.
 - Commits are a narrow channel and are off by default. With them on, the filters and jev keep only clear choices for the whole project; in this repository three subjects still became "decisions" no one had made for the whole project. Decision records are the dependable source.
 - Git can be slow in a folder synced by iCloud, because objects evicted to the cloud are downloaded on first read. That's why hooks never run git: only the background pass does, and it waits up to a minute. Python reads the kernel's own modules the same way, so a hook running from such a folder can be cancelled; `context-kernel doctor` warns when that can happen.
 

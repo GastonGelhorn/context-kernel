@@ -116,6 +116,8 @@ ADDED_COLUMNS = (
 # What counts as regret about a capture: taken back, forgotten or revoked within a week, or replaced by the
 # user within the hour. A later change of mind is a change, not a misreading.
 REGRET_SECONDS = {"undone": 7 * 86400, "forgotten": 7 * 86400, "revoked": 7 * 86400, "corrected": 3600}
+# How a fact that was right came to an end (`conclude`): none of them is regret.
+CLOSE_OUTCOMES = ("done", "cancelled", "ended")
 RELATION_COLUMNS = "id,scope,kind,from_statement,to_statement,from_entity,to_entity"
 
 
@@ -518,6 +520,50 @@ class Store:
             self.db.execute("UPDATE statements SET lifecycle='revoked' WHERE scope=? AND id=? AND lifecycle='active'",
                             (self.scope, statement_id))
             self._event("retire", {"statement_id": statement_id})
+
+    def conclude(self, statement_id, outcome="done", at=None):
+        """The fact was right and is over: a step done, a plan cancelled, an arrangement that ended. Its validity
+        ends (`at`, default now): it stays in history, is no longer delivered, what rested on it is flagged for
+        review, and it is not a capture the user took back. Only the end date changes, so an older kernel sharing
+        the database reads it as expired."""
+        if outcome not in CLOSE_OUTCOMES:
+            raise KernelError("A close is done, cancelled, or ended.")
+        with self.db:
+            row = self._decode(self._row(statement_id))
+            if row["lifecycle"] != "active" or row["effective_state"] != "active":
+                raise KernelError("Only a current statement can be closed.")
+            end = timestamp(at) if at else self.clock()
+            if not row["valid_from"] < end <= self.clock():
+                raise KernelError("A close falls after the statement started and not in the future.")
+            self.db.execute("UPDATE statements SET valid_until=? WHERE scope=? AND id=?", (end, self.scope, statement_id))
+            self._event("close", {"statement_id": statement_id, "outcome": outcome, "at": end, "until": row["valid_until"]})
+        return {"status": "closed", "id": statement_id, "entity": row["entity_key"], "predicate": row["predicate"],
+                "outcome": outcome, "closed_at": end, "review_needed": [r["id"] for r in self.dependents(statement_id)]}
+
+    def reopen(self, statement_id):
+        """Take back a close: the statement is current again, with the end it had before (if any)."""
+        with self.db:
+            row = self._decode(self._row(statement_id))
+            close = next((c for c in (json.loads(r[0]) for r in self.db.execute(
+                "SELECT metadata FROM operations WHERE scope=? AND operation='close' ORDER BY recorded_at DESC, rowid DESC",
+                (self.scope,))) if c.get("statement_id") == statement_id), None)
+            if not close or row["lifecycle"] != "active" or row["valid_until"] != close["at"]:
+                raise KernelError("Only a closed statement can be reopened.")
+            if close["until"] and close["until"] <= self.clock():
+                raise KernelError("Its own period has ended as well; state it again instead.")
+            if any((r["entity_key"], r["predicate"]) == (row["entity_key"], row["predicate"]) for r in self.records(quarantined=True)):
+                raise KernelError("A newer value of this property is current; correct that one instead.")
+            self.db.execute("UPDATE statements SET valid_until=? WHERE scope=? AND id=?", (close["until"], self.scope, statement_id))
+            self._event("reopen", {"statement_id": statement_id})
+        return self.inspect(statement_id)
+
+    def close_metrics(self):
+        """How many facts ended as done, cancelled or ended (separate from regret: they were right)."""
+        counts = dict.fromkeys(CLOSE_OUTCOMES, 0)
+        for (metadata,) in self.db.execute("SELECT metadata FROM operations WHERE scope=? AND operation='close'", (self.scope,)):
+            outcome = json.loads(metadata).get("outcome")
+            counts[outcome] = counts.get(outcome, 0) + 1
+        return counts
 
     def _log_regret(self, statement_ids, outcome):
         """Inside the caller's transaction: a capture the user took back. `soon` when it happened within

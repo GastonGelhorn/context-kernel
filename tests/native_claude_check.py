@@ -42,9 +42,9 @@ PHASES = [
 ]
 
 
-def invoke(claude, workspace, prompt, mcp_config, model=None):
+def invoke(claude, workspace, prompt, mcp_config, model=None, tools=MEMORY_TOOLS):
     command = [claude, "-p", prompt, "--output-format", "json", "--disallowedTools", TOOLS_OFF,
-               "--allowedTools", MEMORY_TOOLS, "--mcp-config", str(mcp_config)]
+               "--allowedTools", tools, "--mcp-config", str(mcp_config)]
     if model:
         command.extend(["--model", model])
     started = time.perf_counter()

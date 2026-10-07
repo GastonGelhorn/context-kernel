@@ -107,6 +107,10 @@ QUESTIONS = {
     "standing_off": [
         "Does the writer of the message in `candidate` ask to stop always keeping the fact in `candidate` in mind?",
     ],
+    "close_asked": [
+        "Does the writer of the message in `candidate` say that the fact in `candidate` has already been done?",
+        "Does the writer of the message in `candidate` say that the fact in `candidate` was cancelled, dropped, or has ended?",
+    ],
     "decision_replaces": [
         "Does the later decision in `candidate` replace or reverse the earlier decision in `candidate`, so that the earlier one no longer holds?",
     ],
@@ -169,9 +173,12 @@ def score(kind, fixtures, judge):
             p = 1.0 - answers["count"].get("none", 0.0)
         else:
             question = {"affirmed": AFFIRMED, "forget_asked": ASKS["memory_forget"], "standing_on": ASKS["memory_standing_on"],
-                        "standing_off": ASKS["memory_standing_off"]}[kind]
-            answers, _ = judge.ask({"text": row["message"], "fact": row["fact"]}, {"q": ("noul", question)}, timeout=60)
-            p = answers["q"]
+                        "standing_off": ASKS["memory_standing_off"], "close_asked": ASKS["memory_close"]}[kind]
+            # An action asked with several questions is decided by the highest, as the server does.
+            asked = question if isinstance(question, tuple) else (question,)
+            answers, _ = judge.ask({"text": row["message"], "fact": row["fact"]},
+                                   {f"q{i}": ("noul", q) for i, q in enumerate(asked)}, timeout=60)
+            p = max(answers.values())
         scored.append({"p": round(p, 3), "label": bool(row["label"]), "message": row["message"][:80]})
     sweep = []
     judged = [r for r in scored if not r.get("filtered")]

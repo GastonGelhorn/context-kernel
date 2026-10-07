@@ -224,3 +224,38 @@
 {"kind": "facts_present", "label": false, "message": "Write a migration that sets every invoice to PDF only."}
 {"kind": "facts_present", "label": false, "message": "Claro, como si tuviéramos presupuesto infinito, jaja."}
 {"kind": "facts_present", "label": false, "message": "Sigue con lo siguiente y avísame al terminar."}
+{"kind": "close_asked", "message": "ya hicimos la prueba conjunta de jevmate y context kernel, todo bien", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": true}
+{"kind": "close_asked", "message": "La v0.3 ya está publicada en GitHub.", "fact": "context_kernel decision: Publicar v0.3 en GitHub esta semana", "label": true}
+{"kind": "close_asked", "message": "We shipped the billing migration to Stripe yesterday.", "fact": "billing next step: Migrate billing to Stripe", "label": true}
+{"kind": "close_asked", "message": "Cancelamos el viaje a Lisboa.", "fact": "user travel plan: Viaje a Lisboa el 20 de octubre", "label": true}
+{"kind": "close_asked", "message": "I no longer work at Acme; I left in September.", "fact": "user employer: Acme", "label": true}
+{"kind": "close_asked", "message": "Done with the security review, Irene signed it off.", "fact": "api open loop: Security review of the API pending", "label": true}
+{"kind": "close_asked", "message": "Listo, ya migramos la base de datos a Postgres.", "fact": "backend next step: Migrar la base de datos a Postgres", "label": true}
+{"kind": "close_asked", "message": "The hiring freeze is over.", "fact": "team constraint: Hiring freeze until further notice", "label": true}
+{"kind": "close_asked", "message": "Ya no estoy de guardia, terminó ayer.", "fact": "user on call: De guardia esta semana", "label": true}
+{"kind": "close_asked", "message": "We dropped the plan to rewrite the frontend in Svelte.", "fact": "frontend decision: Rewrite the frontend in Svelte", "label": true}
+{"kind": "close_asked", "message": "Hecho: la prueba conjunta ya está.", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": true}
+{"kind": "close_asked", "message": "La release de la v0.3 salió el lunes.", "fact": "context_kernel decision: Publicar v0.3 en GitHub esta semana", "label": true}
+{"kind": "close_asked", "message": "Finished the Stripe migration.", "fact": "billing next step: Migrate billing to Stripe", "label": true}
+{"kind": "close_asked", "message": "Al final no vamos a Lisboa.", "fact": "user travel plan: Viaje a Lisboa el 20 de octubre", "label": true}
+{"kind": "close_asked", "message": "Ya no hay congelación de contrataciones.", "fact": "team constraint: Hiring freeze until further notice", "label": true}
+{"kind": "close_asked", "message": "Marca como hecha la prueba conjunta de jevmate y context kernel.", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": true}
+{"kind": "close_asked", "message": "Cierra lo de publicar la v0.3, ya está.", "fact": "context_kernel decision: Publicar v0.3 en GitHub esta semana", "label": true}
+{"kind": "close_asked", "message": "Mark the Stripe migration as done.", "fact": "billing next step: Migrate billing to Stripe", "label": true}
+{"kind": "close_asked", "message": "Close the security review item.", "fact": "api open loop: Security review of the API pending", "label": true}
+{"kind": "close_asked", "message": "¿Puedes marcar algo como hecho?", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": false}
+{"kind": "close_asked", "message": "Marca como hecha la migración a Stripe.", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": false}
+{"kind": "close_asked", "message": "ya he reiniciado, que queda ahora?", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": false}
+{"kind": "close_asked", "message": "Vamos a empezar la migración a Stripe mañana.", "fact": "billing next step: Migrate billing to Stripe", "label": false}
+{"kind": "close_asked", "message": "Recuerda que la v0.3 hay que publicarla esta semana.", "fact": "context_kernel decision: Publicar v0.3 en GitHub esta semana", "label": false}
+{"kind": "close_asked", "message": "La prueba conjunta va bien, seguimos midiendo.", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": false}
+{"kind": "close_asked", "message": "I left the meeting early.", "fact": "user employer: Acme", "label": false}
+{"kind": "close_asked", "message": "¿Ya está publicada la v0.3?", "fact": "context_kernel decision: Publicar v0.3 en GitHub esta semana", "label": false}
+{"kind": "close_asked", "message": "Todavía no hemos publicado la v0.3, a ver si el viernes.", "fact": "context_kernel decision: Publicar v0.3 en GitHub esta semana", "label": false}
+{"kind": "close_asked", "message": "We're halfway through the billing migration.", "fact": "billing next step: Migrate billing to Stripe", "label": false}
+{"kind": "close_asked", "message": "Mi manager es Dani.", "fact": "user manager: Dani", "label": false}
+{"kind": "close_asked", "message": "Should we cancel the Lisbon trip?", "fact": "user travel plan: Viaje a Lisboa el 20 de octubre", "label": false}
+{"kind": "close_asked", "message": "The security review is still pending; Irene is on it.", "fact": "api open loop: Security review of the API pending", "label": false}
+{"kind": "close_asked", "message": "Ya terminé el informe de gastos.", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": false}
+{"kind": "close_asked", "message": "Ya hice la prueba de jevmate sola; falta la conjunta con context kernel.", "fact": "context_kernel next step: Tras reiniciar Claude Code, en una sesión limpia: probar jevmate junto con context kernel y medir qué problemas soluciona", "label": false}
+{"kind": "close_asked", "message": "Seguimos con el plan de reescribir el frontend en Svelte.", "fact": "frontend decision: Rewrite the frontend in Svelte", "label": false}

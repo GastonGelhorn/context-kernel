@@ -38,7 +38,14 @@ _KEEP = re.compile(r"\b(don'?t|do not|never|no te|no|nunca) (forget|olvides|te o
 _UNDO = re.compile(
     r"\b(olvida (eso|esto|lo ultimo|lo que (acabas de|has) guardad\w*)|deshaz(lo)?|deshacer eso|eso no|no era (asi|eso)|"
     r"undo( that| it| this)?|take (it|that) back|forget (that|this|it|what you just saved)|that'?s wrong|scratch that)\b")
-_CONTINUATIONS = {"ok", "okay", "si", "sí", "yes", "y", "dale", "vale", "go", "go on", "continue", "continua", "sigue",
+# Something stored may be over ("ya publicamos la v0.3", "we shipped the migration", "cancelamos el viaje"). Only a
+# hint to look at the claims: memory_close checks the user's words against the fact itself.
+_DONE = re.compile(
+    r"\b(ya (esta|estan|lo|la|los|las|hemos|he|hice|hicimos|termine|terminamos|acabe|acabamos|publicamos|salio|no)|"
+    r"(?<!de )hech[oa]s?|terminad[oa]s?|termin(e|amos|o)|acabad[oa]s?|acabamos|completad[oa]s?|completamos|"
+    r"cancelad[oa]s?|cancel(e|amos|o)|al final no|se acabo|"
+    r"done|finished|completed|shipped|cancel+ed|called off|dropped|no longer|(is|are|was) over|wrapped up)\b")
+_CONTINUATIONS ={"ok", "okay", "si", "sí", "yes", "y", "dale", "vale", "go", "go on", "continue", "continua", "sigue",
                   "listo", "done", "gracias", "thanks", "perfecto", "great", "good", "bien"}
 
 
@@ -64,6 +71,10 @@ def forget_request(prompt):
 
 def undo_request(prompt):
     return bool(_UNDO.search(fold(prompt)))
+
+
+def done_statement(prompt):
+    return bool(_DONE.search(fold(prompt)))
 
 
 # Picking among options the agent just listed ("haz 1 y 2", "la 3", "ambas", "go with option 2") says

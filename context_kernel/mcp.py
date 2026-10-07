@@ -31,7 +31,8 @@ TOKEN = {"type": "string", "minLength": 8, "maxLength": 64,
          "description": "The turn token from the memory context packet of the current user message (turn.token)."}
 FACT = schema({"entity": STRING | {"description": "Short snake_case key: user, a project, a person, an object."},
                "predicate": STRING | {"description": "Short snake_case property, e.g. manager, deadline, decision."},
-               "value": {"description": "The value as the user stated it; a string, number, or small object."},
+               "value": {"description": "The value as the user stated it; a string, number, or small object. Keep a relative "
+                                        "period the user gave (this week, mañana, el viernes): the fact then ends with it."},
                "quote": {"type": "string", "minLength": 3, "maxLength": 300,
                          "description": "The user's exact words in this message that state the fact. Checked against the message: "
                                         "words that are not there, or only in pasted text, are not saved."},
@@ -70,6 +71,11 @@ TOOLS = [
      "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
     {"name": "memory_revoke", "description": "Stop using a statement as evidence (kept in history), when the user's current message says it no longer applies.",
      "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
+    {"name": "memory_close", "description": "End a stored fact that was right and is now over, when the user's current message says so: a step done, a plan cancelled or dropped, an arrangement that ended. It stays in history, is no longer delivered, decisions that rested on it are flagged for review, and it does not count as a memory error. Validated against the user's own words. Use memory_revoke when it was never right, memory_forget when the user wants it erased.",
+     "inputSchema": schema({"token": TOKEN, "id": STRING,
+                            "outcome": {"type": "string", "enum": ["done", "cancelled", "ended"],
+                                        "description": "done (default): it happened; cancelled: it will not; ended: it was true until now."}},
+                           ["token", "id"])},
     {"name": "memory_confirm", "description": "Mark a captured or held statement as confirmed, when the user's current message confirms it.",
      "inputSchema": schema({"token": TOKEN, "id": STRING}, ["token", "id"])},
     {"name": "memory_reaffirm", "description": "The user says a decision flagged for review still stands under the changed facts: move its links to their current versions.",
@@ -99,6 +105,11 @@ ASKS = {
     "memory_policy": "Does the writer of `text` ask to start or stop remembering `fact` automatically?",
     "memory_standing_on": "Does the writer of `text` ask to always keep `fact` in mind, in every conversation?",
     "memory_standing_off": "Does the writer of `text` ask to stop always keeping `fact` in mind?",
+    # Two narrower questions, the higher one deciding: on 19 closes and 16 non-closes (fixtures/calibration.jsonl,
+    # close_asked), one question for both meanings kept 13 closes at 0.7 and these two together 16 to 17 over two
+    # runs; none kept a non-close (highest 0.67).
+    "memory_close": ("Does the writer of `text` say that `fact` has already been done?",
+                     "Does the writer of `text` say that `fact` was cancelled, dropped, or has ended?"),
 }
 ASK_THRESHOLD = 0.7
 
@@ -112,7 +123,9 @@ INSTRUCTIONS = (
     "matters); if a value changes a stored fact (turn.capture.related or the claims), pass its id as replaces. "
     "Report the tool's receipt in one line, never more. Facts attributed to captured_prompt are unconfirmed readings "
     "of earlier messages; the user's current words take precedence. To forget a fact the user names, call "
-    "memory_forget with its id; memory_undo only takes back the last thing saved. Say a change is done only when a "
+    "memory_forget with its id; memory_undo only takes back the last thing saved. When the user says a stored step, "
+    "plan or arrangement is done, cancelled or over, call memory_close with its id: it was right, so it is closed, "
+    "not forgotten. Say a change is done only when a "
     "tool confirms it. Items under review are earlier recommendations whose premises changed: they need review, not "
     "reversal; memory_dependents explains them. Claims marked standing apply to every task of the session. When the "
     "user asks to always keep something in mind, or to stop, call memory_standing with the fact's id. A failed or "
@@ -194,8 +207,10 @@ class Server:
         if not authored:
             raise KernelError("The user's message for this turn is not available; ask them to repeat the request.")
         line = fact_line(statement["entity_key"], statement["predicate"], statement["value"]) if isinstance(statement, dict) else statement
-        answers, _ = self._judge().ask({"text": authored, "fact": line}, {"asked": ("noul", ASKS[name])})
-        if answers["asked"] < ASK_THRESHOLD:
+        questions = ASKS[name] if isinstance(ASKS[name], tuple) else (ASKS[name],)
+        answers, _ = self._judge().ask({"text": authored, "fact": line},
+                                       {("asked" if i == 0 else f"asked{i + 1}"): ("noul", q) for i, q in enumerate(questions)})
+        if max(answers.values()) < ASK_THRESHOLD:
             raise KernelError("The user's message does not ask for this; nothing was changed.")
 
     def _owner_action(self, name, arguments):
@@ -228,6 +243,16 @@ class Server:
         if name == "memory_depend":
             self._asked(name, turn, statement)
             return self.store.depend(arguments["id"], arguments["assumption_id"])
+        if name == "memory_close":
+            if statement["effective_state"] != "active" or statement["assertion_kind"] not in {"user_statement", "observed"}:
+                raise KernelError("Only a current fact can be closed.")
+            self._asked(name, turn, statement)
+            closed = self.store.conclude(arguments["id"], arguments.get("outcome", "done"))
+            # Logged with the turn, so the Stop hook's line says it; never counted as a capture or as regret.
+            self.store.log_capture(turn["session_id"], turn["turn_key"], "closed", closed["id"], closed["outcome"],
+                                   label=f"{closed['entity']}.{closed['predicate']}")
+            review =f" {len(closed['review_needed'])} decision(s) that rested on it need review." if closed["review_needed"] else ""
+            return closed | {"receipt": f"Memory: closed {closed['entity']}.{closed['predicate']} ({closed['outcome']}).{review}"}
         self._asked(name, turn, statement)
         if name == "memory_forget":
             return self.store.forget(arguments["id"], keep_token=turn["token"])

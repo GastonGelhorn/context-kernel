@@ -5,7 +5,8 @@ each client release can change one of them. This runs the end-to-end checks in f
 
   claude-v04   tests/native_claude_check.py: capture, change, review flag, forget, generic question
   claude-v06   tests/native_v06_check.py --client claude: decision records, standing facts, supersession
-  codex-v06    tests/native_v06_check.py --client codex, only with --codex-pilot (a folder whose hooks the
+  claude-v09   tests/native_close_check.py: a fact that ends with its week, a step closed when it is done
+  codex-v06   tests/native_v06_check.py --client codex, only with --codex-pilot (a folder whose hooks the
                owner already trusted in Codex; see tests/native_codex_v04_check.py --prepare)
 
 Each run appends one entry to docs/compatibility.json and rewrites the table in docs/compatibility.md.
@@ -34,7 +35,7 @@ ROOT = Path(__file__).resolve().parent.parent
 HISTORY = ROOT / "docs" / "compatibility.json"
 TABLE = ROOT / "docs" / "compatibility.md"
 CHECKS = {"claude-v04": ["tests.native_claude_check"], "claude-v06": ["tests.native_v06_check", "--client", "claude"],
-          "codex-v06": ["tests.native_v06_check", "--client", "codex"]}
+          "claude-v09": ["tests.native_close_check"], "codex-v06": ["tests.native_v06_check", "--client", "codex"]}
 
 
 def version(command):

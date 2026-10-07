@@ -17,7 +17,8 @@ from .language import fold
 from .planner import NeedPlan, generic_question
 from .protocol import parse_json
 from . import repository
-from .turns import choice_reply, close_turn, do_not_remember, forget_request, open_turn, trivial_continuation, undo_request
+from .turns import (choice_reply, close_turn, do_not_remember, done_statement, forget_request, open_turn,
+                    trivial_continuation, undo_request)
 
 
 class HookBlock(KernelError):
@@ -207,6 +208,10 @@ def hook_response(event, workspace, store, compiler, strategy="rules", proposals
         projection = compiler.prepare(prompt, strategy=selection, extra={"turn": marker}, pinned=pinned)
     store.update_turn(turn["session_id"], turn["turn_key"], projection_id=projection.id,
                       delivered_ids=projection.trace["selected"], gate_count=gate_count, flags=flags)
+    # "Ya publicamos la v0.3": something delivered may be over. Asked in plain text after the packet was built,
+    # like the capture request; the agent decides, and memory_close checks the user's words against the fact.
+    if turn["origin"] == "interactive" and not quiet and projection.trace["selected"] and done_statement(authored):
+        marker["close"] = True
     if judge is not None and not cold:
         refresh_keep_alive(judge, store)
     if pinned and set(pinned) <= set(projection.trace["selected"]):
@@ -253,6 +258,10 @@ def kernel_requests(marker):
                         "from turn.pending.")
     if marker.get("privacy"):
         requests.append(marker["privacy"] + f" Use token \"{token}\".")
+    if marker.get("close"):
+        requests.append(f"If the user's message says that something in the claims is done, cancelled or over, call "
+                        f"memory_close with token \"{token}\" and that claim's id: it was right, so it is closed, not "
+                        f"forgotten. Otherwise do nothing and do not mention this request.")
     if isinstance(marker.get("capture"), str):
         requests.append("The user asked not to keep this message: do not call memory_capture for it.")
     return requests
@@ -325,7 +334,7 @@ def _report(store, judge, deadline, turn, reply, nudged=False):
     results = store.captures_for_turn(turn["session_id"], turn["turn_key"])
     rows = {r["id"]: r for r in store.records(history=True)}
     described = [dict(status=r["outcome"], entity=rows[r["statement_id"]]["entity_key"], predicate=rows[r["statement_id"]]["predicate"])
-                 for r in results if r["statement_id"] in rows]
+                 | ({"reason": r["reason"]} if r["outcome"] == "closed" else {}) for r in results if r["statement_id"] in rows]
     # What was not saved, by the label it was proposed under (no statement exists for it).
     described += [dict(status="rejected", reason=r["reason"], entity=r["label"].split(".", 1)[0], predicate=r["label"].split(".", 1)[1])
                   for r in results if r["outcome"] == "rejected" and r.get("label") and "." in r["label"]]
