@@ -48,6 +48,11 @@ def settings():
         else:
             merged[name], origin[name] = default, "default"
     merged["db"] = str(Path(os.path.expanduser(merged["db"])))
+    # An Ollama on another machine of the owner's that counts as local. Only setup writes it, so it is
+    # read from the file alone: a plugin option cannot widen where memory text goes.
+    private = stored.get("private_judges") if isinstance(stored.get("private_judges"), list) else []
+    merged["private_judges"] = [u for u in private if isinstance(u, str) and u.strip()]
+    origin["private_judges"] = str(CONFIG) if merged["private_judges"] else "default"
     return merged, origin
 
 
@@ -65,6 +70,8 @@ def find_jev(explicit=""):
 
 def kernel_args(config, jev):
     base = ["--db", config["db"], "--scope", config["scope"]]
+    for url in config.get("private_judges", []):
+        base += ["--private-judge", url]
     strategy = config["strategy"] if config["strategy"] in {"rules", "fts", "jev"} else "jev"
     if strategy == "jev" and not jev:
         strategy = "rules"  # selection fails open; captures still need a judge and are refused without one

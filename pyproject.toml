@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "shelflife-context"
-version = "0.10.0"
+version = "0.10.1"
 description = "Memory for coding agents that you keep up to date by talking"
 requires-python = ">=3.9"
 license = {text = "MIT"}

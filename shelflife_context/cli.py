@@ -30,6 +30,9 @@ def parser():
     root.add_argument("--db", default=".shelflife-context/memory.sqlite", help="SQLite path (default: workspace-local)")
     root.add_argument("--scope", default="personal", help="Owner-selected scope; not supplied by an agent tool")
     root.add_argument("--pretty", action="store_true", help="Print readable JSON for owner commands")
+    root.add_argument("--private-judge", action="append", default=[], metavar="URL",
+                      help="An Ollama on another machine of yours that counts as local: memory text may go there "
+                           "(shelflife-context setup names it; repeatable)")
     commands = root.add_subparsers(dest="command", required=True)
     for name in ("init", "status", "proposals", "inventory", "metrics"):
         commands.add_parser(name)
@@ -372,7 +375,7 @@ def make_judge(args):
         return None
     return JevCommand(resolved or command, getattr(args, "jev_timeout", 10), getattr(args, "jev_critical", 0.6),
                       getattr(args, "jev_supporting", 0.5), getattr(args, "jev_question", None),
-                      getattr(args, "jev_band", 0.35), getattr(args, "jev_max_pairs", 48))
+                      getattr(args, "jev_band", 0.35), getattr(args, "jev_max_pairs", 48), getattr(args, "private_judge", ()))
 
 
 def main(argv=None):

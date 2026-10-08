@@ -1,7 +1,7 @@
 {
   "name": "shelflife-context",
   "displayName": "Shelflife",
-  "version": "0.10.0",
+  "version": "0.10.1",
   "description": "Durable context for coding agents that tracks when earlier advice goes stale. It keeps what you tell the agent and what your repository's decision records say, notices when you change your mind or finish something, and flags a recommendation for review when a fact it rested on changes. Stored locally in SQLite; judged by jev on a local model. After each turn a line above the prompt says what was saved, with undo.",
   "author": {
     "name": "Gaston Gelhorn",

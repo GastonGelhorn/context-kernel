@@ -101,7 +101,7 @@ Deleting things takes more than the model asking. `memory_forget`, `revoke`, `co
 
 Where your memory goes, in two levels:
 
-- **Storage and judging stay local.** The database is a SQLite file on your machine, and jev judges on a local model by default. If jev is pointed at a hosted backend (say, through `TYPESAFE_BASE_URL`), the kernel sends it nothing unless you've allowed that for the scope; in that case it selects facts with keyword rules instead and refuses new writes. Calls that carry your text skip jev's own cache, and your words reach jev through a private temporary file, never on the command line.
+- **Storage and judging stay local.** The database is a SQLite file on your machine, and jev judges on a local model by default. An Ollama on another machine of yours (a Mac on your Tailscale network, a box on your LAN) counts as local once setup names it, and only that server: its scheme, host and port. If jev is pointed at a hosted backend (say, through `TYPESAFE_BASE_URL`) or at a server you haven't named, the kernel sends it nothing unless you've allowed that for the scope; in that case it selects facts with keyword rules instead and refuses new writes. Calls that carry your text skip jev's own cache, and your words reach jev through a private temporary file, never on the command line.
 - **Delivery goes to your agent's provider.** The facts selected for a prompt are added to that prompt's context (Claude Code's `additionalContext`, Codex's hook output), so the agent's model reads them, and they travel to that model's provider like the rest of the conversation. A local database doesn't make the agent local.
 
 When jev is unavailable, reading keeps working and writing stops. Selection falls back to keyword rules with a warning and your prompt goes through; nothing new is saved without a judge.
@@ -121,7 +121,7 @@ Install jevmate and the kernel from the same marketplace, then run the setup com
 /shelflife-context:setup
 ```
 
-The plugin brings its own hooks and MCP server, so there's nothing to copy into your projects. It asks for a scope, a database and a selection mode when you install it, and you can change those later in the plugin's settings. `/shelflife-context:setup` checks the install and lets you pick the judge: jev on a local Ollama model, which is free and keeps everything on your machine, or jev's paid hosted service, which is faster but sends your memory text out, so the scope has to allow it.
+The plugin brings its own hooks and MCP server, so there's nothing to copy into your projects. It asks for a scope, a database and a selection mode when you install it, and you can change those later in the plugin's settings. `/shelflife-context:setup` checks the install and lets you pick the judge: jev on Ollama on this machine, which is free and keeps everything here; jev on Ollama on another machine of yours, free and kept on your machines; or jev's paid hosted service, which is faster but sends your memory text out, so the scope has to allow it.
 
 After each turn, a line above the prompt tells you what memory saved, held for review or didn't save, with an undo button. It's meant to show up in the desktop app too, which doesn't display hook messages. Its configuration is validated, but nobody has watched it in an interactive session yet; until then, the receipt in the agent's reply ("Memory: saved …") is the dependable signal.
 
@@ -133,7 +133,13 @@ From a checkout:
 ./install.sh
 ```
 
-The script finds a Python that works (or uses one managed by `uv`), installs `~/.local/bin/shelflife-context`, and starts `shelflife-context setup`. The setup asks about the judge, the scope and the database (saved to `~/.shelflife-context/config.json`), offers to install the Claude Code plugin, and can wire Codex for a project. It shows you the Codex files before writing them, and Codex will ask you to review the hooks the next time it opens that folder. Run `shelflife-context doctor` any time to check the install. It also warns you if a project still wires the kernel by hand, which would make every hook run twice.
+The script finds a Python that works (or uses one managed by `uv`), installs `~/.local/bin/shelflife-context`, and starts `shelflife-context setup`. The setup asks about the scope, the database and the judge (saved to `~/.shelflife-context/config.json`), offers to install the Claude Code plugin, and can wire Codex for a project. It shows you the Codex files before writing them, and Codex will ask you to review the hooks the next time it opens that folder. Every question has a flag, so a whole setup is one line; with the judge on another machine of yours:
+
+```sh
+shelflife-context setup --yes --claude no --scope work --judge remote --judge-url 100.74.0.1
+```
+
+jev (jevmate 1.10 or newer) checks that Ollama, makes the `tev1-32k` it needs (`--pull` also downloads `tev1`, 4.5 GB), and setup names that server as yours. That machine's Ollama has to listen beyond itself (`OLLAMA_HOST=0.0.0.0`) and has no password, so keep it on a network you trust. Run `shelflife-context doctor` any time to check the install. It also warns you if a project still wires the kernel by hand, which would make every hook run twice.
 
 ### By hand
 

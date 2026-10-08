@@ -28,24 +28,44 @@ class JudgeRemote(JudgeError):
     """The judge would send memory text to a hosted backend this scope has not authorized."""
 
 
-def is_local(url):
+def origin(url):
+    """scheme://host:port with the port spelled out, or "" for anything else: how a private judge is
+    named and matched, so http://box and http://box:80/v1/systemone are the same server."""
+    parts = urlsplit(url or "")
+    host = (parts.hostname or "").lower()
+    if not host or parts.scheme not in ("http", "https"):
+        return ""
+    try:
+        port = parts.port or (443 if parts.scheme == "https" else 80)
+    except ValueError:
+        return ""
+    return f"{parts.scheme}://{'[' + host + ']' if ':' in host else host}:{port}"
+
+
+def is_local(url, private=()):
+    """This machine, or a judge the owner named as theirs (`private`): an Ollama on another of their
+    machines, on their own network, which `shelflife-context setup` records. Memory text may go to
+    either without the scope allowing a hosted judge."""
     parts = urlsplit(url or "")
     host = parts.hostname or ""
     if host == "localhost" or host.endswith(".localhost"):
         return True
     try:
-        return ipaddress.ip_address(host).is_loopback
+        if ipaddress.ip_address(host).is_loopback:
+            return True
     except ValueError:
-        return False
+        pass
+    named = origin(url)
+    return bool(named) and named in {origin(p) for p in private}
 
 
-def weights(url, model):
+def weights(url, model, local=None):
     """The digest of the weights behind a local Ollama model name, or None.
 
     A judgment cache keyed by URL and model name keeps answers from an older model after the same
-    alias is pulled again. Only a loopback backend is asked, with a short timeout; any failure
-    leaves the fingerprint at None, which still differs from every known digest."""
-    if not model or not is_local(url):
+    alias is pulled again. Only a local backend (this machine or a private judge) is asked, with a
+    short timeout; any failure leaves the fingerprint at None, which still differs from every known digest."""
+    if not model or not (is_local(url) if local is None else local):
         return None
     parts = urlsplit(url)
     try:
@@ -78,7 +98,7 @@ def loaded(description, timeout=0.3):
     cannot be told (a hosted backend, another server, no answer in time). A cold model takes several
     seconds to load, longer than a prompt hook should wait."""
     url, model = description.get("url"), description.get("model")
-    if not model or not is_local(url):
+    if not model or not description.get("local", is_local(url)):
         return None
     try:
         running = _ollama(url, "/api/ps", timeout=timeout).get("models", [])
@@ -93,7 +113,7 @@ def keep_alive(description, duration, timeout=1.0):
     ("30m"). An empty generate request only loads the model; jev's own requests reset the timer to
     Ollama's default, so this is repeated after each turn. Returns whether the backend accepted it."""
     url, model = description.get("url"), description.get("model")
-    if not model or not is_local(url) or not duration:
+    if not model or not description.get("local", is_local(url)) or not duration:
         return False
     try:
         _ollama(url, "/api/generate", {"model": model, "keep_alive": duration}, timeout=timeout)
@@ -109,9 +129,12 @@ class JevCommand:
 
     RELEVANCE = "Is `candidate` a fact that someone answering `query` must take into account?"
 
-    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None, band=0.35, max_pairs=48):
+    def __init__(self, command="jev", timeout=10, critical=0.6, supporting=0.5, question=None, band=0.35, max_pairs=48,
+                 private=()):
         if not isinstance(command, str) or not command.strip() or "\0" in command:
             raise KernelError("Invalid jev command.")
+        if isinstance(private, str) or not all(isinstance(p, str) and origin(p) for p in private):
+            raise KernelError("A private judge is an http(s) URL.")
         if not 0 < timeout <= 60:
             raise KernelError("jev timeout must be 1-60 seconds.")
         if not (0 < band <= supporting <= critical <= 1):
@@ -121,6 +144,7 @@ class JevCommand:
         self.command, self.timeout, self.max_pairs = command, timeout, max_pairs
         self.critical, self.supporting, self.band = critical, supporting, band
         self.question = text(question or self.RELEVANCE, 1024)
+        self.private = tuple(origin(p) for p in private)
         self._description = None
 
     # Backward-compatible name used by traces and tests.
@@ -167,12 +191,15 @@ class JevCommand:
             if not isinstance(url, str):
                 raise JudgeError("jev did not report its backend.")
             # `weights` is part of every cached judgment's model key: a re-pulled alias starts fresh.
-            self._description = {"url": url, "model": model, "local": is_local(url), "weights": weights(url, model)}
+            local = is_local(url, self.private)
+            self._description = {"url": url, "model": model, "local": local, "private": local and not is_local(url),
+                                 "weights": weights(url, model, local)}
         return self._description
 
     def require_local(self, allow_remote=False):
         if not allow_remote and not self.describe()["local"]:
-            raise JudgeRemote("jev points to a hosted backend; memory text stays on this machine unless the scope allows it.")
+            raise JudgeRemote("jev points to a backend off this machine; memory text stays here unless the scope allows a hosted "
+                              "judge, or `shelflife-context setup` names that server as yours.")
 
     def loaded(self):
         """Whether the local model is in memory (see `loaded` above); None when that cannot be told."""

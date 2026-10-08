@@ -238,6 +238,15 @@ Both clients have now passed the same pre-registered scenario once each, with no
 
 We still need repeated runs to estimate rates, the nudge in a native session where the agent skips the capture, and real use over weeks. `tests/native_claude_check.py` runs five fresh headless Claude Code sessions with no memory commands and checks the database after each one. The Codex walkthrough repeats the flow with the generated Codex bundle. Both use the owner's sign-in and quota. The runs above also tested process-ancestry binding natively in both hosts, and every session that wrote was bound.
 
+## v0.10.1: a judge on another machine of yours
+
+Checked on 2026-10-08 with jev 1.10.0 against Ollama 0.35.1 and tev1-32k on an M4 reached over Tailscale, from an Intel Mac with Python 3.14.5.
+
+The kernel counted only a loopback host as local, so an Ollama on the owner's other machine was a hosted judge: nothing new was saved unless the scope allowed a hosted judge, and that allowance let any hosted backend in, not just that machine. `shelflife-context setup --judge remote --judge-url HOST` now has jev (1.10 or newer) prepare that Ollama, then names its origin (scheme, host and port) in `~/.shelflife-context/config.json`. Every kernel call gets it as `--private-judge`, owner commands included, so the calibration canary keys the same judge as the hooks. Only that server counts; a plugin option cannot add one; choosing local or hosted clears it, and naming it turns the scope's hosted allowance off.
+
+- 354 tests pass, 9 of them new in `tests/test_v10_1.py`, with a fake `jev` over a real subprocess.
+- End to end in a throwaway home: one line of setup had jev check the remote Ollama (570 ms for its decision) and named it, and the doctor reported `your machine at http://100.x.y.z:11434/v1/systemone · tev1-32k · loaded`. The prompt hook then asked the agent to capture "We decided staging deploys happen on Fridays."; with the name removed from the config, the same prompt got no capture request.
+
 ## v0.10: Shelflife, and agents without hooks
 
 Checked on 2026-10-07 with jev 1.9.3 on its local backend (tev1-32k through Ollama) and Claude Code 2.1.287, on macOS arm64.
